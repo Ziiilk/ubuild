@@ -21,18 +21,23 @@ export class ProjectGenerator {
       Logger.info(`Project: ${projectPath}`);
       Logger.info(`Engine: ${enginePath}`);
 
-      // Generate using UnrealBuildTool
+      // Generate using UnrealBuildTool (UBT 原生生成对应 IDE 方案)
       if (ide === 'sln' || ide === 'vs2022') {
-        await this.generateWithUBT(enginePath, projectPath, force);
+        await this.generateWithUBT(enginePath, projectPath, force, ide);
         generatedFiles.push(...await this.findGeneratedSolutionFiles(projectPath));
       } else if (ide === 'vscode') {
-        await this.generateWithUBT(enginePath, projectPath, force);
-        await this.generateVSCodeConfig(projectPath);
+        await this.generateWithUBT(enginePath, projectPath, force, ide);
         generatedFiles.push(...await this.findGeneratedSolutionFiles(projectPath));
+        generatedFiles.push(...await this.findVSCodeWorkspaceFiles(projectPath));
         generatedFiles.push(...await this.findVSCodeConfigFiles(projectPath));
+      } else if (ide === 'clion') {
+        await this.generateWithUBT(enginePath, projectPath, force, ide);
+        generatedFiles.push(...await this.findGeneratedCLionFiles(projectPath));
+      } else if (ide === 'xcode') {
+        await this.generateWithUBT(enginePath, projectPath, force, ide);
+        generatedFiles.push(...await this.findGeneratedXcodeFiles(projectPath));
       } else {
-        // For other IDEs, just use UBT
-        await this.generateWithUBT(enginePath, projectPath, force);
+        await this.generateWithUBT(enginePath, projectPath, force, ide);
         generatedFiles.push(...await this.findGeneratedSolutionFiles(projectPath));
       }
 
@@ -98,12 +103,13 @@ export class ProjectGenerator {
   }
 
   /**
-   * Generate project files using UnrealBuildTool
+   * Generate project files using UnrealBuildTool (UBT 原生方案，不叠加自定义配置)
    */
   private static async generateWithUBT(
     enginePath: string,
     projectPath: string,
-    force: boolean
+    force: boolean,
+    ide: IDE
   ): Promise<void> {
     const ubtPath = path.join(
       enginePath,
@@ -124,6 +130,15 @@ export class ProjectGenerator {
       '-game',
       '-engine'
     ];
+
+    if (ide === 'vscode') {
+      args.push('-VSCode');
+    } else if (ide === 'clion') {
+      args.push('-CLion');
+    } else if (ide === 'xcode') {
+      args.push('-XCodeProjectFiles');
+    }
+    // sln / vs2022：不传 IDE 参数，UBT 默认生成 Visual Studio 方案
 
     if (force) {
       args.push('-force');
@@ -164,138 +179,6 @@ export class ProjectGenerator {
   }
 
   /**
-   * Generate VSCode configuration files
-   */
-  private static async generateVSCodeConfig(projectPath: string): Promise<void> {
-    const projectDir = path.dirname(projectPath);
-    const vscodeDir = path.join(projectDir, '.vscode');
-
-    await fs.ensureDir(vscodeDir);
-
-    // Create tasks.json
-    const tasksJson = {
-      version: '2.0.0',
-      tasks: [
-        {
-          label: 'Build Editor (Development)',
-          type: 'shell',
-          command: 'ubuild',
-          args: ['build', '--target', 'Editor', '--config', 'Development'],
-          group: {
-            kind: 'build',
-            isDefault: true
-          },
-          problemMatcher: []
-        },
-        {
-          label: 'Build Game (Development)',
-          type: 'shell',
-          command: 'ubuild',
-          args: ['build', '--target', 'Game', '--config', 'Development'],
-          group: 'build',
-          problemMatcher: []
-        },
-        {
-          label: 'Clean Build',
-          type: 'shell',
-          command: 'ubuild',
-          args: ['build', '--target', 'Editor', '--config', 'Development', '--clean'],
-          group: 'build',
-          problemMatcher: []
-        }
-      ]
-    };
-
-    await fs.writeFile(
-      path.join(vscodeDir, 'tasks.json'),
-      JSON.stringify(tasksJson, null, 2)
-    );
-
-    // Create launch.json
-    const launchJson = {
-      version: '0.2.0',
-      configurations: [
-        {
-          name: 'Launch Editor',
-          type: 'cppvsdbg',
-          request: 'launch',
-          program: '${workspaceFolder}/Binaries/Win64/UnrealEditor.exe',
-          args: ['"${workspaceFolder}/Project.uproject"'],
-          cwd: '${workspaceFolder}',
-          console: 'integratedTerminal',
-          preLaunchTask: 'Build Editor (Development)'
-        },
-        {
-          name: 'Launch Game',
-          type: 'cppvsdbg',
-          request: 'launch',
-          program: '${workspaceFolder}/Binaries/Win64/Project.exe',
-          cwd: '${workspaceFolder}',
-          console: 'integratedTerminal',
-          preLaunchTask: 'Build Game (Development)'
-        }
-      ]
-    };
-
-    await fs.writeFile(
-      path.join(vscodeDir, 'launch.json'),
-      JSON.stringify(launchJson, null, 2)
-    );
-
-    // Create settings.json
-    const settingsJson = {
-      'files.exclude': {
-        'Binaries': true,
-        'Intermediate': true,
-        'Saved': true,
-        'DerivedDataCache': true,
-        '**/.git': true,
-        '**/.svn': true,
-        '**/.hg': true,
-        '**/CVS': true,
-        '**/.DS_Store': true
-      },
-      'C_Cpp.default.configurationProvider': 'ms-vscode.cpptools',
-      'cmake.configureOnOpen': false
-    };
-
-    await fs.writeFile(
-      path.join(vscodeDir, 'settings.json'),
-      JSON.stringify(settingsJson, null, 2)
-    );
-
-    // Create c_cpp_properties.json
-    const cppProperties = {
-      configurations: [
-        {
-          name: 'Win32',
-          includePath: [
-            '${workspaceFolder}/Source/**',
-            '${workspaceFolder}/Intermediate/Build/Win64/**'
-          ],
-          defines: [
-            'WIN32',
-            '_WINDOWS',
-            'UE_BUILD_DEVELOPMENT'
-          ],
-          windowsSdkVersion: '10.0',
-          cStandard: 'c17',
-          cppStandard: 'c++17',
-          intelliSenseMode: 'windows-msvc-x64'
-        }
-      ],
-      version: 4
-    };
-
-    await fs.writeFile(
-      path.join(vscodeDir, 'c_cpp_properties.json'),
-      JSON.stringify(cppProperties, null, 2)
-    );
-
-    Logger.success('VSCode configuration files generated');
-  }
-
-  /**
    * Find generated solution files
    */
   private static async findGeneratedSolutionFiles(projectPath: string): Promise<string[]> {
@@ -327,7 +210,42 @@ export class ProjectGenerator {
   }
 
   /**
-   * Find VSCode configuration files
+   * Find UBT 生成的 CLion/CMake 文件（CMakeLists.txt）
+   */
+  private static async findGeneratedCLionFiles(projectPath: string): Promise<string[]> {
+    const projectDir = path.dirname(projectPath);
+    const cmakePath = path.join(projectDir, 'CMakeLists.txt');
+    if (await fs.pathExists(cmakePath)) {
+      return [cmakePath];
+    }
+    return [];
+  }
+
+  /**
+   * Find UBT 生成的 Xcode 项目（.xcodeproj）
+   */
+  private static async findGeneratedXcodeFiles(projectPath: string): Promise<string[]> {
+    const projectDir = path.dirname(projectPath);
+    const entries = await fs.readdir(projectDir, { withFileTypes: true });
+    const files = entries
+      .filter(e => e.isDirectory() && e.name.endsWith('.xcodeproj'))
+      .map(e => path.join(projectDir, e.name));
+    return files;
+  }
+
+  /**
+   * Find UBT 生成的 .code-workspace 文件
+   */
+  private static async findVSCodeWorkspaceFiles(projectPath: string): Promise<string[]> {
+    const projectDir = path.dirname(projectPath);
+    const files = await fs.readdir(projectDir).then(list =>
+      list.filter(f => f.endsWith('.code-workspace')).map(f => path.join(projectDir, f))
+    );
+    return files;
+  }
+
+  /**
+   * Find VSCode configuration files (.vscode 目录，由 UBT 生成)
    */
   private static async findVSCodeConfigFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
