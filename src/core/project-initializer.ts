@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import inquirer from 'inquirer';
 import { InitOptions, InitResult, ProjectType } from '../types/init';
+import type { EngineVersionInfo } from '../types/engine';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
 import { EngineResolver } from './engine-resolver';
@@ -250,6 +251,23 @@ export class ProjectInitializer {
   }
 
   /**
+   * Get engine version info from Build.version (for version-appropriate Target/Build generation)
+   */
+  private static async getEngineVersionInfo(enginePath: string): Promise<EngineVersionInfo | undefined> {
+    try {
+      const versionFile = path.join(enginePath, 'Engine', 'Build', 'Build.version');
+      if (!(await fs.pathExists(versionFile))) {
+        return undefined;
+      }
+      const content = await fs.readFile(versionFile, 'utf-8');
+      const versionInfo: EngineVersionInfo = JSON.parse(content);
+      return versionInfo;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
    * Get engine association ID from engine path
    */
   private static async getEngineAssociationId(enginePath: string): Promise<string> {
@@ -278,19 +296,25 @@ export class ProjectInitializer {
   }
 
   /**
-   * Create source files for C++ project
+   * Create source files for C++ project (aligned with engine version to avoid compilation errors)
    */
   private static async createSourceFiles(
     name: string,
     directory: string,
-    _enginePath: string
+    enginePath: string
   ): Promise<string[]> {
     const createdFiles: string[] = [];
     const sourceDir = path.join(directory, 'Source');
+    const versionInfo = await this.getEngineVersionInfo(enginePath);
+    if (versionInfo) {
+      Logger.debug(
+        `Engine version: ${versionInfo.MajorVersion}.${versionInfo.MinorVersion}.${versionInfo.PatchVersion}`
+      );
+    }
 
-    // Create .Target.cs files
-    const gameTarget = await this.createTargetFile(name, sourceDir, 'Game');
-    const editorTarget = await this.createTargetFile(name, sourceDir, 'Editor');
+    // Create .Target.cs files (Editor target aligned with UnrealEditor to share build products)
+    const gameTarget = await this.createTargetFile(name, sourceDir, 'Game', versionInfo);
+    const editorTarget = await this.createTargetFile(name, sourceDir, 'Editor', versionInfo);
     createdFiles.push(gameTarget, editorTarget);
 
     // Create .Build.cs file
@@ -322,12 +346,14 @@ export class ProjectInitializer {
   }
 
   /**
-   * Create target file (*.Target.cs)
+   * Create target file (*.Target.cs), aligned with UnrealEditor for Editor target to avoid
+   * "modifies the values of properties ... This is not allowed, as [target] has build products in common with UnrealEditor"
    */
   private static async createTargetFile(
     name: string,
     sourceDir: string,
-    type: 'Game' | 'Editor'
+    type: 'Game' | 'Editor',
+    versionInfo?: EngineVersionInfo
   ): Promise<string> {
     const fileName = type === 'Editor' ? `${name}Editor.Target.cs` : `${name}.Target.cs`;
     const filePath = path.join(sourceDir, fileName);
@@ -335,6 +361,22 @@ export class ProjectInitializer {
     const targetType = type === 'Editor' ? 'TargetType.Editor' : 'TargetType.Game';
     const extraModuleNames = type === 'Editor' ? `"${name}"` : '';
 
+    const isUE5 = versionInfo && versionInfo.MajorVersion >= 5;
+
+    // UE5: use Latest so generated project matches current engine; UE4: use V2
+    const defaultBuildSettings = isUE5 ? 'BuildSettingsVersion.Latest' : 'BuildSettingsVersion.V2';
+    const includeOrderLine = isUE5
+      ? '        IncludeOrderVersion = EngineIncludeOrderVersion.Latest;'
+      : '';
+
+    const bodyLines = [
+      `        Type = ${targetType};`,
+      `        DefaultBuildSettings = ${defaultBuildSettings};`,
+      includeOrderLine,
+      extraModuleNames
+        ? `        ExtraModuleNames.AddRange(new string[] { ${extraModuleNames} });`
+        : ''
+    ].filter(Boolean);
     const content = `using UnrealBuildTool;
 using System.Collections.Generic;
 
@@ -342,9 +384,7 @@ public class ${name}${type === 'Editor' ? 'Editor' : ''}Target : TargetRules
 {
     public ${name}${type === 'Editor' ? 'Editor' : ''}Target(TargetInfo Target) : base(Target)
     {
-        Type = ${targetType};
-        DefaultBuildSettings = BuildSettingsVersion.V2;
-        ${extraModuleNames ? `ExtraModuleNames.AddRange(new string[] { ${extraModuleNames} });` : ''}
+${bodyLines.join('\n')}
     }
 }`;
 
