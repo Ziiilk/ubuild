@@ -60,8 +60,7 @@ export function generateCommand(program: Command): void {
             console.log(`Open ${chalk.bold('.sln')} file in Visual Studio to build and debug.`);
           } else if (options.ide === 'vscode') {
             console.log();
-            console.log(`Open project folder in ${chalk.bold('Visual Studio Code')}.`);
-            console.log(`Build tasks are available in the Tasks menu.`);
+            console.log(`Open the ${chalk.bold('.code-workspace')} file in Visual Studio Code (UBT 生成的方案).`);
           }
 
         } else {
