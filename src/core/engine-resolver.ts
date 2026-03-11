@@ -1,7 +1,12 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { execa } from 'execa';
-import { EngineInstallation, EngineVersionInfo, EngineAssociation, EngineDetectionResult } from '../types/engine';
+import {
+  EngineInstallation,
+  EngineVersionInfo,
+  EngineAssociation,
+  EngineDetectionResult,
+} from '../types/engine';
 import { Platform } from '../utils/platform';
 import { Logger } from '../utils/logger';
 
@@ -29,12 +34,29 @@ export class EngineResolver {
       // If we have an engine association, try to match it
       let matchedEngine: EngineInstallation | undefined;
       if (uprojectEngine && engineInstallations.length > 0) {
-        matchedEngine = engineInstallations.find(
-          engine => engine.associationId === uprojectEngine!.guid
-        );
+        const association = uprojectEngine.guid;
+        const isVersionString = !association.startsWith('{');
 
-        if (!matchedEngine && uprojectEngine.guid) {
-          warnings.push(`Engine with association ID ${uprojectEngine.guid} not found in installed engines`);
+        if (isVersionString) {
+          // EngineAssociation is a version string (e.g., "5.5") from Launcher
+          // Only match launcher/environment engines, NOT registry source builds
+          matchedEngine = engineInstallations.find((engine) => {
+            // Match by associationId like "UE_5.5"
+            if (engine.associationId && engine.associationId.startsWith('UE_')) {
+              const engineVersion = engine.associationId.replace('UE_', '').replace(/_/g, '.');
+              return this.compareVersionString(engineVersion, association) === 0;
+            }
+            return false;
+          });
+        } else {
+          // EngineAssociation is a GUID - match by exact associationId
+          matchedEngine = engineInstallations.find(
+            (engine) => engine.associationId === association
+          );
+        }
+
+        if (!matchedEngine && association) {
+          warnings.push(`Engine with association ID ${association} not found in installed engines`);
         }
       }
 
@@ -43,19 +65,20 @@ export class EngineResolver {
         // Sort by version (newest first) and use the first one
         engineInstallations.sort((a, b) => this.compareVersions(b.version, a.version));
         matchedEngine = engineInstallations[0];
-        warnings.push(`Using engine ${matchedEngine.displayName || matchedEngine.associationId} (not associated with project)`);
+        warnings.push(
+          `Using engine ${matchedEngine.displayName || matchedEngine.associationId} (not associated with project)`
+        );
       }
 
       return {
         engine: matchedEngine,
         uprojectEngine,
-        warnings
+        warnings,
       };
-
     } catch (error) {
       return {
         error: error instanceof Error ? error.message : String(error),
-        warnings
+        warnings,
       };
     }
   }
@@ -72,11 +95,11 @@ export class EngineResolver {
     try {
       // Check if projectPath is a directory or .uproject file
       let uprojectPath = projectPath;
-      if (await fs.pathExists(projectPath) && (await fs.stat(projectPath)).isDirectory()) {
+      if ((await fs.pathExists(projectPath)) && (await fs.stat(projectPath)).isDirectory()) {
         // Look for .uproject file in directory
-        const uprojectFiles = await fs.readdir(projectPath).then(files =>
-          files.filter(f => f.endsWith('.uproject'))
-        );
+        const uprojectFiles = await fs
+          .readdir(projectPath)
+          .then((files) => files.filter((f) => f.endsWith('.uproject')));
 
         if (uprojectFiles.length === 0) {
           warnings.push('No .uproject file found in project directory');
@@ -100,15 +123,20 @@ export class EngineResolver {
         return { warnings };
       }
 
+      const associationValue = uproject.EngineAssociation;
+      const isGuid = associationValue.startsWith('{');
+
       const association: EngineAssociation = {
-        guid: uproject.EngineAssociation,
-        name: uproject.EngineAssociation
+        guid: associationValue,
+        name: associationValue,
+        version: isGuid ? undefined : associationValue,
       };
 
       return { association, warnings };
-
     } catch (error) {
-      warnings.push(`Failed to read project file: ${error instanceof Error ? error.message : String(error)}`);
+      warnings.push(
+        `Failed to read project file: ${error instanceof Error ? error.message : String(error)}`
+      );
       return { warnings };
     }
   }
@@ -169,7 +197,9 @@ export class EngineResolver {
       'HKEY_LOCAL_MACHINE\\SOFTWARE\\Epic Games\\UE_4',
     ];
 
-    Logger.debug('Querying registry for UE engines from locations: ' + JSON.stringify(registryLocations));
+    Logger.debug(
+      'Querying registry for UE engines from locations: ' + JSON.stringify(registryLocations)
+    );
 
     for (const registryLocation of registryLocations) {
       try {
@@ -200,11 +230,7 @@ export class EngineResolver {
     const installations: EngineInstallation[] = [];
 
     try {
-      const { stdout } = await execa('reg', [
-        'query',
-        registryKey,
-        '/s'
-      ]);
+      const { stdout } = await execa('reg', ['query', registryKey, '/s']);
 
       // Parse registry output
       // Format can vary:
@@ -230,7 +256,7 @@ export class EngineResolver {
             associationId: guid,
             displayName: `UE Engine ${guid}`,
             version: undefined,
-            source: 'registry'
+            source: 'registry',
           });
           continue;
         }
@@ -269,7 +295,7 @@ export class EngineResolver {
                 associationId: guid,
                 displayName: `UE Engine ${guid}`,
                 version: undefined,
-                source: 'registry'
+                source: 'registry',
               });
             } else {
               Logger.debug(`Found GUID ${guid} but could not extract engine path`);
@@ -295,20 +321,75 @@ export class EngineResolver {
       // Common launcher manifest locations
       const manifestPaths = [
         // Legacy UnrealEngine launcher
-        path.join(process.env.LOCALAPPDATA || '', 'UnrealEngine', 'Common', 'LauncherInstalled.dat'),
+        path.join(
+          process.env.LOCALAPPDATA || '',
+          'UnrealEngine',
+          'Common',
+          'LauncherInstalled.dat'
+        ),
         // ProgramData locations
-        path.join(process.env.PROGRAMDATA || '', 'Epic', 'UnrealEngineLauncher', 'LauncherInstalled.dat'),
-        path.join(process.env.PROGRAMDATA || '', 'Epic', 'EpicGamesLauncher', 'Data', 'LauncherInstalled.dat'),
+        path.join(
+          process.env.PROGRAMDATA || '',
+          'Epic',
+          'UnrealEngineLauncher',
+          'LauncherInstalled.dat'
+        ),
+        path.join(
+          process.env.PROGRAMDATA || '',
+          'Epic',
+          'EpicGamesLauncher',
+          'Data',
+          'LauncherInstalled.dat'
+        ),
         // AppData locations
-        path.join(process.env.APPDATA || '', 'Epic', 'UnrealEngineLauncher', 'LauncherInstalled.dat'),
-        path.join(process.env.APPDATA || '', 'Epic', 'EpicGamesLauncher', 'Data', 'LauncherInstalled.dat'),
+        path.join(
+          process.env.APPDATA || '',
+          'Epic',
+          'UnrealEngineLauncher',
+          'LauncherInstalled.dat'
+        ),
+        path.join(
+          process.env.APPDATA || '',
+          'Epic',
+          'EpicGamesLauncher',
+          'Data',
+          'LauncherInstalled.dat'
+        ),
         // Additional possible locations for newer launcher versions
-        path.join(process.env.LOCALAPPDATA || '', 'EpicGamesLauncher', 'Data', 'LauncherInstalled.dat'),
-        path.join(process.env.LOCALAPPDATA || '', 'Epic', 'UnrealEngineLauncher', 'LauncherInstalled.dat'),
-        path.join(process.env.APPDATA || '', 'Epic Games', 'Launcher', 'Data', 'LauncherInstalled.dat'),
+        path.join(
+          process.env.LOCALAPPDATA || '',
+          'EpicGamesLauncher',
+          'Data',
+          'LauncherInstalled.dat'
+        ),
+        path.join(
+          process.env.LOCALAPPDATA || '',
+          'Epic',
+          'UnrealEngineLauncher',
+          'LauncherInstalled.dat'
+        ),
+        path.join(
+          process.env.APPDATA || '',
+          'Epic Games',
+          'Launcher',
+          'Data',
+          'LauncherInstalled.dat'
+        ),
         // Fallback: Epic Games Launcher default installation
-        path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'Epic Games', 'Launcher', 'Data', 'LauncherInstalled.dat'),
-        path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'Epic Games', 'Launcher', 'Data', 'LauncherInstalled.dat')
+        path.join(
+          process.env.PROGRAMFILES || 'C:\\Program Files',
+          'Epic Games',
+          'Launcher',
+          'Data',
+          'LauncherInstalled.dat'
+        ),
+        path.join(
+          process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)',
+          'Epic Games',
+          'Launcher',
+          'Data',
+          'LauncherInstalled.dat'
+        ),
       ];
 
       Logger.debug('Searching for launcher manifests in: ' + JSON.stringify(manifestPaths));
@@ -327,19 +408,25 @@ export class EngineResolver {
                 // Check if this is an Unreal Engine installation
                 // AppName could be: 'UE_4', 'UE_5', 'UE_5.0', 'UE_5.1', etc.
                 // Also check for 'UE_' prefix in general
-                if (installation.AppName &&
-                    (installation.AppName.startsWith('UE_') ||
-                     installation.AppName.includes('UnrealEngine') ||
-                     installation.Category === 'engine')) {
-
-                  Logger.debug(`Found UE installation: ${installation.AppName} at ${installation.InstallLocation}`);
+                if (
+                  installation.AppName &&
+                  (installation.AppName.startsWith('UE_') ||
+                    installation.AppName.includes('UnrealEngine') ||
+                    installation.Category === 'engine')
+                ) {
+                  Logger.debug(
+                    `Found UE installation: ${installation.AppName} at ${installation.InstallLocation}`
+                  );
                   installations.push({
                     path: installation.InstallLocation,
                     associationId: installation.AppName,
-                    displayName: installation.DisplayName || installation.AppName || `UE ${installation.AppVersion || 'Unknown'}`,
+                    displayName:
+                      installation.DisplayName ||
+                      installation.AppName ||
+                      `UE ${installation.AppVersion || 'Unknown'}`,
                     installedDate: installation.InstallDate,
                     version: undefined,
-                    source: 'launcher'
+                    source: 'launcher',
                   });
                 } else {
                   Logger.debug(`Skipping non-UE installation: ${installation.AppName}`);
@@ -349,7 +436,10 @@ export class EngineResolver {
               Logger.debug('No InstallationList found in manifest or it is not an array');
             }
           } catch (parseError) {
-            Logger.debug('Failed to parse launcher manifest: ' + (parseError instanceof Error ? parseError.message : String(parseError)));
+            Logger.debug(
+              'Failed to parse launcher manifest: ' +
+                (parseError instanceof Error ? parseError.message : String(parseError))
+            );
             Logger.debug('Manifest path: ' + manifestPath);
           }
         } else {
@@ -357,7 +447,10 @@ export class EngineResolver {
         }
       }
     } catch (error) {
-      Logger.debug('Failed to read launcher manifest: ' + (error instanceof Error ? error.message : String(error)));
+      Logger.debug(
+        'Failed to read launcher manifest: ' +
+          (error instanceof Error ? error.message : String(error))
+      );
     }
 
     Logger.debug(`Total launcher engines found: ${installations.length}`);
@@ -372,13 +465,13 @@ export class EngineResolver {
 
     for (const envVar of envVars) {
       const enginePath = process.env[envVar];
-      if (enginePath && await fs.pathExists(enginePath)) {
+      if (enginePath && (await fs.pathExists(enginePath))) {
         return {
           path: enginePath,
           associationId: `ENV_${envVar}`,
           displayName: `UE Engine (from ${envVar})`,
           version: undefined,
-          source: 'environment'
+          source: 'environment',
         };
       }
     }
@@ -394,7 +487,7 @@ export class EngineResolver {
       // Look for version file in common locations
       const versionFilePaths = [
         path.join(installation.path, 'Engine', 'Binaries', 'Win64', 'UnrealEditor.version'),
-        path.join(installation.path, 'Engine', 'Build', 'Build.version')
+        path.join(installation.path, 'Engine', 'Build', 'Build.version'),
       ];
 
       for (const versionFilePath of versionFilePaths) {
@@ -409,7 +502,10 @@ export class EngineResolver {
 
             return;
           } catch (parseError) {
-            Logger.debug('Failed to parse version file: ' + (parseError instanceof Error ? parseError.message : String(parseError)));
+            Logger.debug(
+              'Failed to parse version file: ' +
+                (parseError instanceof Error ? parseError.message : String(parseError))
+            );
           }
         }
       }
@@ -427,29 +523,49 @@ export class EngineResolver {
           IsLicenseeVersion: 0,
           IsPromotedBuild: 0,
           BranchName: '',
-          BuildId: ''
+          BuildId: '',
         };
         installation.displayName = `UE ${versionStr}`;
       }
     } catch (error) {
-      Logger.debug('Failed to load engine version info: ' + (error instanceof Error ? error.message : String(error)));
+      Logger.debug(
+        'Failed to load engine version info: ' +
+          (error instanceof Error ? error.message : String(error))
+      );
     }
   }
 
   /**
    * Remove duplicate engines (same path)
+   * Priority: launcher > environment > registry (source builds)
+   * Then sort by version (newest first)
    */
   private static removeDuplicateEngines(installations: EngineInstallation[]): EngineInstallation[] {
-    const seen = new Set<string>();
-    const unique: EngineInstallation[] = [];
+    const pathMap = new Map<string, EngineInstallation>();
 
     for (const installation of installations) {
       const normalizedPath = path.normalize(installation.path).toLowerCase();
-      if (!seen.has(normalizedPath)) {
-        seen.add(normalizedPath);
-        unique.push(installation);
+      const existing = pathMap.get(normalizedPath);
+
+      if (!existing) {
+        pathMap.set(normalizedPath, installation);
+      } else {
+        // Prefer launcher > environment > registry
+        const sourcePriority = { launcher: 0, environment: 1, registry: 2 };
+        const existingPriority =
+          sourcePriority[existing.source as keyof typeof sourcePriority] ?? 2;
+        const newPriority = sourcePriority[installation.source as keyof typeof sourcePriority] ?? 2;
+
+        if (newPriority < existingPriority) {
+          pathMap.set(normalizedPath, installation);
+        }
       }
     }
+
+    const unique = Array.from(pathMap.values());
+
+    // Sort by version (newest first)
+    unique.sort((a, b) => this.compareVersions(b.version, a.version));
 
     return unique;
   }
@@ -461,7 +577,7 @@ export class EngineResolver {
     // Handle undefined versions
     if (!a && !b) return 0;
     if (!a) return -1; // a is undefined, b is defined -> a < b
-    if (!b) return 1;  // a is defined, b is undefined -> a > b
+    if (!b) return 1; // a is defined, b is undefined -> a > b
 
     if (a.MajorVersion !== b.MajorVersion) {
       return a.MajorVersion - b.MajorVersion;
@@ -473,5 +589,31 @@ export class EngineResolver {
       return a.PatchVersion - b.PatchVersion;
     }
     return a.Changelist - b.Changelist;
+  }
+
+  /**
+   * Compare two version strings (e.g., "5.5.4" vs "5.5")
+   * Returns: 0 if equal or compatible (a starts with b), positive if a > b, negative if a < b
+   */
+  private static compareVersionString(a: string, b: string): number {
+    // Check if a starts with b (e.g., "5.5.4" is compatible with "5.5")
+    if (a === b || a.startsWith(b + '.') || a.startsWith(b + '_')) {
+      return 0;
+    }
+
+    const parseVersion = (v: string): number[] => {
+      return v.split('.').map((part) => parseInt(part, 10) || 0);
+    };
+    const partsA = parseVersion(a);
+    const partsB = parseVersion(b);
+
+    for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+      const partA = partsA[i] || 0;
+      const partB = partsB[i] || 0;
+      if (partA !== partB) {
+        return partA - partB;
+      }
+    }
+    return 0;
   }
 }
