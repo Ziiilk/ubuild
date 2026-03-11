@@ -8,6 +8,7 @@ import { buildCommand } from '../commands/build';
 import { generateCommand } from '../commands/generate';
 import { initCommand } from '../commands/init';
 import { runCommand } from '../commands/run';
+import { updateCommand } from '../commands/update';
 import { version, description } from '../../package.json';
 
 const program = new Command();
@@ -17,7 +18,7 @@ program
   .description(description)
   .version(version)
   .configureOutput({
-    outputError: (str, write) => write(chalk.red(str))
+    outputError: (str, write) => write(chalk.red(str)),
   });
 
 // Register commands
@@ -27,11 +28,12 @@ buildCommand(program);
 generateCommand(program);
 initCommand(program);
 runCommand(program);
+updateCommand(program);
 
 // Global error handling
 program.configureHelp({
   sortSubcommands: true,
-  subcommandTerm: (cmd) => cmd.name()
+  subcommandTerm: (cmd) => cmd.name(),
 });
 
 // Parse arguments
