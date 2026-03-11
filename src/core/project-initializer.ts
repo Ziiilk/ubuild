@@ -80,9 +80,8 @@ export class ProjectInitializer {
         projectPath: directory,
         uprojectPath,
         engineAssociation: await this.getEngineAssociationId(enginePath),
-        createdFiles
+        createdFiles,
       };
-
     } catch (error) {
       return {
         success: false,
@@ -90,7 +89,7 @@ export class ProjectInitializer {
         uprojectPath: '',
         engineAssociation: '',
         createdFiles,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
@@ -105,7 +104,9 @@ export class ProjectInitializer {
     }
 
     if (!Validator.isValidProjectName(name)) {
-      throw new Error('Project name can only contain alphanumeric characters, underscores, and hyphens');
+      throw new Error(
+        'Project name can only contain alphanumeric characters, underscores, and hyphens'
+      );
     }
 
     const type: ProjectType = options.type || 'cpp';
@@ -135,7 +136,9 @@ export class ProjectInitializer {
 
     // Validate engine path
     if (!(await Validator.isValidEnginePath(enginePath))) {
-      throw new Error(`Invalid engine path: ${enginePath}. Make sure it points to a valid Unreal Engine installation.`);
+      throw new Error(
+        `Invalid engine path: ${enginePath}. Make sure it points to a valid Unreal Engine installation.`
+      );
     }
 
     const force = options.force || false;
@@ -146,7 +149,7 @@ export class ProjectInitializer {
       template,
       enginePath,
       directory,
-      force
+      force,
     };
   }
 
@@ -166,7 +169,7 @@ export class ProjectInitializer {
       }
       return {
         name: description,
-        value: engine.path
+        value: engine.path,
       };
     });
 
@@ -175,8 +178,8 @@ export class ProjectInitializer {
         type: 'list',
         name: 'selectedEngine',
         message: 'Select engine to use:',
-        choices
-      }
+        choices,
+      },
     ]);
 
     return selectedEngine;
@@ -185,7 +188,11 @@ export class ProjectInitializer {
   /**
    * Create C++ project structure
    */
-  private static async createCppProject(name: string, directory: string, _enginePath: string): Promise<void> {
+  private static async createCppProject(
+    name: string,
+    directory: string,
+    _enginePath: string
+  ): Promise<void> {
     // Create Source directory
     const sourceDir = path.join(directory, 'Source');
     await fs.ensureDir(sourceDir);
@@ -202,7 +209,11 @@ export class ProjectInitializer {
   /**
    * Create Blueprint project structure
    */
-  private static async createBlueprintProject(_name: string, directory: string, _enginePath: string): Promise<void> {
+  private static async createBlueprintProject(
+    _name: string,
+    directory: string,
+    _enginePath: string
+  ): Promise<void> {
     // Blueprint projects only need Content directory
     const contentDir = path.join(directory, 'Content');
     await fs.ensureDir(contentDir);
@@ -211,7 +222,11 @@ export class ProjectInitializer {
   /**
    * Create Blank project structure
    */
-  private static async createBlankProject(_name: string, directory: string, _enginePath: string): Promise<void> {
+  private static async createBlankProject(
+    _name: string,
+    directory: string,
+    _enginePath: string
+  ): Promise<void> {
     // Blank project has minimal structure
     const contentDir = path.join(directory, 'Content');
     await fs.ensureDir(contentDir);
@@ -235,15 +250,18 @@ export class ProjectInitializer {
       EngineAssociation: engineAssociation,
       Category: '',
       Description: '',
-      Modules: type === 'cpp' ? [
-        {
-          Name: name,
-          Type: 'Runtime',
-          LoadingPhase: 'Default'
-        }
-      ] : [],
+      Modules:
+        type === 'cpp'
+          ? [
+              {
+                Name: name,
+                Type: 'Runtime',
+                LoadingPhase: 'Default',
+              },
+            ]
+          : [],
       Plugins: [],
-      TargetPlatforms: []
+      TargetPlatforms: [],
     };
 
     await fs.writeFile(uprojectPath, JSON.stringify(uproject, null, 2), 'utf-8');
@@ -253,7 +271,9 @@ export class ProjectInitializer {
   /**
    * Get engine version info from Build.version (for version-appropriate Target/Build generation)
    */
-  private static async getEngineVersionInfo(enginePath: string): Promise<EngineVersionInfo | undefined> {
+  private static async getEngineVersionInfo(
+    enginePath: string
+  ): Promise<EngineVersionInfo | undefined> {
     try {
       const versionFile = path.join(enginePath, 'Engine', 'Build', 'Build.version');
       if (!(await fs.pathExists(versionFile))) {
@@ -269,23 +289,33 @@ export class ProjectInitializer {
 
   /**
    * Get engine association ID from engine path
+   * Aligned with UnrealVersionSelector:
+   * - Launcher engines: use version string (e.g., "5.5")
+   * - Registry source builds: use associationId (GUID or custom name)
    */
   private static async getEngineAssociationId(enginePath: string): Promise<string> {
-    // First, try to get from registry
+    // First, try to get from EngineResolver's engine list
     const engines = await EngineResolver.findEngineInstallations();
-    const matchingEngine = engines.find(engine => engine.path === enginePath);
+    const matchingEngine = engines.find((engine) => engine.path === enginePath);
 
-    if (matchingEngine && matchingEngine.associationId) {
-      return matchingEngine.associationId;
+    if (matchingEngine) {
+      // Launcher engines: use version string (e.g., "5.5")
+      if (matchingEngine.source === 'launcher' && matchingEngine.version) {
+        return `${matchingEngine.version.MajorVersion}.${matchingEngine.version.MinorVersion}`;
+      }
+      // Registry/environment engines: use associationId (GUID or custom name)
+      if (matchingEngine.associationId) {
+        return matchingEngine.associationId;
+      }
     }
 
-    // Fallback: try to extract from version file
+    // Fallback: try to extract from Build.version file
     try {
       const versionFile = path.join(enginePath, 'Engine', 'Build', 'Build.version');
       if (await fs.pathExists(versionFile)) {
         const content = await fs.readFile(versionFile, 'utf-8');
         const versionInfo = JSON.parse(content);
-        return `{${versionInfo.MajorVersion}.${versionInfo.MinorVersion}.${versionInfo.PatchVersion}}`;
+        return `${versionInfo.MajorVersion}.${versionInfo.MinorVersion}`;
       }
     } catch {
       // ignore
@@ -375,7 +405,7 @@ export class ProjectInitializer {
       includeOrderLine,
       extraModuleNames
         ? `        ExtraModuleNames.AddRange(new string[] { ${extraModuleNames} });`
-        : ''
+        : '',
     ].filter(Boolean);
     const content = `using UnrealBuildTool;
 using System.Collections.Generic;
