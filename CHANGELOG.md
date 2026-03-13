@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.5]
+
+- Fix gencodebase command not registered
+
 ## [0.0.4]
 
 - Add `gencodebase` command for generating compile_commands.json
