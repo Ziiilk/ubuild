@@ -9,6 +9,7 @@ import { generateCommand } from '../commands/generate';
 import { initCommand } from '../commands/init';
 import { runCommand } from '../commands/run';
 import { updateCommand } from '../commands/update';
+import { gencodebaseCommand } from '../commands/gencodebase';
 import { version, description } from '../../package.json';
 
 const program = new Command();
@@ -29,6 +30,7 @@ generateCommand(program);
 initCommand(program);
 runCommand(program);
 updateCommand(program);
+gencodebaseCommand(program);
 
 // Global error handling
 program.configureHelp({
