@@ -287,18 +287,7 @@ export class ProjectGenerator {
           type: 'shell',
           command: 'ubuild',
           args: ['build'],
-          group: {
-            kind: 'build',
-            isDefault: true
-          },
-          presentation: {
-            echo: true,
-            reveal: 'always',
-            focus: false,
-            panel: 'shared',
-            showReuseMessage: true,
-            clear: false
-          },
+          group: 'build',
           problemMatcher: ['$msCompile'],
           detail: 'Build Unreal Engine project using ubuild'
         },
@@ -307,15 +296,7 @@ export class ProjectGenerator {
           type: 'shell',
           command: 'ubuild',
           args: ['run', '--build-first'],
-          group: 'none',
-          presentation: {
-            echo: true,
-            reveal: 'always',
-            focus: false,
-            panel: 'shared',
-            showReuseMessage: true,
-            clear: false
-          },
+          group: 'build',
           detail: 'Build and run Unreal Engine project using ubuild'
         }
       ]
