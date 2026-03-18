@@ -30,6 +30,12 @@ export class ProjectGenerator {
         generatedFiles.push(...await this.findGeneratedSolutionFiles(projectPath));
         generatedFiles.push(...await this.findVSCodeWorkspaceFiles(projectPath));
         generatedFiles.push(...await this.findVSCodeConfigFiles(projectPath));
+        
+        // Generate ubuild tasks.json
+        const tasksFile = await this.generateVSCodeTasks(projectPath);
+        if (tasksFile) {
+          generatedFiles.push(tasksFile);
+        }
       } else if (ide === 'clion') {
         await this.generateWithUBT(enginePath, projectPath, force, ide);
         generatedFiles.push(...await this.findGeneratedCLionFiles(projectPath));
@@ -260,5 +266,81 @@ export class ProjectGenerator {
     );
 
     return vscodeFiles;
+  }
+
+  /**
+   * Generate VSCode tasks.json for ubuild commands
+   */
+  private static async generateVSCodeTasks(projectPath: string): Promise<string | null> {
+    const projectDir = path.dirname(projectPath);
+    const vscodeDir = path.join(projectDir, '.vscode');
+    const tasksPath = path.join(vscodeDir, 'tasks.json');
+
+    // Ensure .vscode directory exists
+    await fs.ensureDir(vscodeDir);
+
+    const tasksConfig = {
+      version: '2.0.0',
+      tasks: [
+        {
+          label: 'ubuild: Build Project',
+          type: 'shell',
+          command: 'ubuild',
+          args: ['build'],
+          group: {
+            kind: 'build',
+            isDefault: true
+          },
+          presentation: {
+            echo: true,
+            reveal: 'always',
+            focus: false,
+            panel: 'shared',
+            showReuseMessage: true,
+            clear: false
+          },
+          problemMatcher: ['$msCompile'],
+          detail: 'Build Unreal Engine project using ubuild'
+        },
+        {
+          label: 'ubuild: Run Project',
+          type: 'shell',
+          command: 'ubuild',
+          args: ['run', '--build-first'],
+          group: 'none',
+          presentation: {
+            echo: true,
+            reveal: 'always',
+            focus: false,
+            panel: 'shared',
+            showReuseMessage: true,
+            clear: false
+          },
+          detail: 'Build and run Unreal Engine project using ubuild'
+        }
+      ]
+    };
+
+    // Check if existing tasks.json exists and merge if necessary
+    if (await fs.pathExists(tasksPath)) {
+      try {
+        const existingContent = await fs.readJson(tasksPath);
+        if (existingContent.tasks) {
+          // Filter out existing ubuild tasks to avoid duplicates
+          existingContent.tasks = existingContent.tasks.filter((t: any) => 
+            !(t.label && t.label.startsWith('ubuild:'))
+          );
+          // Add new ubuild tasks
+          existingContent.tasks.push(...tasksConfig.tasks);
+          await fs.writeJson(tasksPath, existingContent, { spaces: 2 });
+          return tasksPath;
+        }
+      } catch {
+        // If parsing fails, overwrite with new content
+      }
+    }
+
+    await fs.writeJson(tasksPath, tasksConfig, { spaces: 2 });
+    return tasksPath;
   }
 }
