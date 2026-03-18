@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.6]
+
+- Add VS Code tasks generation for `ubuild generate --ide vscode`
+  - `ubuild: Build Project` - builds the project
+  - `ubuild: Run Project` - builds and runs the project
+
 ## [0.0.5]
 
 - Fix gencodebase command not registered
