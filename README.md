@@ -9,6 +9,9 @@ Unreal Engine project management CLI tool for Agent integration.
 - **Build Execution** (`ubuild build`): Build projects with various configurations
 - **Project Generation** (`ubuild generate`): Generate IDE project files (Visual Studio, VSCode, etc.)
 - **Project Initialization** (`ubuild init`): Create new Unreal Engine projects (C++ or Blueprint)
+- **Run Project** (`ubuild run`): Run Unreal Engine Editor or Game executable
+- **Update Tool** (`ubuild update`): Update ubuild to the latest version
+- **Generate Compile Commands** (`ubuild gencodebase`): Generate compile_commands.json for IDE code completion
 
 ## Installation
 
@@ -44,6 +47,18 @@ ubuild generate --ide vscode
 # Initialize new project
 ubuild init --name MyProject --type cpp
 ubuild init --name MyBlueprintProject --type blueprint
+
+# Run project (Editor or Game)
+ubuild run
+ubuild run --target Game --config Development
+ubuild run --build-first
+
+# Generate compile commands for IDE
+ubuild gencodebase
+ubuild gencodebase --target Editor --config Development
+
+# Update ubuild to latest version
+ubuild update
 ```
 
 ### Programmatic API
@@ -74,6 +89,10 @@ const initResult = await UEBuildAPI.init.initialize({
   name: 'MyProject',
   type: 'cpp'
 });
+
+// Create concurrent builder/runner
+const builder = UEBuildAPI.concurrent.createBuilder();
+const runner = UEBuildAPI.concurrent.createRunner();
 ```
 
 ## Command Reference
@@ -91,6 +110,7 @@ Display engine information for the current project.
 Options:
 - `-p, --project <path>`: Path to project directory or .uproject file
 - `-j, --json`: Output result as JSON
+- `-v, --verbose`: Show verbose engine detection details
 
 ### `ubuild build`
 Build Unreal Engine project.
@@ -127,6 +147,43 @@ Options:
 - `--engine-path <path>`: Path to Unreal Engine installation
 - `--force`: Force initialization even if directory is not empty
 - `--dry-run`: Show what would be created without actually creating
+
+### `ubuild run`
+Run Unreal Engine project (Editor or Game executable).
+
+Options:
+- `-t, --target <target>`: Run target (Editor, Game, Client, Server) - default: Editor
+- `-c, --config <config>`: Build configuration (Debug, DebugGame, Development, Shipping, Test) - default: Development
+- `-p, --platform <platform>`: Platform (Win64, Win32, Linux, Mac, Android, IOS) - default: Win64
+- `--project <path>`: Path to project directory or .uproject file
+- `--engine-path <path>`: Path to Unreal Engine installation
+- `--dry-run`: Show what would be run without actually running
+- `--build-first`: Build the project before running
+- `--no-build`: Do not build, just run existing executable
+- `--detached`: Run the process in detached mode (non-blocking)
+- `--args <args...>`: Additional arguments to pass to the executable
+
+### `ubuild gencodebase`
+Generate compile_commands.json for IDE (VSCode clangd, CLion, etc.).
+
+Options:
+- `-t, --target <target>`: Build targets (Editor is recommended for IDE code completion) - default: Editor
+- `-c, --config <config>`: Build configuration (Debug, DebugGame, Development, Shipping, Test) - default: Development
+- `-p, --platform <platform>`: Platform (Win64, Win32, Linux, Mac) - default: Win64
+- `--project <path>`: Path to project directory or .uproject file
+- `--engine-path <path>`: Path to Unreal Engine installation
+- `--include-plugin-sources`: Include plugin sources in compile commands (default: true)
+- `--no-include-plugin-sources`: Exclude plugin sources
+- `--include-engine-sources`: Include engine sources in compile commands (default: true)
+- `--no-include-engine-sources`: Exclude engine sources
+- `--use-engine-includes`: Use engine includes in compile commands (default: true)
+- `--no-use-engine-includes`: Do not use engine includes
+- `--json`: Output result as JSON
+
+### `ubuild update`
+Update ubuild to the latest version.
+
+Automatically detects whether ubuild is installed globally or locally and updates accordingly.
 
 ## Engine Detection
 
