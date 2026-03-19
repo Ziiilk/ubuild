@@ -8,23 +8,17 @@ import { Validator } from '../utils/validator';
 import { EngineResolver } from './engine-resolver';
 
 export class ProjectInitializer {
-  /**
-   * Initialize a new Unreal Engine project
-   */
   static async initialize(options: InitOptions): Promise<InitResult> {
     const createdFiles: string[] = [];
 
     try {
-      // Validate options
       const validatedOptions = await this.validateOptions(options);
       const { name, type, directory, enginePath, force } = validatedOptions;
 
       Logger.title(`Initializing ${name}`);
 
-      // Create project directory
       await fs.ensureDir(directory);
 
-      // Check if directory is safe for initialization
       const safetyCheck = await Validator.isSafeForInit(directory, force);
       if (!safetyCheck.safe) {
         throw new Error(`Directory not safe for initialization: ${safetyCheck.message}`);
@@ -34,7 +28,6 @@ export class ProjectInitializer {
       Logger.info(`Project type: ${type}`);
       Logger.info(`Engine: ${enginePath}`);
 
-      // Create project structure based on type
       switch (type) {
         case 'cpp':
           await this.createCppProject(name, directory, enginePath);
@@ -47,29 +40,24 @@ export class ProjectInitializer {
           break;
       }
 
-      // Create .uproject file
       const uprojectPath = await this.createUProjectFile(name, directory, enginePath, type);
       createdFiles.push(uprojectPath);
 
-      // Create source directory and files for C++ projects
       if (type === 'cpp') {
         const sourceFiles = await this.createSourceFiles(name, directory, enginePath);
         createdFiles.push(...sourceFiles);
       }
 
-      // Create Content directory for blueprint projects
       if (type === 'blueprint' || type === 'blank') {
         const contentDir = path.join(directory, 'Content');
         await fs.ensureDir(contentDir);
         createdFiles.push(contentDir);
       }
 
-      // Create Config directory
       const configDir = path.join(directory, 'Config');
       await fs.ensureDir(configDir);
       createdFiles.push(configDir);
 
-      // Create default config files
       await this.createConfigFiles(directory);
       createdFiles.push(path.join(configDir, 'DefaultEngine.ini'));
 
@@ -94,9 +82,6 @@ export class ProjectInitializer {
     }
   }
 
-  /**
-   * Validate and complete initialization options
-   */
   private static async validateOptions(options: InitOptions): Promise<Required<InitOptions>> {
     const name = options.name;
     if (!name) {
@@ -117,10 +102,8 @@ export class ProjectInitializer {
     const directory = options.directory || path.join(process.cwd(), name);
     const template = options.template || 'Basic';
 
-    // Resolve engine path
     let enginePath = options.enginePath;
     if (!enginePath) {
-      // Find available engines
       const engines = await EngineResolver.findEngineInstallations();
 
       if (engines.length === 0) {
@@ -129,12 +112,10 @@ export class ProjectInitializer {
         enginePath = engines[0].path;
         Logger.info(`Using engine: ${engines[0].displayName || engines[0].associationId}`);
       } else {
-        // Multiple engines - let user choose
         enginePath = await this.promptForEngineSelection(engines);
       }
     }
 
-    // Validate engine path
     if (!(await Validator.isValidEnginePath(enginePath))) {
       throw new Error(
         `Invalid engine path: ${enginePath}. Make sure it points to a valid Unreal Engine installation.`
@@ -153,9 +134,6 @@ export class ProjectInitializer {
     };
   }
 
-  /**
-   * Prompt user to select an engine from multiple installations
-   */
   private static async promptForEngineSelection(engines: any[]): Promise<string> {
     Logger.info('Multiple Unreal Engine installations found:');
 
@@ -185,56 +163,39 @@ export class ProjectInitializer {
     return selectedEngine;
   }
 
-  /**
-   * Create C++ project structure
-   */
   private static async createCppProject(
     name: string,
     directory: string,
     _enginePath: string
   ): Promise<void> {
-    // Create Source directory
     const sourceDir = path.join(directory, 'Source');
     await fs.ensureDir(sourceDir);
 
-    // Create project module directory
     const moduleDir = path.join(sourceDir, name);
     await fs.ensureDir(moduleDir);
 
-    // Create Public and Private directories
     await fs.ensureDir(path.join(moduleDir, 'Public'));
     await fs.ensureDir(path.join(moduleDir, 'Private'));
   }
 
-  /**
-   * Create Blueprint project structure
-   */
   private static async createBlueprintProject(
     _name: string,
     directory: string,
     _enginePath: string
   ): Promise<void> {
-    // Blueprint projects only need Content directory
     const contentDir = path.join(directory, 'Content');
     await fs.ensureDir(contentDir);
   }
 
-  /**
-   * Create Blank project structure
-   */
   private static async createBlankProject(
     _name: string,
     directory: string,
     _enginePath: string
   ): Promise<void> {
-    // Blank project has minimal structure
     const contentDir = path.join(directory, 'Content');
     await fs.ensureDir(contentDir);
   }
 
-  /**
-   * Create .uproject file
-   */
   private static async createUProjectFile(
     name: string,
     directory: string,
@@ -268,9 +229,6 @@ export class ProjectInitializer {
     return uprojectPath;
   }
 
-  /**
-   * Get engine version info from Build.version (for version-appropriate Target/Build generation)
-   */
   private static async getEngineVersionInfo(
     enginePath: string
   ): Promise<EngineVersionInfo | undefined> {
@@ -287,29 +245,19 @@ export class ProjectInitializer {
     }
   }
 
-  /**
-   * Get engine association ID from engine path
-   * Aligned with UnrealVersionSelector:
-   * - Launcher engines: use version string (e.g., "5.5")
-   * - Registry source builds: use associationId (GUID or custom name)
-   */
   private static async getEngineAssociationId(enginePath: string): Promise<string> {
-    // First, try to get from EngineResolver's engine list
     const engines = await EngineResolver.findEngineInstallations();
     const matchingEngine = engines.find((engine) => engine.path === enginePath);
 
     if (matchingEngine) {
-      // Launcher engines: use version string (e.g., "5.5")
       if (matchingEngine.source === 'launcher' && matchingEngine.version) {
         return `${matchingEngine.version.MajorVersion}.${matchingEngine.version.MinorVersion}`;
       }
-      // Registry/environment engines: use associationId (GUID or custom name)
       if (matchingEngine.associationId) {
         return matchingEngine.associationId;
       }
     }
 
-    // Fallback: try to extract from Build.version file
     try {
       const versionFile = path.join(enginePath, 'Engine', 'Build', 'Build.version');
       if (await fs.pathExists(versionFile)) {
@@ -318,16 +266,11 @@ export class ProjectInitializer {
         return `${versionInfo.MajorVersion}.${versionInfo.MinorVersion}`;
       }
     } catch {
-      // ignore
     }
 
-    // Final fallback: use generic ID
     return '5.1';
   }
 
-  /**
-   * Create source files for C++ project (aligned with engine version to avoid compilation errors)
-   */
   private static async createSourceFiles(
     name: string,
     directory: string,
@@ -342,43 +285,32 @@ export class ProjectInitializer {
       );
     }
 
-    // Create .Target.cs files (Editor target aligned with UnrealEditor to share build products)
     const gameTarget = await this.createTargetFile(name, sourceDir, 'Game', versionInfo);
     const editorTarget = await this.createTargetFile(name, sourceDir, 'Editor', versionInfo);
     createdFiles.push(gameTarget, editorTarget);
 
-    // Create .Build.cs file
     const buildCs = await this.createBuildCsFile(name, sourceDir);
     createdFiles.push(buildCs);
 
-    // Create main module files
     const moduleDir = path.join(sourceDir, name);
     const publicDir = path.join(moduleDir, 'Public');
     const privateDir = path.join(moduleDir, 'Private');
 
-    // Create module header
     const moduleHeader = await this.createModuleHeader(name, publicDir);
     createdFiles.push(moduleHeader);
 
-    // Create module source
     const moduleSource = await this.createModuleSource(name, privateDir);
     createdFiles.push(moduleSource);
 
-    // Create game mode header (example)
     const gameModeHeader = await this.createGameModeHeader(name, publicDir);
     createdFiles.push(gameModeHeader);
 
-    // Create game mode source
     const gameModeSource = await this.createGameModeSource(name, privateDir);
     createdFiles.push(gameModeSource);
 
     return createdFiles;
   }
 
-  /**
-   * Create target file (*.Target.cs), aligned with UnrealEditor for Editor target to avoid
-   * "modifies the values of properties ... This is not allowed, as [target] has build products in common with UnrealEditor"
-   */
   private static async createTargetFile(
     name: string,
     sourceDir: string,
@@ -393,7 +325,6 @@ export class ProjectInitializer {
 
     const isUE5 = versionInfo && versionInfo.MajorVersion >= 5;
 
-    // UE5: use Latest so generated project matches current engine; UE4: use V2
     const defaultBuildSettings = isUE5 ? 'BuildSettingsVersion.Latest' : 'BuildSettingsVersion.V2';
     const includeOrderLine = isUE5
       ? '        IncludeOrderVersion = EngineIncludeOrderVersion.Latest;'
@@ -422,9 +353,6 @@ ${bodyLines.join('\n')}
     return filePath;
   }
 
-  /**
-   * Create build file (*.Build.cs)
-   */
   private static async createBuildCsFile(name: string, sourceDir: string): Promise<string> {
     const filePath = path.join(sourceDir, name, `${name}.Build.cs`);
 
@@ -444,7 +372,6 @@ public class ${name} : ModuleRules
         });
 
         PrivateDependencyModuleNames.AddRange(new string[] {
-            // Add private dependencies here
         });
     }
 }`;
@@ -453,9 +380,6 @@ public class ${name} : ModuleRules
     return filePath;
   }
 
-  /**
-   * Create module header file
-   */
   private static async createModuleHeader(name: string, publicDir: string): Promise<string> {
     const filePath = path.join(publicDir, `${name}.h`);
 
@@ -475,9 +399,6 @@ public:
     return filePath;
   }
 
-  /**
-   * Create module source file
-   */
   private static async createModuleSource(name: string, privateDir: string): Promise<string> {
     const filePath = path.join(privateDir, `${name}.cpp`);
 
@@ -488,21 +409,16 @@ IMPLEMENT_MODULE(F${name}Module, ${name})
 
 void F${name}Module::StartupModule()
 {
-    // Startup code here
 }
 
 void F${name}Module::ShutdownModule()
 {
-    // Shutdown code here
 }`;
 
     await fs.writeFile(filePath, content, 'utf-8');
     return filePath;
   }
 
-  /**
-   * Create game mode header file
-   */
   private static async createGameModeHeader(name: string, publicDir: string): Promise<string> {
     const filePath = path.join(publicDir, `${name}GameModeBase.h`);
 
@@ -525,9 +441,6 @@ public:
     return filePath;
   }
 
-  /**
-   * Create game mode source file
-   */
   private static async createGameModeSource(name: string, privateDir: string): Promise<string> {
     const filePath = path.join(privateDir, `${name}GameModeBase.cpp`);
 
@@ -535,7 +448,6 @@ public:
 
 A${name}GameModeBase::A${name}GameModeBase()
 {
-    // Set default pawn class
     static ConstructorHelpers::FClassFinder<APawn> PlayerPawnBPClass(TEXT("/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter"));
     if (PlayerPawnBPClass.Class != nullptr)
     {
@@ -547,13 +459,9 @@ A${name}GameModeBase::A${name}GameModeBase()
     return filePath;
   }
 
-  /**
-   * Create config files
-   */
   private static async createConfigFiles(directory: string): Promise<void> {
     const configDir = path.join(directory, 'Config');
 
-    // Create DefaultEngine.ini
     const defaultEngineContent = `[/Script/EngineSettings.GeneralProjectSettings]
 ProjectID=00000000000000000000000000000000
 
@@ -563,12 +471,10 @@ ProjectID=00000000000000000000000000000000
 `;
     await fs.writeFile(path.join(configDir, 'DefaultEngine.ini'), defaultEngineContent, 'utf-8');
 
-    // Create DefaultGame.ini
     const defaultGameContent = `[/Script/Engine.GameSession]
 `;
     await fs.writeFile(path.join(configDir, 'DefaultGame.ini'), defaultGameContent, 'utf-8');
 
-    // Create DefaultEditor.ini
     const defaultEditorContent = `[/Script/UnrealEd.EditorEngine]
 +ActiveGameNameRedirects=(OldGameName="/Script/Engine",NewGameName="/Script/Engine")
 +ActiveGameNameRedirects=(OldGameName="/Script/CoreUObject",NewGameName="/Script/CoreUObject")

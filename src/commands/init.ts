@@ -20,27 +20,23 @@ export function initCommand(program: Command): void {
       try {
         Logger.title('Initialize Unreal Engine Project');
 
-        // Dry run
         if (options.dryRun) {
           await dryRunInit(options);
           return;
         }
 
-        // Validate project name
         if (!Validator.isValidProjectName(options.name)) {
           Logger.error(`Invalid project name: ${options.name}`);
           Logger.info('Project name can only contain: a-z, A-Z, 0-9, _, -');
           process.exit(1);
         }
 
-        // Validate project type
         if (!Validator.isValidProjectType(options.type)) {
           Logger.error(`Invalid project type: ${options.type}`);
           Logger.info('Valid types: cpp, blueprint, blank');
           process.exit(1);
         }
 
-        // Execute initialization
         Logger.info(`Initializing ${chalk.bold(options.name)} as ${options.type.toUpperCase()} project`);
         Logger.divider();
 
@@ -58,7 +54,6 @@ export function initCommand(program: Command): void {
         if (result.success) {
           Logger.success(`Project ${chalk.bold(options.name)} initialized successfully!`);
 
-          // Show project structure
           Logger.subTitle('Project Structure');
           console.log(`  ${result.projectPath}/`);
           console.log(`  ├── ${options.name}.uproject`);
@@ -121,7 +116,6 @@ async function dryRunInit(options: any): Promise<void> {
   console.log(`  Directory: ${options.directory || `./${options.name}`}`);
   console.log(`  Force: ${options.force ? 'Yes' : 'No'}`);
 
-  // Try to detect engine
   if (options.enginePath) {
     console.log(`  Engine Path: ${options.enginePath}`);
   } else {
@@ -147,7 +141,6 @@ async function dryRunInit(options: any): Promise<void> {
     }
   }
 
-  // Show what would be created
   console.log();
   Logger.subTitle('What would be created:');
 

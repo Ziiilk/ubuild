@@ -21,14 +21,10 @@ export class BuildExecutor {
     });
   }
 
-  /**
-   * Execute Unreal Engine build (instance method)
-   */
   async execute(options: BuildOptions): Promise<BuildResult> {
     const startTime = Date.now();
 
     try {
-      // Validate options
       const validatedOptions = await this.validateOptions(options);
       const { target, config, platform, projectPath, enginePath } = validatedOptions;
 
@@ -36,7 +32,6 @@ export class BuildExecutor {
       this.logger.info(`Project: ${projectPath}`);
       this.logger.info(`Engine: ${enginePath}`);
 
-      // Check if Build.bat exists
       const buildBatPath = path.join(enginePath, 'Engine', 'Build', 'BatchFiles', 'Build.bat');
       const buildScriptExists = await fs.pathExists(buildBatPath);
 
@@ -45,13 +40,11 @@ export class BuildExecutor {
       let exitCode = 0;
 
       if (buildScriptExists) {
-        // Use Build.bat
         const result = await this.executeBuildBat(buildBatPath, validatedOptions);
         stdout = result.stdout;
         stderr = result.stderr;
         exitCode = result.exitCode;
       } else {
-        // Fallback to UnrealBuildTool directly
         const result = await this.executeUnrealBuildTool(enginePath, validatedOptions);
         stdout = result.stdout;
         stderr = result.stderr;
@@ -88,9 +81,6 @@ export class BuildExecutor {
     }
   }
 
-  /**
-   * Validate and complete build options
-   */
   private async validateOptions(options: BuildOptions): Promise<Required<BuildOptions>> {
     const target: BuildTarget = options.target || 'Editor';
     const config: BuildConfiguration = options.config || 'Development';
@@ -99,10 +89,8 @@ export class BuildExecutor {
     const verbose = options.verbose || false;
     const additionalArgs = options.additionalArgs || [];
 
-    // Validate project path
     let projectPath = options.projectPath || process.cwd();
     if (await fs.pathExists(projectPath) && (await fs.stat(projectPath)).isDirectory()) {
-      // Look for .uproject file
       const uprojectFiles = await fs.readdir(projectPath).then(files =>
         files.filter(f => f.endsWith('.uproject'))
       );
@@ -114,10 +102,8 @@ export class BuildExecutor {
       }
     }
 
-    // Validate engine path
     let enginePath = options.enginePath;
     if (!enginePath) {
-      // Try to resolve engine path
       const { EngineResolver } = await import('./engine-resolver');
       const engineResult = await EngineResolver.resolveEngine(projectPath);
       if (!engineResult.engine) {
@@ -126,28 +112,23 @@ export class BuildExecutor {
       enginePath = engineResult.engine.path;
     }
 
-    // Validate engine path exists
     if (!(await fs.pathExists(enginePath))) {
       throw new Error(`Engine path does not exist: ${enginePath}`);
     }
 
-    // Resolve target name from generic type to project-specific target
     let resolvedTarget = target;
     const availableTargets = await BuildExecutor.getAvailableTargets(projectPath);
 
     if (availableTargets.length > 0) {
-      // Check if target is a generic type (Editor, Game, Client, Server)
       const genericTypes = ['Editor', 'Game', 'Client', 'Server'];
       const isGenericType = genericTypes.includes(target);
 
       if (isGenericType) {
-        // Find a target matching the generic type
         const matchingTarget = availableTargets.find(t => t.type === target);
         if (matchingTarget) {
           resolvedTarget = matchingTarget.name;
           this.logger.debug(`Resolved generic target "${target}" to "${resolvedTarget}"`);
         } else {
-          // No matching target found, try to find any target with the type in name
           const fallbackTarget = availableTargets.find(t =>
             t.name.toLowerCase().includes(target.toLowerCase())
           );
@@ -159,14 +140,12 @@ export class BuildExecutor {
           }
         }
       } else {
-        // Target is already a specific name, verify it exists
         const targetExists = availableTargets.some(t => t.name === target);
         if (!targetExists) {
           throw new Error(`Target "${target}" not found in project. Available targets: ${availableTargets.map(t => t.name).join(', ')}`);
         }
       }
     } else {
-      // No target files found, might be a blueprint-only project
       this.logger.debug('No target files found, using generic target name');
     }
 
@@ -186,20 +165,16 @@ export class BuildExecutor {
     };
   }
 
-  /**
-   * Execute build using Build.bat
-   */
   private async executeBuildBat(
     buildBatPath: string,
     options: Required<BuildOptions>
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    // Build command string with proper quoting
     const args = [
       options.target,
       options.platform,
       options.config,
       `-project="${options.projectPath}"`,
-      '-NoMutex'  // Allow concurrent UBT instances
+      '-NoMutex'
     ];
 
     if (options.clean) {
@@ -218,13 +193,12 @@ export class BuildExecutor {
     const childProcess = execa(command, {
       stdio: 'pipe',
       cwd: path.dirname(buildBatPath),
-      shell: true // Still need shell for .bat files
+      shell: true
     });
 
     let stdout = '';
     let stderr = '';
 
-    // Stream output to both logger and capture
     if (childProcess.stdout) {
       childProcess.stdout.on('data', (data: Buffer) => {
         const str = data.toString();
@@ -249,9 +223,6 @@ export class BuildExecutor {
     };
   }
 
-  /**
-   * Execute build using UnrealBuildTool directly
-   */
   private async executeUnrealBuildTool(
     enginePath: string,
     options: Required<BuildOptions>
@@ -269,13 +240,12 @@ export class BuildExecutor {
       throw new Error(`UnrealBuildTool not found at: ${ubtPath}`);
     }
 
-    // Build command arguments
     const args = [
       options.target,
       options.platform,
       options.config,
       `-project="${options.projectPath}"`,
-      '-NoMutex'  // Allow concurrent UBT instances
+      '-NoMutex'
     ];
 
     if (options.clean) {
@@ -294,13 +264,12 @@ export class BuildExecutor {
     const childProcess = execa(command, {
       stdio: 'pipe',
       cwd: path.dirname(ubtPath),
-      shell: true // Need shell for .exe on Windows
+      shell: true
     });
 
     let stdout = '';
     let stderr = '';
 
-    // Stream output to both logger and capture
     if (childProcess.stdout) {
       childProcess.stdout.on('data', (data: Buffer) => {
         const str = data.toString();
@@ -325,12 +294,8 @@ export class BuildExecutor {
     };
   }
 
-  /**
-   * Get available build targets from project (static method)
-   */
   static async getAvailableTargets(projectPath: string): Promise<Array<{ name: string; type: string }>> {
     try {
-      // Determine project directory: if path ends with .uproject, use its parent directory
       let projectDir = projectPath;
       if (projectPath.endsWith('.uproject')) {
         projectDir = path.dirname(projectPath);
@@ -363,9 +328,6 @@ export class BuildExecutor {
     }
   }
 
-  /**
-   * Get default build options for project (static method)
-   */
   static async getDefaultOptions(projectPath: string): Promise<Partial<BuildOptions>> {
     const targets = await BuildExecutor.getAvailableTargets(projectPath);
     const hasEditorTarget = targets.some(t => t.type === 'Editor');
@@ -377,9 +339,6 @@ export class BuildExecutor {
     };
   }
 
-  /**
-   * Execute Unreal Engine build (static method for backward compatibility)
-   */
   static async execute(options: BuildOptions): Promise<BuildResult> {
     const executor = new BuildExecutor({
       logger: options.logger,
@@ -390,16 +349,10 @@ export class BuildExecutor {
     return executor.execute(options);
   }
 
-  /**
-   * Get available build targets from project (instance method)
-   */
   async getAvailableTargetsInstance(projectPath: string): Promise<Array<{ name: string; type: string }>> {
     return BuildExecutor.getAvailableTargets(projectPath);
   }
 
-  /**
-   * Get default build options for project (instance method)
-   */
   async getDefaultOptionsInstance(projectPath: string): Promise<Partial<BuildOptions>> {
     return BuildExecutor.getDefaultOptions(projectPath);
   }

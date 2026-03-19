@@ -4,15 +4,11 @@ import { glob } from 'glob';
 import { UProject, ProjectInfo, ProjectDetectionOptions, ProjectDetectionResult } from '../types/project';
 
 export class ProjectDetector {
-  /**
-   * Detect Unreal Engine project in the given directory
-   */
   static async detectProject(options: ProjectDetectionOptions = {}): Promise<ProjectDetectionResult> {
     const cwd = options.cwd || process.cwd();
     const warnings: string[] = [];
 
     try {
-      // Find .uproject files
       const uprojectFiles = await this.findUProjectFiles(cwd, options.recursive);
 
       if (uprojectFiles.length === 0) {
@@ -23,15 +19,11 @@ export class ProjectDetector {
         };
       }
 
-      // For now, use the first found .uproject file
-      // In the future, we might support multiple projects or let user choose
       const uprojectPath = uprojectFiles[0];
       const projectDir = path.dirname(uprojectPath);
 
-      // Parse .uproject file
       const uproject = await this.parseUProject(uprojectPath);
 
-      // Validate .uproject structure
       const validationResult = this.validateUProject(uproject);
       if (!validationResult.isValid) {
         return {
@@ -41,10 +33,8 @@ export class ProjectDetector {
         };
       }
 
-      // Get project name from .uproject filename
       const projectName = path.basename(uprojectPath, '.uproject');
 
-      // Check Source directory
       const sourceDir = path.join(projectDir, 'Source');
       const hasSourceDir = await fs.pathExists(sourceDir);
 
@@ -52,13 +42,10 @@ export class ProjectDetector {
         warnings.push('Source directory not found - this may be a blueprint-only project');
       }
 
-      // Find target files
       const targets = hasSourceDir ? await this.findTargetFiles(sourceDir) : [];
 
-      // Find module files
       const modules = hasSourceDir ? await this.findModuleFiles(sourceDir) : [];
 
-      // Build project info
       const projectInfo: ProjectInfo = {
         name: projectName,
         path: projectDir,
@@ -83,29 +70,19 @@ export class ProjectDetector {
     }
   }
 
-  /**
-   * Find .uproject files in the directory
-   */
   private static async findUProjectFiles(cwd: string, recursive?: boolean): Promise<string[]> {
     const pattern = recursive ? '**/*.uproject' : '*.uproject';
     return await glob(pattern, { cwd, absolute: true });
   }
 
-  /**
-   * Parse .uproject JSON file
-   */
   private static async parseUProject(uprojectPath: string): Promise<UProject> {
     const content = await fs.readFile(uprojectPath, 'utf-8');
     return JSON.parse(content);
   }
 
-  /**
-   * Validate .uproject structure
-   */
   private static validateUProject(uproject: UProject): { isValid: boolean; error?: string; warnings: string[] } {
     const warnings: string[] = [];
 
-    // Check required fields
     if (uproject.FileVersion === undefined) {
       return { isValid: false, error: 'Missing FileVersion field', warnings };
     }
@@ -125,9 +102,6 @@ export class ProjectDetector {
     return { isValid: true, warnings };
   }
 
-  /**
-   * Find target files (*.Target.cs) in Source directory
-   */
   private static async findTargetFiles(sourceDir: string): Promise<ProjectInfo['targets']> {
     const files = await glob('*.Target.cs', { cwd: sourceDir, absolute: false });
 
@@ -135,7 +109,6 @@ export class ProjectDetector {
       const fileName = path.basename(file, '.Target.cs');
       let type: 'Editor' | 'Game' | 'Client' | 'Server' = 'Game';
 
-      // Try to determine type from filename
       if (fileName.toLowerCase().includes('editor')) {
         type = 'Editor';
       } else if (fileName.toLowerCase().includes('client')) {
@@ -154,9 +127,6 @@ export class ProjectDetector {
     return targets;
   }
 
-  /**
-   * Find module files (*.Build.cs) in Source directory
-   */
   private static async findModuleFiles(sourceDir: string): Promise<ProjectInfo['modules']> {
     const files = await glob('**/*.Build.cs', { cwd: sourceDir, absolute: false });
 

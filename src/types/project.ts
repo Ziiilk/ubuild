@@ -1,6 +1,6 @@
 export interface UProject {
   FileVersion: number;
-  EngineAssociation: string; // GUID or string like "5.1"
+  EngineAssociation: string;
   Category?: string;
   Description?: string;
   Modules: Array<{

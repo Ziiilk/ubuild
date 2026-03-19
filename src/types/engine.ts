@@ -13,7 +13,7 @@ export interface EngineVersionInfo {
 export interface EngineInstallation {
   path: string;
   version?: EngineVersionInfo;
-  associationId: string; // GUID
+  associationId: string;
   displayName?: string;
   installedDate?: string;
   source?: 'registry' | 'launcher' | 'environment';

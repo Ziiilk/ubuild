@@ -22,7 +22,6 @@ program
     outputError: (str, write) => write(chalk.red(str)),
   });
 
-// Register commands
 listCommand(program);
 engineCommand(program);
 buildCommand(program);
@@ -32,13 +31,11 @@ runCommand(program);
 updateCommand(program);
 gencodebaseCommand(program);
 
-// Global error handling
 program.configureHelp({
   sortSubcommands: true,
   subcommandTerm: (cmd) => cmd.name(),
 });
 
-// Parse arguments
 try {
   program.parse(process.argv);
 } catch (error) {
