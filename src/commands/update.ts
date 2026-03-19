@@ -5,8 +5,6 @@ import { Logger } from '../utils/logger';
 
 async function isGlobalInstall(): Promise<boolean> {
   try {
-    const { stdout } = await execa('npm', ['root', '-g']);
-    const globalPath = stdout.trim();
     const { stdout: listOutput } = await execa('npm', ['list', '-g', '@zitool/ubuild', '--depth=0']);
     return listOutput.includes('@zitool/ubuild');
   } catch {
