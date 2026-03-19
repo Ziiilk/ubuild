@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.7]
+
+- Support concurrent `ubuild build` commands
+- `ubuild update` no longer requires confirmation and auto-detects installation type
+
 ## [0.0.6]
 
 - Add VS Code tasks generation for `ubuild generate --ide vscode`
