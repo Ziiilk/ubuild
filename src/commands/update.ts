@@ -1,16 +1,24 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { execa } from 'execa';
-import inquirer from 'inquirer';
 import { Logger } from '../utils/logger';
+
+async function isGlobalInstall(): Promise<boolean> {
+  try {
+    const { stdout } = await execa('npm', ['root', '-g']);
+    const globalPath = stdout.trim();
+    const { stdout: listOutput } = await execa('npm', ['list', '-g', '@zitool/ubuild', '--depth=0']);
+    return listOutput.includes('@zitool/ubuild');
+  } catch {
+    return false;
+  }
+}
 
 export function updateCommand(program: Command): void {
   program
     .command('update')
     .description('Update ubuild to the latest version')
-    .option('-g, --global', 'Update globally installed ubuild')
-    .option('-y, --yes', 'Skip confirmation and update automatically')
-    .action(async (options) => {
+    .action(async () => {
       try {
         Logger.title('Update ubuild');
 
@@ -47,28 +55,15 @@ export function updateCommand(program: Command): void {
           }
 
           Logger.warning(`Update available: ${currentVersion} → ${latestVersion}`);
-
-          if (!options.yes) {
-            const answers = await inquirer.prompt([
-              {
-                type: 'confirm',
-                name: 'confirm',
-                message: 'Do you want to update now?',
-                default: true,
-              },
-            ]);
-
-            if (!answers.confirm) {
-              Logger.info('Update cancelled');
-              return;
-            }
-          }
-
           Logger.info('Updating ubuild...');
 
-          if (options.global) {
+          const isGlobal = await isGlobalInstall();
+
+          if (isGlobal) {
+            Logger.info('Detected global installation, updating globally...');
             await execa('npm', ['install', '-g', '@zitool/ubuild']);
           } else {
+            Logger.info('Detected local installation, updating locally...');
             await execa('npm', ['install', '@zitool/ubuild@latest']);
           }
 
