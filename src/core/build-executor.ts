@@ -1,15 +1,30 @@
 import { execa } from 'execa';
 import path from 'path';
 import fs from 'fs-extra';
+import { Writable } from 'stream';
 import { BuildOptions, BuildResult, BuildTarget, BuildConfiguration, BuildPlatform } from '../types/build';
 import { Logger } from '../utils/logger';
 import { Platform } from '../utils/platform';
 
 export class BuildExecutor {
+  private logger: Logger;
+  private stdout: Writable;
+  private stderr: Writable;
+
+  constructor(options: { logger?: Logger; stdout?: Writable; stderr?: Writable; silent?: boolean } = {}) {
+    this.stdout = options.stdout || process.stdout;
+    this.stderr = options.stderr || process.stderr;
+    this.logger = options.logger || new Logger({
+      stdout: this.stdout,
+      stderr: this.stderr,
+      silent: options.silent
+    });
+  }
+
   /**
-   * Execute Unreal Engine build
+   * Execute Unreal Engine build (instance method)
    */
-  static async execute(options: BuildOptions): Promise<BuildResult> {
+  async execute(options: BuildOptions): Promise<BuildResult> {
     const startTime = Date.now();
 
     try {
@@ -17,9 +32,9 @@ export class BuildExecutor {
       const validatedOptions = await this.validateOptions(options);
       const { target, config, platform, projectPath, enginePath } = validatedOptions;
 
-      Logger.info(`Starting build: ${target} | ${platform} | ${config}`);
-      Logger.info(`Project: ${projectPath}`);
-      Logger.info(`Engine: ${enginePath}`);
+      this.logger.info(`Starting build: ${target} | ${platform} | ${config}`);
+      this.logger.info(`Project: ${projectPath}`);
+      this.logger.info(`Engine: ${enginePath}`);
 
       // Check if Build.bat exists
       const buildBatPath = path.join(enginePath, 'Engine', 'Build', 'BatchFiles', 'Build.bat');
@@ -76,7 +91,7 @@ export class BuildExecutor {
   /**
    * Validate and complete build options
    */
-  private static async validateOptions(options: BuildOptions): Promise<Required<BuildOptions>> {
+  private async validateOptions(options: BuildOptions): Promise<Required<BuildOptions>> {
     const target: BuildTarget = options.target || 'Editor';
     const config: BuildConfiguration = options.config || 'Development';
     const platform: BuildPlatform = options.platform || 'Win64';
@@ -118,7 +133,7 @@ export class BuildExecutor {
 
     // Resolve target name from generic type to project-specific target
     let resolvedTarget = target;
-    const availableTargets = await this.getAvailableTargets(projectPath);
+    const availableTargets = await BuildExecutor.getAvailableTargets(projectPath);
 
     if (availableTargets.length > 0) {
       // Check if target is a generic type (Editor, Game, Client, Server)
@@ -130,7 +145,7 @@ export class BuildExecutor {
         const matchingTarget = availableTargets.find(t => t.type === target);
         if (matchingTarget) {
           resolvedTarget = matchingTarget.name;
-          Logger.debug(`Resolved generic target "${target}" to "${resolvedTarget}"`);
+          this.logger.debug(`Resolved generic target "${target}" to "${resolvedTarget}"`);
         } else {
           // No matching target found, try to find any target with the type in name
           const fallbackTarget = availableTargets.find(t =>
@@ -138,7 +153,7 @@ export class BuildExecutor {
           );
           if (fallbackTarget) {
             resolvedTarget = fallbackTarget.name;
-            Logger.debug(`Fallback: resolved target "${target}" to "${resolvedTarget}"`);
+            this.logger.debug(`Fallback: resolved target "${target}" to "${resolvedTarget}"`);
           } else {
             throw new Error(`No ${target} target found in project. Available targets: ${availableTargets.map(t => t.name).join(', ')}`);
           }
@@ -152,7 +167,7 @@ export class BuildExecutor {
       }
     } else {
       // No target files found, might be a blueprint-only project
-      Logger.debug('No target files found, using generic target name');
+      this.logger.debug('No target files found, using generic target name');
     }
 
     return {
@@ -163,14 +178,18 @@ export class BuildExecutor {
       enginePath,
       clean,
       verbose,
-      additionalArgs
+      additionalArgs,
+      logger: options.logger || this.logger,
+      stdout: options.stdout || this.stdout,
+      stderr: options.stderr || this.stderr,
+      silent: options.silent || false
     };
   }
 
   /**
    * Execute build using Build.bat
    */
-  private static async executeBuildBat(
+  private async executeBuildBat(
     buildBatPath: string,
     options: Required<BuildOptions>
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
@@ -179,7 +198,8 @@ export class BuildExecutor {
       options.target,
       options.platform,
       options.config,
-      `-project="${options.projectPath}"`
+      `-project="${options.projectPath}"`,
+      '-NoMutex'  // Allow concurrent UBT instances
     ];
 
     if (options.clean) {
@@ -193,7 +213,7 @@ export class BuildExecutor {
     args.push(...options.additionalArgs);
 
     const command = `"${buildBatPath}" ${args.join(' ')}`;
-    Logger.debug(`Executing: ${command}`);
+    this.logger.debug(`Executing: ${command}`);
 
     const childProcess = execa(command, {
       stdio: 'pipe',
@@ -201,31 +221,38 @@ export class BuildExecutor {
       shell: true // Still need shell for .bat files
     });
 
-    // Stream output
+    let stdout = '';
+    let stderr = '';
+
+    // Stream output to both logger and capture
     if (childProcess.stdout) {
       childProcess.stdout.on('data', (data: Buffer) => {
-        process.stdout.write(data.toString());
+        const str = data.toString();
+        stdout += str;
+        this.stdout.write(str);
       });
     }
 
     if (childProcess.stderr) {
       childProcess.stderr.on('data', (data: Buffer) => {
-        process.stderr.write(data.toString());
+        const str = data.toString();
+        stderr += str;
+        this.stderr.write(str);
       });
     }
 
     const result = await childProcess;
     return {
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode
+      stdout: result.stdout || stdout,
+      stderr: result.stderr || stderr,
+      exitCode: result.exitCode ?? 0
     };
   }
 
   /**
    * Execute build using UnrealBuildTool directly
    */
-  private static async executeUnrealBuildTool(
+  private async executeUnrealBuildTool(
     enginePath: string,
     options: Required<BuildOptions>
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
@@ -247,7 +274,8 @@ export class BuildExecutor {
       options.target,
       options.platform,
       options.config,
-      `-project="${options.projectPath}"`
+      `-project="${options.projectPath}"`,
+      '-NoMutex'  // Allow concurrent UBT instances
     ];
 
     if (options.clean) {
@@ -261,7 +289,7 @@ export class BuildExecutor {
     args.push(...options.additionalArgs);
 
     const command = `"${ubtPath}" ${args.join(' ')}`;
-    Logger.debug(`Executing: ${command}`);
+    this.logger.debug(`Executing: ${command}`);
 
     const childProcess = execa(command, {
       stdio: 'pipe',
@@ -269,29 +297,36 @@ export class BuildExecutor {
       shell: true // Need shell for .exe on Windows
     });
 
-    // Stream output
+    let stdout = '';
+    let stderr = '';
+
+    // Stream output to both logger and capture
     if (childProcess.stdout) {
       childProcess.stdout.on('data', (data: Buffer) => {
-        process.stdout.write(data.toString());
+        const str = data.toString();
+        stdout += str;
+        this.stdout.write(str);
       });
     }
 
     if (childProcess.stderr) {
       childProcess.stderr.on('data', (data: Buffer) => {
-        process.stderr.write(data.toString());
+        const str = data.toString();
+        stderr += str;
+        this.stderr.write(str);
       });
     }
 
     const result = await childProcess;
     return {
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode
+      stdout: result.stdout || stdout,
+      stderr: result.stderr || stderr,
+      exitCode: result.exitCode ?? 0
     };
   }
 
   /**
-   * Get available build targets from project
+   * Get available build targets from project (static method)
    */
   static async getAvailableTargets(projectPath: string): Promise<Array<{ name: string; type: string }>> {
     try {
@@ -329,10 +364,10 @@ export class BuildExecutor {
   }
 
   /**
-   * Get default build options for project
+   * Get default build options for project (static method)
    */
   static async getDefaultOptions(projectPath: string): Promise<Partial<BuildOptions>> {
-    const targets = await this.getAvailableTargets(projectPath);
+    const targets = await BuildExecutor.getAvailableTargets(projectPath);
     const hasEditorTarget = targets.some(t => t.type === 'Editor');
 
     return {
@@ -340,5 +375,32 @@ export class BuildExecutor {
       config: 'Development',
       platform: 'Win64'
     };
+  }
+
+  /**
+   * Execute Unreal Engine build (static method for backward compatibility)
+   */
+  static async execute(options: BuildOptions): Promise<BuildResult> {
+    const executor = new BuildExecutor({
+      logger: options.logger,
+      stdout: options.stdout,
+      stderr: options.stderr,
+      silent: options.silent
+    });
+    return executor.execute(options);
+  }
+
+  /**
+   * Get available build targets from project (instance method)
+   */
+  async getAvailableTargetsInstance(projectPath: string): Promise<Array<{ name: string; type: string }>> {
+    return BuildExecutor.getAvailableTargets(projectPath);
+  }
+
+  /**
+   * Get default build options for project (instance method)
+   */
+  async getDefaultOptionsInstance(projectPath: string): Promise<Partial<BuildOptions>> {
+    return BuildExecutor.getDefaultOptions(projectPath);
   }
 }

@@ -13,9 +13,14 @@ import { Validator } from './utils/validator';
 import { FileSystem } from './utils/file-system';
 import { Platform } from './utils/platform';
 
+// Command classes for concurrent execution
+import { ProjectBuilder } from './commands/build';
+import { ProjectRunner } from './commands/run';
+
 // Re-exports
 export { ProjectDetector, EngineResolver, BuildExecutor, ProjectGenerator, ProjectInitializer };
 export { Logger, Validator, FileSystem, Platform };
+export { ProjectBuilder, ProjectRunner };
 
 // Types
 export * from './types/project';
@@ -30,8 +35,12 @@ import { engineCommand } from './commands/engine';
 import { buildCommand } from './commands/build';
 import { generateCommand } from './commands/generate';
 import { initCommand } from './commands/init';
+import { runCommand } from './commands/run';
 
-export { listCommand, engineCommand, buildCommand, generateCommand, initCommand };
+export { listCommand, engineCommand, buildCommand, generateCommand, initCommand, runCommand };
+
+// Type for stream options
+import { Writable } from 'stream';
 
 /**
  * Main API for programmatic usage
@@ -48,7 +57,8 @@ export class UEBuildAPI {
   static build = {
     execute: BuildExecutor.execute.bind(BuildExecutor),
     getAvailableTargets: BuildExecutor.getAvailableTargets.bind(BuildExecutor),
-    getDefaultOptions: BuildExecutor.getDefaultOptions.bind(BuildExecutor)
+    getDefaultOptions: BuildExecutor.getDefaultOptions.bind(BuildExecutor),
+    createExecutor: (options?: { logger?: Logger; stdout?: Writable; stderr?: Writable; silent?: boolean }) => new BuildExecutor(options)
   };
 
   static generate = {
@@ -64,6 +74,12 @@ export class UEBuildAPI {
     validator: Validator,
     fileSystem: FileSystem,
     platform: Platform
+  };
+
+  // New concurrent execution API
+  static concurrent = {
+    createBuilder: (options?: { logger?: Logger; stdout?: Writable; stderr?: Writable; silent?: boolean }) => new ProjectBuilder(options),
+    createRunner: (options?: { logger?: Logger; stdout?: Writable; stderr?: Writable; silent?: boolean }) => new ProjectRunner(options)
   };
 }
 

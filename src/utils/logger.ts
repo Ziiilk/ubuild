@@ -1,51 +1,145 @@
 import chalk from 'chalk';
+import { Writable } from 'stream';
+
+export interface LoggerOptions {
+  prefix?: string;
+  stdout?: Writable;
+  stderr?: Writable;
+  silent?: boolean;
+}
 
 export class Logger {
-  static info(message: string): void {
-    console.log(chalk.blue('ℹ'), message);
+  private prefix: string;
+  private stdout: Writable;
+  private stderr: Writable;
+  private silent: boolean;
+
+  constructor(options: LoggerOptions = {}) {
+    this.prefix = options.prefix || '';
+    this.stdout = options.stdout || process.stdout;
+    this.stderr = options.stderr || process.stderr;
+    this.silent = options.silent || false;
   }
 
-  static success(message: string): void {
-    console.log(chalk.green('✓'), message);
+  private formatMessage(message: string): string {
+    return this.prefix ? `[${this.prefix}] ${message}` : message;
   }
 
-  static warning(message: string): void {
-    console.log(chalk.yellow('⚠'), message);
+  info(message: string): void {
+    if (this.silent) return;
+    this.stdout.write(chalk.blue('ℹ') + ' ' + this.formatMessage(message) + '\n');
   }
 
-  static error(message: string): void {
-    console.error(chalk.red('✗'), message);
+  success(message: string): void {
+    if (this.silent) return;
+    this.stdout.write(chalk.green('✓') + ' ' + this.formatMessage(message) + '\n');
   }
 
-  static debug(message: string): void {
+  warning(message: string): void {
+    if (this.silent) return;
+    this.stdout.write(chalk.yellow('⚠') + ' ' + this.formatMessage(message) + '\n');
+  }
+
+  error(message: string): void {
+    if (this.silent) return;
+    this.stderr.write(chalk.red('✗') + ' ' + this.formatMessage(message) + '\n');
+  }
+
+  debug(message: string): void {
+    if (this.silent) return;
     if (process.env.DEBUG) {
-      console.log(chalk.gray('🔍'), message);
+      this.stdout.write(chalk.gray('🔍') + ' ' + this.formatMessage(message) + '\n');
     }
   }
 
+  progress(message: string): void {
+    if (this.silent) return;
+    this.stdout.write(chalk.cyan('»') + ' ' + this.formatMessage(message) + '\r');
+  }
+
+  clearProgress(): void {
+    if (this.silent) return;
+    const width = (this.stdout as any).columns || 80;
+    this.stdout.write(' '.repeat(width) + '\r');
+  }
+
+  divider(): void {
+    if (this.silent) return;
+    const width = (this.stdout as any).columns || 80;
+    this.stdout.write(chalk.gray('─'.repeat(Math.min(width, 80))) + '\n');
+  }
+
+  title(title: string): void {
+    if (this.silent) return;
+    this.stdout.write('\n' + chalk.bold.cyan(this.formatMessage(title)) + '\n');
+    this.stdout.write(chalk.cyan('═'.repeat(title.length)) + '\n');
+  }
+
+  subTitle(subTitle: string): void {
+    if (this.silent) return;
+    this.stdout.write('\n' + chalk.bold(this.formatMessage(subTitle)) + '\n');
+    this.stdout.write(chalk.gray('─'.repeat(subTitle.length)) + '\n');
+  }
+
+  json(data: unknown): void {
+    if (this.silent) return;
+    this.stdout.write(JSON.stringify(data, null, 2) + '\n');
+  }
+
+  write(data: string): void {
+    if (this.silent) return;
+    this.stdout.write(data);
+  }
+
+  writeError(data: string): void {
+    if (this.silent) return;
+    this.stderr.write(data);
+  }
+
+  // Static methods for backward compatibility (use default global logger)
+  private static globalLogger = new Logger();
+
+  static info(message: string): void {
+    Logger.globalLogger.info(message);
+  }
+
+  static success(message: string): void {
+    Logger.globalLogger.success(message);
+  }
+
+  static warning(message: string): void {
+    Logger.globalLogger.warning(message);
+  }
+
+  static error(message: string): void {
+    Logger.globalLogger.error(message);
+  }
+
+  static debug(message: string): void {
+    Logger.globalLogger.debug(message);
+  }
+
   static progress(message: string): void {
-    process.stdout.write(chalk.cyan('»') + ' ' + message + '\r');
+    Logger.globalLogger.progress(message);
   }
 
   static clearProgress(): void {
-    process.stdout.write(' '.repeat(process.stdout.columns) + '\r');
+    Logger.globalLogger.clearProgress();
   }
 
   static divider(): void {
-    console.log(chalk.gray('─'.repeat(80)));
+    Logger.globalLogger.divider();
   }
 
   static title(title: string): void {
-    console.log('\n' + chalk.bold.cyan(title));
-    console.log(chalk.cyan('═'.repeat(title.length)));
+    Logger.globalLogger.title(title);
   }
 
   static subTitle(subTitle: string): void {
-    console.log('\n' + chalk.bold(subTitle));
-    console.log(chalk.gray('─'.repeat(subTitle.length)));
+    Logger.globalLogger.subTitle(subTitle);
   }
 
   static json(data: unknown): void {
-    console.log(JSON.stringify(data, null, 2));
+    Logger.globalLogger.json(data);
   }
 }
