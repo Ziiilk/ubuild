@@ -73,7 +73,6 @@ export class ProjectRunner {
   async run(options: RunOptions): Promise<void> {
     this.logger.title('Run Unreal Engine Project');
 
-    // Validate options
     if (!Validator.isValidBuildTarget(options.target || 'Editor')) {
       this.logger.error(`Invalid run target: ${options.target}`);
       this.logger.info('Valid targets: Editor, Game, Client, Server');
@@ -92,13 +91,11 @@ export class ProjectRunner {
       throw new Error('Invalid platform');
     }
 
-    // Dry run
     if (options.dryRun) {
       await this.dryRun(options);
       return;
     }
 
-    // Execute run
     await this.runProject(options);
   }
 
@@ -113,7 +110,6 @@ export class ProjectRunner {
     this.stdout.write(`  Detached: ${options.detached ? 'Yes' : 'No'}\n`);
     this.stdout.write(`  Additional Args: ${options.args ? options.args.join(' ') : 'None'}\n`);
 
-    // Try to detect engine and project
     try {
       const engineResult = await EngineResolver.resolveEngine(options.project);
       if (engineResult.engine) {
@@ -125,7 +121,6 @@ export class ProjectRunner {
       this.stdout.write(`  Engine: ${chalk.yellow('Detection failed - specify with --engine-path')}\n`);
     }
 
-    // Try to find executable
     try {
       const executablePath = await this.findExecutable(options);
       if (executablePath && await fs.pathExists(executablePath)) {
@@ -149,10 +144,8 @@ export class ProjectRunner {
   private async runProject(options: RunOptions): Promise<void> {
     const startTime = Date.now();
 
-    // Determine project path
     let projectPath = options.project || process.cwd();
     if (await fs.pathExists(projectPath) && (await fs.stat(projectPath)).isDirectory()) {
-      // Look for .uproject file
       const uprojectFiles = await fs.readdir(projectPath).then(files =>
         files.filter(f => f.endsWith('.uproject'))
       );
@@ -163,12 +156,10 @@ export class ProjectRunner {
       }
     }
 
-    // Validate project file
     if (!(await fs.pathExists(projectPath))) {
       throw new Error(`Project file not found: ${projectPath}`);
     }
 
-    // Resolve engine path
     let enginePath = options.enginePath;
     if (!enginePath) {
       const engineResult = await EngineResolver.resolveEngine(projectPath);
@@ -179,7 +170,6 @@ export class ProjectRunner {
       this.logger.debug(`Resolved engine path: ${enginePath}`);
     }
 
-    // Build first if requested
     if (options.buildFirst === true) {
       this.logger.info('Building project before running...');
       const buildExecutor = new BuildExecutor({
@@ -202,7 +192,6 @@ export class ProjectRunner {
       }
     }
 
-    // Find and run executable
     options.enginePath = enginePath;
     const executablePath = await this.findExecutable(options);
     if (!executablePath) {
@@ -216,16 +205,13 @@ export class ProjectRunner {
     this.logger.info(`Running: ${chalk.bold(path.basename(executablePath))}`);
     this.logger.divider();
 
-    // Prepare arguments
     const args = options.args || [];
 
-    // For Editor targets, add project path as argument
     const targetLower = (options.target || 'Editor').toLowerCase();
     if (targetLower.includes('editor')) {
       args.unshift(projectPath);
     }
 
-    // Execute
     try {
       const execOptions: any = {
         stdio: options.detached ? 'ignore' : 'inherit',
@@ -234,7 +220,6 @@ export class ProjectRunner {
       };
 
       if (options.detached) {
-        // In detached mode, don't wait for process
         const childProcess = execa(executablePath, args, execOptions);
         childProcess.unref();
         this.logger.success(`Started process in detached mode: ${path.basename(executablePath)}`);
@@ -243,7 +228,6 @@ export class ProjectRunner {
 
       const childProcess = execa(executablePath, args, execOptions);
 
-      // Handle process exit
       childProcess.on('exit', (code) => {
         this.logger.divider();
         const duration = (Date.now() - startTime) / 1000;
@@ -262,7 +246,6 @@ export class ProjectRunner {
 
   private async findExecutable(options: RunOptions): Promise<string | null> {
     try {
-      // Determine project path and name
       let projectPath = options.project || process.cwd();
       let projectDir = projectPath;
       let projectName = '';
@@ -283,7 +266,6 @@ export class ProjectRunner {
         return null;
       }
 
-      // Get actual target name (resolve generic to specific)
       let targetName = options.target || 'Editor';
       const availableTargets = await BuildExecutor.getAvailableTargets(projectPath);
       if (availableTargets.length > 0) {
@@ -297,13 +279,10 @@ export class ProjectRunner {
         }
       }
 
-      // Determine if target is editor
       const isEditor = targetName.toLowerCase().includes('editor');
 
-      // For editor targets, use UnrealEditor.exe from engine
       if (isEditor) {
         let enginePath = options.enginePath;
-        // Resolve engine path if not provided
         if (!enginePath) {
           const engineResult = await EngineResolver.resolveEngine(projectPath);
           if (!engineResult.engine) {
@@ -313,7 +292,6 @@ export class ProjectRunner {
           enginePath = engineResult.engine.path;
         }
 
-        // Editor executable path
         const platform = options.platform || 'Win64';
         const editorExePath = path.join(
           enginePath,
@@ -326,7 +304,6 @@ export class ProjectRunner {
         if (await fs.pathExists(editorExePath)) {
           return editorExePath;
         } else {
-          // Fallback to alternative editor executable names
           const alternativePaths = [
             path.join(enginePath, 'Engine', 'Binaries', platform, 'UnrealEditor-Cmd.exe'),
             path.join(enginePath, 'Engine', 'Binaries', platform, 'UE4Editor.exe'),
@@ -339,35 +316,27 @@ export class ProjectRunner {
             }
           }
 
-          // Return the expected path even if it doesn't exist (will throw error later)
           return editorExePath;
         }
       }
 
-      // For non-editor targets (Game, Client, Server)
       const executableName = `${projectName}.exe`;
       const platform = options.platform || 'Win64';
       const config = options.config || 'Development';
 
-      // Common executable locations
       const possiblePaths = [
-        // Build output location
         path.join(projectDir, 'Binaries', platform, executableName),
-        // Development build location
         path.join(projectDir, 'Binaries', platform, `${projectName}-${platform}-${config}`, executableName),
-        // With target name
         path.join(projectDir, 'Binaries', platform, `${targetName}.exe`),
         path.join(projectDir, 'Binaries', platform, `${targetName}-${platform}-${config}.exe`),
       ].filter(Boolean) as string[];
 
-      // Find first existing path
       for (const possiblePath of possiblePaths) {
         if (await fs.pathExists(possiblePath)) {
           return possiblePath;
         }
       }
 
-      // If not found, return the most likely path
       return path.join(projectDir, 'Binaries', platform, executableName);
     } catch {
       return null;
@@ -375,7 +344,6 @@ export class ProjectRunner {
   }
 }
 
-// Backward compatibility: static run method
 export async function runProject(options: RunOptions): Promise<void> {
   const runner = new ProjectRunner({
     logger: options.logger,

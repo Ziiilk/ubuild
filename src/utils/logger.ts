@@ -96,7 +96,6 @@ export class Logger {
     this.stderr.write(data);
   }
 
-  // Static methods for backward compatibility (use default global logger)
   private static globalLogger = new Logger();
 
   static info(message: string): void {

@@ -18,20 +18,17 @@ export function generateCommand(program: Command): void {
       try {
         Logger.title('Generate Project Files');
 
-        // List IDEs if requested
         if (options.listIdes) {
           listAvailableIDEs();
           return;
         }
 
-        // Validate IDE type
         if (!Validator.isValidIDE(options.ide)) {
           Logger.error(`Invalid IDE type: ${options.ide}`);
           listAvailableIDEs();
           process.exit(1);
         }
 
-        // Execute generation
         Logger.info(`Generating ${options.ide.toUpperCase()} project files...`);
         Logger.divider();
 
@@ -54,7 +51,6 @@ export function generateCommand(program: Command): void {
             });
           }
 
-          // IDE-specific instructions
           if (options.ide === 'sln' || options.ide === 'vs2022') {
             console.log();
             console.log(`Open ${chalk.bold('.sln')} file in Visual Studio to build and debug.`);

@@ -6,14 +6,10 @@ import { Logger } from '../utils/logger';
 import { Platform } from '../utils/platform';
 
 export class ProjectGenerator {
-  /**
-   * Generate IDE project files
-   */
   static async generate(options: GenerateOptions): Promise<GenerateResult> {
     const generatedFiles: string[] = [];
 
     try {
-      // Validate options
       const validatedOptions = await this.validateOptions(options);
       const { ide, projectPath, enginePath, force } = validatedOptions;
 
@@ -21,7 +17,6 @@ export class ProjectGenerator {
       Logger.info(`Project: ${projectPath}`);
       Logger.info(`Engine: ${enginePath}`);
 
-      // Generate using UnrealBuildTool (UBT 原生生成对应 IDE 方案)
       if (ide === 'sln' || ide === 'vs2022') {
         await this.generateWithUBT(enginePath, projectPath, force, ide);
         generatedFiles.push(...await this.findGeneratedSolutionFiles(projectPath));
@@ -30,8 +25,7 @@ export class ProjectGenerator {
         generatedFiles.push(...await this.findGeneratedSolutionFiles(projectPath));
         generatedFiles.push(...await this.findVSCodeWorkspaceFiles(projectPath));
         generatedFiles.push(...await this.findVSCodeConfigFiles(projectPath));
-        
-        // Generate ubuild tasks.json
+
         const tasksFile = await this.generateVSCodeTasks(projectPath);
         if (tasksFile) {
           generatedFiles.push(tasksFile);
@@ -61,17 +55,12 @@ export class ProjectGenerator {
     }
   }
 
-  /**
-   * Validate and complete generate options
-   */
   private static async validateOptions(options: GenerateOptions): Promise<Required<GenerateOptions>> {
     const ide: IDE = options.ide || 'sln';
     const force = options.force || false;
 
-    // Validate project path
     let projectPath = options.projectPath || process.cwd();
     if (await fs.pathExists(projectPath) && (await fs.stat(projectPath)).isDirectory()) {
-      // Look for .uproject file
       const uprojectFiles = await fs.readdir(projectPath).then(files =>
         files.filter(f => f.endsWith('.uproject'))
       );
@@ -83,10 +72,8 @@ export class ProjectGenerator {
       }
     }
 
-    // Validate engine path
     let enginePath = options.enginePath;
     if (!enginePath) {
-      // Try to resolve engine path
       const { EngineResolver } = await import('./engine-resolver');
       const engineResult = await EngineResolver.resolveEngine(projectPath);
       if (!engineResult.engine) {
@@ -95,7 +82,6 @@ export class ProjectGenerator {
       enginePath = engineResult.engine.path;
     }
 
-    // Validate engine path exists
     if (!(await fs.pathExists(enginePath))) {
       throw new Error(`Engine path does not exist: ${enginePath}`);
     }
@@ -108,9 +94,6 @@ export class ProjectGenerator {
     };
   }
 
-  /**
-   * Generate project files using UnrealBuildTool (UBT 原生方案，不叠加自定义配置)
-   */
   private static async generateWithUBT(
     enginePath: string,
     projectPath: string,
@@ -144,7 +127,6 @@ export class ProjectGenerator {
     } else if (ide === 'xcode') {
       args.push('-XCodeProjectFiles');
     }
-    // sln / vs2022：不传 IDE 参数，UBT 默认生成 Visual Studio 方案
 
     if (force) {
       args.push('-force');
@@ -159,7 +141,6 @@ export class ProjectGenerator {
       shell: true
     });
 
-    // Stream output
     if (childProcess.stdout) {
       childProcess.stdout.on('data', (data: Buffer) => {
         const output = data.toString();
@@ -184,28 +165,22 @@ export class ProjectGenerator {
     Logger.success('Project files generated successfully');
   }
 
-  /**
-   * Find generated solution files
-   */
   private static async findGeneratedSolutionFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
     const solutionFiles: string[] = [];
 
-    // Look for .sln files
     const slnFiles = await fs.readdir(projectDir).then(files =>
       files.filter(f => f.endsWith('.sln'))
     );
 
     solutionFiles.push(...slnFiles.map(f => path.join(projectDir, f)));
 
-    // Look for project filter files
     const filterFiles = await fs.readdir(projectDir).then(files =>
       files.filter(f => f.endsWith('.vcxproj.filters'))
     );
 
     solutionFiles.push(...filterFiles.map(f => path.join(projectDir, f)));
 
-    // Look for project files
     const vcxprojFiles = await fs.readdir(projectDir).then(files =>
       files.filter(f => f.endsWith('.vcxproj'))
     );
@@ -215,9 +190,6 @@ export class ProjectGenerator {
     return solutionFiles;
   }
 
-  /**
-   * Find UBT 生成的 CLion/CMake 文件（CMakeLists.txt）
-   */
   private static async findGeneratedCLionFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
     const cmakePath = path.join(projectDir, 'CMakeLists.txt');
@@ -227,9 +199,6 @@ export class ProjectGenerator {
     return [];
   }
 
-  /**
-   * Find UBT 生成的 Xcode 项目（.xcodeproj）
-   */
   private static async findGeneratedXcodeFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
     const entries = await fs.readdir(projectDir, { withFileTypes: true });
@@ -239,9 +208,6 @@ export class ProjectGenerator {
     return files;
   }
 
-  /**
-   * Find UBT 生成的 .code-workspace 文件
-   */
   private static async findVSCodeWorkspaceFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
     const files = await fs.readdir(projectDir).then(list =>
@@ -250,9 +216,6 @@ export class ProjectGenerator {
     return files;
   }
 
-  /**
-   * Find VSCode configuration files (.vscode 目录，由 UBT 生成)
-   */
   private static async findVSCodeConfigFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
     const vscodeDir = path.join(projectDir, '.vscode');
@@ -268,15 +231,11 @@ export class ProjectGenerator {
     return vscodeFiles;
   }
 
-  /**
-   * Generate VSCode tasks.json for ubuild commands
-   */
   private static async generateVSCodeTasks(projectPath: string): Promise<string | null> {
     const projectDir = path.dirname(projectPath);
     const vscodeDir = path.join(projectDir, '.vscode');
     const tasksPath = path.join(vscodeDir, 'tasks.json');
 
-    // Ensure .vscode directory exists
     await fs.ensureDir(vscodeDir);
 
     const tasksConfig = {
@@ -302,22 +261,18 @@ export class ProjectGenerator {
       ]
     };
 
-    // Check if existing tasks.json exists and merge if necessary
     if (await fs.pathExists(tasksPath)) {
       try {
         const existingContent = await fs.readJson(tasksPath);
         if (existingContent.tasks) {
-          // Filter out existing ubuild tasks to avoid duplicates
-          existingContent.tasks = existingContent.tasks.filter((t: any) => 
+          existingContent.tasks = existingContent.tasks.filter((t: any) =>
             !(t.label && t.label.startsWith('ubuild:'))
           );
-          // Add new ubuild tasks
           existingContent.tasks.push(...tasksConfig.tasks);
           await fs.writeJson(tasksPath, existingContent, { spaces: 2 });
           return tasksPath;
         }
       } catch {
-        // If parsing fails, overwrite with new content
       }
     }
 

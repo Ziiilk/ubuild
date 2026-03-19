@@ -67,13 +67,11 @@ export class ProjectBuilder {
   async build(options: BuildCommandOptions): Promise<void> {
     this.logger.title('Unreal Engine Build');
 
-    // List targets if requested
     if (options.listTargets) {
       await this.listAvailableTargets(options.project);
       return;
     }
 
-    // Validate options
     if (!Validator.isValidBuildTarget(options.target || 'Editor')) {
       this.logger.error(`Invalid build target: ${options.target}`);
       this.logger.info('Valid generic targets: Editor, Game, Client, Server');
@@ -93,13 +91,11 @@ export class ProjectBuilder {
       throw new Error('Invalid platform');
     }
 
-    // Dry run
     if (options.dryRun) {
       await this.dryRunBuild(options);
       return;
     }
 
-    // Execute build
     this.logger.info(`Preparing to build: ${chalk.bold(options.target)} | ${chalk.bold(options.platform)} | ${chalk.bold(options.config)}`);
     this.logger.divider();
 
@@ -135,7 +131,6 @@ export class ProjectBuilder {
         this.logger.error(result.error);
       }
 
-      // Show error summary
       if (result.stderr) {
         const errorLines = result.stderr.split('\n').filter(line =>
           line.toLowerCase().includes('error') ||
@@ -197,7 +192,6 @@ export class ProjectBuilder {
     this.stdout.write(`  Clean Build: ${options.clean ? 'Yes' : 'No'}\n`);
     this.stdout.write(`  Verbose: ${options.verbose ? 'Yes' : 'No'}\n`);
 
-    // Try to detect engine
     try {
       const { EngineResolver } = await import('../core/engine-resolver');
       const engineResult = await EngineResolver.resolveEngine(options.project);
@@ -216,7 +210,6 @@ export class ProjectBuilder {
   }
 }
 
-// Backward compatibility: static build method
 export async function executeBuild(options: BuildCommandOptions): Promise<void> {
   const builder = new ProjectBuilder({
     logger: options.logger,

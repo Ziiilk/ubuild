@@ -17,13 +17,11 @@ export function engineCommand(program: Command): void {
 
         let projectPath = options.project || process.cwd();
 
-        // First, try to detect project to get project path
         const projectResult = await ProjectDetector.detectProject({ cwd: projectPath });
         if (projectResult.project) {
           projectPath = projectResult.project.path;
         }
 
-        // Resolve engine information
         const result = await EngineResolver.resolveEngine(projectPath);
 
         if (options.json) {
@@ -31,7 +29,6 @@ export function engineCommand(program: Command): void {
           return;
         }
 
-        // Show verbose engine detection details if requested
         if (options.verbose) {
           Logger.subTitle('Engine Detection Details');
           const allInstallations = await EngineResolver.findEngineInstallations();
@@ -60,7 +57,6 @@ export function engineCommand(program: Command): void {
           process.exit(1);
         }
 
-        // Display engine information only if we have a project association
         if (result.engine && result.uprojectEngine) {
           const engine = result.engine;
           Logger.success(`Found engine for project: ${chalk.bold(engine.displayName || engine.associationId)}`);
@@ -83,9 +79,7 @@ export function engineCommand(program: Command): void {
         } else if (!result.engine) {
           Logger.warning('No engine installation found');
         }
-        // No engine details shown for non-project context (use --verbose to see all available engines)
 
-        // Display project engine association
         if (result.uprojectEngine) {
           Logger.subTitle('Project Engine Association');
           console.log(`  GUID: ${result.uprojectEngine.guid}`);
@@ -104,7 +98,6 @@ export function engineCommand(program: Command): void {
           }
         }
 
-        // Warnings
         if (result.warnings.length > 0) {
           Logger.subTitle('Warnings');
           result.warnings.forEach(warning => {
@@ -118,7 +111,6 @@ export function engineCommand(program: Command): void {
         } else if (!result.engine) {
           Logger.warning('No engine installation found');
         }
-        // No final message for non-project context (warnings already shown)
 
       } catch (error) {
         Logger.error(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);

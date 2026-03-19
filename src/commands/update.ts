@@ -14,11 +14,9 @@ export function updateCommand(program: Command): void {
       try {
         Logger.title('Update ubuild');
 
-        // Get current version
         const currentVersion = require('../../package.json').version;
         Logger.info(`Current version: ${chalk.bold(currentVersion)}`);
 
-        // Fetch latest version from npm
         Logger.info('Checking for latest version...');
 
         try {
@@ -36,13 +34,11 @@ export function updateCommand(program: Command): void {
 
           Logger.info(`Latest version: ${chalk.bold(latestVersion)}`);
 
-          // Compare versions
           if (latestVersion === currentVersion) {
             Logger.success('You are already using the latest version!');
             return;
           }
 
-          // Check if update is needed
           const needsUpdate = compareVersions(latestVersion, currentVersion) > 0;
 
           if (!needsUpdate) {
@@ -52,7 +48,6 @@ export function updateCommand(program: Command): void {
 
           Logger.warning(`Update available: ${currentVersion} → ${latestVersion}`);
 
-          // Confirm update unless -y flag is set
           if (!options.yes) {
             const answers = await inquirer.prompt([
               {
@@ -69,7 +64,6 @@ export function updateCommand(program: Command): void {
             }
           }
 
-          // Perform update
           Logger.info('Updating ubuild...');
 
           if (options.global) {
@@ -78,7 +72,6 @@ export function updateCommand(program: Command): void {
             await execa('npm', ['install', '@zitool/ubuild@latest']);
           }
 
-          // Get new version
           const { stdout: newVersionOutput } = await execa('npm', [
             'list',
             '@zitool/ubuild',

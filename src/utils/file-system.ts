@@ -2,9 +2,6 @@ import fs from 'fs-extra';
 import path from 'path';
 
 export class FileSystem {
-  /**
-   * Check if directory is empty (or doesn't exist)
-   */
   static async isDirectoryEmpty(dir: string): Promise<boolean> {
     try {
       if (!(await fs.pathExists(dir))) {
@@ -18,9 +15,6 @@ export class FileSystem {
     }
   }
 
-  /**
-   * Find file in directory tree
-   */
   static async findFile(dir: string, fileName: string, maxDepth = 3): Promise<string | null> {
     async function search(currentDir: string, depth: number): Promise<string | null> {
       if (depth > maxDepth) {
@@ -46,7 +40,6 @@ export class FileSystem {
           }
         }
       } catch (error) {
-        // Ignore permission errors
       }
 
       return null;
@@ -55,16 +48,10 @@ export class FileSystem {
     return search(dir, 0);
   }
 
-  /**
-   * Create directory if it doesn't exist
-   */
   static async ensureDirectory(dir: string): Promise<void> {
     await fs.ensureDir(dir);
   }
 
-  /**
-   * Copy directory recursively with filtering
-   */
   static async copyDirectory(
     src: string,
     dest: string,
@@ -81,7 +68,6 @@ export class FileSystem {
       const srcPath = path.join(src, item);
       const destPath = path.join(dest, item);
 
-      // Apply filter if provided
       if (options.filter && !options.filter(srcPath, destPath)) {
         continue;
       }
@@ -91,7 +77,6 @@ export class FileSystem {
       if (stat.isDirectory()) {
         await this.copyDirectory(srcPath, destPath, options);
       } else {
-        // Copy file
         if (options.transform) {
           const content = await fs.readFile(srcPath, 'utf-8');
           const transformed = options.transform(content, srcPath, destPath);
@@ -103,9 +88,6 @@ export class FileSystem {
     }
   }
 
-  /**
-   * Read JSON file with error handling
-   */
   static async readJson<T>(filePath: string): Promise<T> {
     try {
       const content = await fs.readFile(filePath, 'utf-8');
@@ -115,9 +97,6 @@ export class FileSystem {
     }
   }
 
-  /**
-   * Write JSON file with formatting
-   */
   static async writeJson(filePath: string, data: unknown): Promise<void> {
     try {
       await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
@@ -126,9 +105,6 @@ export class FileSystem {
     }
   }
 
-  /**
-   * Check if file exists and is readable
-   */
   static async isReadable(filePath: string): Promise<boolean> {
     try {
       await fs.access(filePath, fs.constants.R_OK);
@@ -138,16 +114,10 @@ export class FileSystem {
     }
   }
 
-  /**
-   * Get relative path from base to target
-   */
   static relativePath(from: string, to: string): string {
     return path.relative(from, to);
   }
 
-  /**
-   * Normalize path separators for current platform
-   */
   static normalizePath(p: string): string {
     return path.normalize(p);
   }

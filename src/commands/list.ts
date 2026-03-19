@@ -40,17 +40,14 @@ export function listCommand(program: Command): void {
 
         const project = result.project;
 
-        // Display project information
         Logger.success(`Found project: ${chalk.bold(project.name)}`);
         console.log();
 
-        // Basic info
         Logger.subTitle('Basic Information');
         console.log(`  Path: ${project.path}`);
         console.log(`  Source Directory: ${project.sourceDir || 'Not found'}`);
         console.log(`  Engine Association: ${project.uproject.EngineAssociation}`);
 
-        // Modules
         if (project.uproject.Modules.length > 0) {
           Logger.subTitle('Modules');
           project.uproject.Modules.forEach(module => {
@@ -58,7 +55,6 @@ export function listCommand(program: Command): void {
           });
         }
 
-        // Build Targets
         if (project.targets.length > 0) {
           Logger.subTitle('Build Targets');
           project.targets.forEach(target => {
@@ -66,7 +62,6 @@ export function listCommand(program: Command): void {
           });
         }
 
-        // Source Modules
         if (project.modules.length > 0) {
           Logger.subTitle('Source Modules');
           project.modules.forEach(module => {
@@ -74,7 +69,6 @@ export function listCommand(program: Command): void {
           });
         }
 
-        // Plugins
         if (project.uproject.Plugins && project.uproject.Plugins.length > 0) {
           Logger.subTitle('Plugins');
           project.uproject.Plugins.forEach(plugin => {
@@ -83,7 +77,6 @@ export function listCommand(program: Command): void {
           });
         }
 
-        // Warnings
         if (result.warnings.length > 0) {
           Logger.subTitle('Warnings');
           result.warnings.forEach(warning => {
