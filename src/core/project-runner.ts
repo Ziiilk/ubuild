@@ -1,0 +1,355 @@
+import chalk from 'chalk';
+import path from 'path';
+import fs from 'fs-extra';
+import { execa } from 'execa';
+import { Writable } from 'stream';
+import { BuildConfiguration, BuildPlatform } from '../types/build';
+import { Logger } from '../utils/logger';
+import { Validator } from '../utils/validator';
+import { BuildExecutor } from './build-executor';
+import { EngineResolver } from './engine-resolver';
+import { ProjectPathResolver } from './project-path-resolver';
+
+export interface RunOptions {
+  target?: string;
+  config?: string;
+  platform?: string;
+  project?: string;
+  enginePath?: string;
+  dryRun?: boolean;
+  buildFirst?: boolean;
+  noBuild?: boolean;
+  args?: string[];
+  logger?: Logger;
+  stdout?: Writable;
+  stderr?: Writable;
+  silent?: boolean;
+  detached?: boolean;
+}
+
+export class ProjectRunner {
+  private logger: Logger;
+  private stdout: Writable;
+  private stderr: Writable;
+
+  constructor(
+    options: { logger?: Logger; stdout?: Writable; stderr?: Writable; silent?: boolean } = {}
+  ) {
+    this.stdout = options.stdout || process.stdout;
+    this.stderr = options.stderr || process.stderr;
+    this.logger =
+      options.logger ||
+      new Logger({
+        stdout: this.stdout,
+        stderr: this.stderr,
+        silent: options.silent,
+      });
+  }
+
+  getLogger(): Logger {
+    return this.logger;
+  }
+
+  async run(options: RunOptions): Promise<void> {
+    this.logger.title('Run Unreal Engine Project');
+
+    if (!Validator.isValidBuildTarget(this.getTarget(options))) {
+      this.logger.error(`Invalid run target: ${options.target}`);
+      this.logger.info('Valid targets: Editor, Game, Client, Server');
+      throw new Error('Invalid target');
+    }
+
+    if (!Validator.isValidBuildConfig(this.getConfigValue(options))) {
+      this.logger.error(`Invalid build configuration: ${options.config}`);
+      this.logger.info('Valid configurations: Debug, DebugGame, Development, Shipping, Test');
+      throw new Error('Invalid config');
+    }
+
+    if (!Validator.isValidBuildPlatform(this.getPlatformValue(options))) {
+      this.logger.error(`Invalid platform: ${options.platform}`);
+      this.logger.info('Valid platforms: Win64, Win32, Linux, Mac, Android, IOS');
+      throw new Error('Invalid platform');
+    }
+
+    if (options.dryRun) {
+      await this.dryRun(options);
+      return;
+    }
+
+    await this.runProject(options);
+  }
+
+  private getTarget(options: RunOptions): string {
+    return options.target || 'Editor';
+  }
+
+  private getConfigValue(options: RunOptions): string {
+    return options.config || 'Development';
+  }
+
+  private getPlatformValue(options: RunOptions): string {
+    return options.platform || 'Win64';
+  }
+
+  private getConfig(options: RunOptions): BuildConfiguration {
+    return this.getConfigValue(options) as BuildConfiguration;
+  }
+
+  private getPlatform(options: RunOptions): BuildPlatform {
+    return this.getPlatformValue(options) as BuildPlatform;
+  }
+
+  private async dryRun(options: RunOptions): Promise<void> {
+    this.logger.subTitle('Dry Run - Run Configuration');
+
+    this.stdout.write(`  Project: ${options.project || 'Current directory'}\n`);
+    this.stdout.write(`  Target: ${options.target}\n`);
+    this.stdout.write(`  Configuration: ${options.config}\n`);
+    this.stdout.write(`  Platform: ${options.platform}\n`);
+    this.stdout.write(`  Build First: ${options.buildFirst ? 'Yes' : 'No'}\n`);
+    this.stdout.write(`  Detached: ${options.detached ? 'Yes' : 'No'}\n`);
+    this.stdout.write(`  Additional Args: ${options.args ? options.args.join(' ') : 'None'}\n`);
+
+    try {
+      const engineResult = await EngineResolver.resolveEngine(options.project);
+      if (engineResult.engine) {
+        this.stdout.write(
+          `  Engine: ${engineResult.engine.displayName || engineResult.engine.path}\n`
+        );
+      } else {
+        this.stdout.write(
+          `  Engine: ${chalk.yellow('Not detected - specify with --engine-path')}\n`
+        );
+      }
+    } catch {
+      this.stdout.write(
+        `  Engine: ${chalk.yellow('Detection failed - specify with --engine-path')}\n`
+      );
+    }
+
+    try {
+      const executablePath = await this.findExecutable(options);
+      if (executablePath && (await fs.pathExists(executablePath))) {
+        this.stdout.write(`  Executable: ${executablePath}\n`);
+        this.stdout.write(`  Executable exists: ${chalk.green('Yes')}\n`);
+      } else if (executablePath) {
+        this.stdout.write(`  Executable: ${executablePath}\n`);
+        this.stdout.write(`  Executable exists: ${chalk.yellow('No - may need to build first')}\n`);
+      } else {
+        this.stdout.write(`  Executable: ${chalk.yellow('Could not determine path')}\n`);
+      }
+    } catch {
+      this.stdout.write(`  Executable: ${chalk.yellow('Path detection failed')}\n`);
+    }
+
+    this.stdout.write('\n');
+    this.logger.info('This is a dry run - no actual run will be performed');
+    this.stdout.write('To execute the run, remove the --dry-run flag\n');
+  }
+
+  private async runProject(options: RunOptions): Promise<void> {
+    const startTime = Date.now();
+
+    const projectPath = await ProjectPathResolver.resolveOrThrow(options.project || process.cwd());
+
+    if (!(await fs.pathExists(projectPath))) {
+      throw new Error(`Project file not found: ${projectPath}`);
+    }
+
+    const enginePath = await EngineResolver.resolveEnginePath({
+      projectPath,
+      enginePath: options.enginePath,
+    });
+    this.logger.debug(`Resolved engine path: ${enginePath}`);
+
+    if (options.buildFirst === true) {
+      this.logger.info('Building project before running...');
+      const buildExecutor = new BuildExecutor({
+        logger: this.logger,
+        stdout: this.stdout,
+        stderr: this.stderr,
+      });
+      const buildResult = await buildExecutor.execute({
+        target: this.getTarget(options),
+        config: this.getConfig(options),
+        platform: this.getPlatform(options),
+        projectPath,
+        enginePath,
+        verbose: false,
+      });
+
+      if (!buildResult.success) {
+        this.logger.error('Build failed. Cannot run project.');
+        throw new Error(`Build failed with exit code ${buildResult.exitCode}`);
+      }
+    }
+
+    const resolvedOptions: RunOptions = {
+      ...options,
+      enginePath,
+    };
+
+    const executablePath = await this.findExecutable(resolvedOptions);
+    if (!executablePath) {
+      throw new Error('Could not determine executable path');
+    }
+
+    if (!(await fs.pathExists(executablePath))) {
+      throw new Error(
+        `Executable not found: ${executablePath}\nTry building the project first with --build-first`
+      );
+    }
+
+    this.logger.info(`Running: ${chalk.bold(path.basename(executablePath))}`);
+    this.logger.divider();
+
+    const args = options.args ? [...options.args] : [];
+
+    if (this.getTarget(options).toLowerCase().includes('editor')) {
+      args.unshift(projectPath);
+    }
+
+    try {
+      const execOptions = {
+        stdio: options.detached ? 'ignore' : 'inherit',
+        cwd: path.dirname(executablePath),
+        detached: options.detached,
+      } as const;
+
+      if (options.detached) {
+        const childProcess = execa(executablePath, args, execOptions);
+        childProcess.unref();
+        this.logger.success(`Started process in detached mode: ${path.basename(executablePath)}`);
+        return;
+      }
+
+      const childProcess = execa(executablePath, args, execOptions);
+
+      childProcess.on('exit', (code) => {
+        this.logger.divider();
+        const duration = (Date.now() - startTime) / 1000;
+        if (code === 0) {
+          this.logger.success(`Process completed successfully in ${duration.toFixed(1)}s`);
+        } else {
+          this.logger.error(`Process exited with code ${code} after ${duration.toFixed(1)}s`);
+        }
+      });
+
+      await childProcess;
+    } catch (error) {
+      throw new Error(
+        `Failed to run executable: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  private async findExecutable(options: RunOptions): Promise<string | null> {
+    try {
+      const projectPathResolution = await ProjectPathResolver.resolve(
+        options.project || process.cwd()
+      );
+      const projectPath = projectPathResolution.resolvedPath;
+      let projectDir = projectPath;
+      let projectName = '';
+
+      if (projectPathResolution.hasUProjectExtension) {
+        projectDir = path.dirname(projectPath);
+        projectName = path.basename(projectPath, '.uproject');
+      }
+
+      if (!projectName) {
+        return null;
+      }
+
+      let targetName = this.getTarget(options);
+      const availableTargets = await BuildExecutor.getAvailableTargets(projectPath);
+      if (availableTargets.length > 0) {
+        const genericTypes = ['Editor', 'Game', 'Client', 'Server'];
+        const isGenericType = genericTypes.includes(options.target || '');
+        if (isGenericType) {
+          const matchingTarget = availableTargets.find((target) => target.type === options.target);
+          if (matchingTarget) {
+            targetName = matchingTarget.name;
+          }
+        }
+      }
+
+      if (targetName.toLowerCase().includes('editor')) {
+        let enginePath: string;
+        try {
+          enginePath = await EngineResolver.resolveEnginePath({
+            projectPath,
+            enginePath: options.enginePath,
+          });
+        } catch {
+          this.logger.warning('Could not resolve engine path for editor target');
+          return null;
+        }
+
+        const platform = this.getPlatform(options);
+        const editorExePath = path.join(
+          enginePath,
+          'Engine',
+          'Binaries',
+          platform,
+          'UnrealEditor.exe'
+        );
+
+        if (await fs.pathExists(editorExePath)) {
+          return editorExePath;
+        }
+
+        const alternativePaths = [
+          path.join(enginePath, 'Engine', 'Binaries', platform, 'UnrealEditor-Cmd.exe'),
+          path.join(enginePath, 'Engine', 'Binaries', platform, 'UE4Editor.exe'),
+          path.join(enginePath, 'Engine', 'Binaries', platform, 'UE5Editor.exe'),
+        ];
+
+        for (const alternativePath of alternativePaths) {
+          if (await fs.pathExists(alternativePath)) {
+            return alternativePath;
+          }
+        }
+
+        return editorExePath;
+      }
+
+      const executableName = `${projectName}.exe`;
+      const platform = this.getPlatform(options);
+      const config = this.getConfig(options);
+
+      const possiblePaths = [
+        path.join(projectDir, 'Binaries', platform, executableName),
+        path.join(
+          projectDir,
+          'Binaries',
+          platform,
+          `${projectName}-${platform}-${config}`,
+          executableName
+        ),
+        path.join(projectDir, 'Binaries', platform, `${targetName}.exe`),
+        path.join(projectDir, 'Binaries', platform, `${targetName}-${platform}-${config}.exe`),
+      ];
+
+      for (const possiblePath of possiblePaths) {
+        if (await fs.pathExists(possiblePath)) {
+          return possiblePath;
+        }
+      }
+
+      return path.join(projectDir, 'Binaries', platform, executableName);
+    } catch {
+      return null;
+    }
+  }
+}
+
+export async function runProject(options: RunOptions): Promise<void> {
+  const runner = new ProjectRunner({
+    logger: options.logger,
+    stdout: options.stdout,
+    stderr: options.stderr,
+    silent: options.silent,
+  });
+  return runner.run(options);
+}
