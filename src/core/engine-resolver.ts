@@ -6,11 +6,36 @@ import {
   EngineVersionInfo,
   EngineAssociation,
   EngineDetectionResult,
+  EnginePathResolutionOptions,
 } from '../types/engine';
 import { Platform } from '../utils/platform';
 import { Logger } from '../utils/logger';
+import { ProjectPathResolver } from './project-path-resolver';
 
 export class EngineResolver {
+  static async resolveEnginePath(options: EnginePathResolutionOptions = {}): Promise<string> {
+    const { projectPath, enginePath } = options;
+
+    if (enginePath) {
+      if (!(await fs.pathExists(enginePath))) {
+        throw new Error(`Engine path does not exist: ${enginePath}`);
+      }
+
+      return enginePath;
+    }
+
+    const engineResult = await this.resolveEngine(projectPath);
+    if (!engineResult.engine) {
+      throw new Error('Could not determine engine path. Please specify --engine-path');
+    }
+
+    if (!(await fs.pathExists(engineResult.engine.path))) {
+      throw new Error(`Engine path does not exist: ${engineResult.engine.path}`);
+    }
+
+    return engineResult.engine.path;
+  }
+
   static async resolveEngine(projectPath?: string): Promise<EngineDetectionResult> {
     const warnings: string[] = [];
 
@@ -78,25 +103,19 @@ export class EngineResolver {
     const warnings: string[] = [];
 
     try {
-      let uprojectPath = projectPath;
-      if ((await fs.pathExists(projectPath)) && (await fs.stat(projectPath)).isDirectory()) {
-        const uprojectFiles = await fs
-          .readdir(projectPath)
-          .then((files) => files.filter((f) => f.endsWith('.uproject')));
+      const projectPathResolution = await ProjectPathResolver.resolve(projectPath);
 
-        if (uprojectFiles.length === 0) {
-          warnings.push('No .uproject file found in project directory');
-          return { warnings };
-        }
-
-        uprojectPath = path.join(projectPath, uprojectFiles[0]);
+      if (projectPathResolution.isDirectory && !projectPathResolution.wasResolvedFromDirectory) {
+        warnings.push('No .uproject file found in project directory');
+        return { warnings };
       }
 
-      if (!uprojectPath.endsWith('.uproject')) {
+      if (!projectPathResolution.hasUProjectExtension) {
         warnings.push('Project path is not a .uproject file');
         return { warnings };
       }
 
+      const uprojectPath = projectPathResolution.resolvedPath;
       const content = await fs.readFile(uprojectPath, 'utf-8');
       const uproject = JSON.parse(content);
 
@@ -189,70 +208,66 @@ export class EngineResolver {
   private static async queryRegistryKey(registryKey: string): Promise<EngineInstallation[]> {
     const installations: EngineInstallation[] = [];
 
-    try {
-      const { stdout } = await execa('reg', ['query', registryKey, '/s']);
+    const { stdout } = await execa('reg', ['query', registryKey, '/s']);
 
-      const lines = stdout.split('\n');
+    const lines = stdout.split('\n');
 
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
 
-        const fullMatch = line.match(/{([^}]+)}\s+REG_SZ\s+(.+)$/);
-        if (fullMatch) {
-          const guid = `{${fullMatch[1]}}`;
-          const enginePath = fullMatch[2].trim();
+      const fullMatch = line.match(/{([^}]+)}\s+REG_SZ\s+(.+)$/);
+      if (fullMatch) {
+        const guid = `{${fullMatch[1]}}`;
+        const enginePath = fullMatch[2].trim();
 
-          installations.push({
-            path: enginePath,
-            associationId: guid,
-            displayName: `UE Engine ${guid}`,
-            version: undefined,
-            source: 'registry',
-          });
-          continue;
-        }
+        installations.push({
+          path: enginePath,
+          associationId: guid,
+          displayName: `UE Engine ${guid}`,
+          version: undefined,
+          source: 'registry',
+        });
+        continue;
+      }
 
-        if (line.startsWith('{')) {
-          const guidMatch = line.match(/^({[^}]+})/);
-          if (guidMatch) {
-            const guid = guidMatch[1];
-            let enginePath: string | undefined;
+      if (line.startsWith('{')) {
+        const guidMatch = line.match(/^({[^}]+})/);
+        if (guidMatch) {
+          const guid = guidMatch[1];
+          let enginePath: string | undefined;
 
-            const regSzMatch = line.match(/REG_SZ\s+(.+)$/);
-            if (regSzMatch) {
-              enginePath = regSzMatch[1].trim();
-            } else {
-              for (let j = i + 1; j < lines.length; j++) {
-                const nextLine = lines[j].trim();
-                if (nextLine.includes('REG_SZ')) {
-                  const pathMatch = nextLine.match(/REG_SZ\s+(.+)$/);
-                  if (pathMatch) {
-                    enginePath = pathMatch[1].trim();
-                    break;
-                  }
-                } else if (nextLine.startsWith('{') || nextLine.includes(registryKey)) {
+          const regSzMatch = line.match(/REG_SZ\s+(.+)$/);
+          if (regSzMatch) {
+            enginePath = regSzMatch[1].trim();
+          } else {
+            for (let j = i + 1; j < lines.length; j++) {
+              const nextLine = lines[j].trim();
+              if (nextLine.includes('REG_SZ')) {
+                const pathMatch = nextLine.match(/REG_SZ\s+(.+)$/);
+                if (pathMatch) {
+                  enginePath = pathMatch[1].trim();
                   break;
                 }
+              } else if (nextLine.startsWith('{') || nextLine.includes(registryKey)) {
+                break;
               }
             }
+          }
 
-            if (enginePath) {
-              installations.push({
-                path: enginePath,
-                associationId: guid,
-                displayName: `UE Engine ${guid}`,
-                version: undefined,
-                source: 'registry',
-              });
-            } else {
-              Logger.debug(`Found GUID ${guid} but could not extract engine path`);
-            }
+          if (enginePath) {
+            installations.push({
+              path: enginePath,
+              associationId: guid,
+              displayName: `UE Engine ${guid}`,
+              version: undefined,
+              source: 'registry',
+            });
+          } else {
+            Logger.debug(`Found GUID ${guid} but could not extract engine path`);
           }
         }
       }
-    } catch (error) {
-      throw error;
     }
 
     return installations;

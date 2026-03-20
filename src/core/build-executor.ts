@@ -2,23 +2,35 @@ import { execa } from 'execa';
 import path from 'path';
 import fs from 'fs-extra';
 import { Writable } from 'stream';
-import { BuildOptions, BuildResult, BuildTarget, BuildConfiguration, BuildPlatform } from '../types/build';
+import {
+  BuildOptions,
+  BuildResult,
+  BuildTarget,
+  BuildConfiguration,
+  BuildPlatform,
+} from '../types/build';
+import { EngineResolver } from './engine-resolver';
 import { Logger } from '../utils/logger';
 import { Platform } from '../utils/platform';
+import { ProjectPathResolver } from './project-path-resolver';
 
 export class BuildExecutor {
   private logger: Logger;
   private stdout: Writable;
   private stderr: Writable;
 
-  constructor(options: { logger?: Logger; stdout?: Writable; stderr?: Writable; silent?: boolean } = {}) {
+  constructor(
+    options: { logger?: Logger; stdout?: Writable; stderr?: Writable; silent?: boolean } = {}
+  ) {
     this.stdout = options.stdout || process.stdout;
     this.stderr = options.stderr || process.stderr;
-    this.logger = options.logger || new Logger({
-      stdout: this.stdout,
-      stderr: this.stderr,
-      silent: options.silent
-    });
+    this.logger =
+      options.logger ||
+      new Logger({
+        stdout: this.stdout,
+        stderr: this.stderr,
+        silent: options.silent,
+      });
   }
 
   async execute(options: BuildOptions): Promise<BuildResult> {
@@ -59,7 +71,7 @@ export class BuildExecutor {
         exitCode,
         stdout,
         stderr,
-        duration
+        duration,
       };
 
       if (!success) {
@@ -67,7 +79,6 @@ export class BuildExecutor {
       }
 
       return buildResult;
-
     } catch (error) {
       const duration = Date.now() - startTime;
       return {
@@ -76,7 +87,7 @@ export class BuildExecutor {
         stdout: '',
         stderr: error instanceof Error ? error.message : String(error),
         duration,
-        error: 'Build execution failed'
+        error: 'Build execution failed',
       };
     }
   }
@@ -89,32 +100,14 @@ export class BuildExecutor {
     const verbose = options.verbose || false;
     const additionalArgs = options.additionalArgs || [];
 
-    let projectPath = options.projectPath || process.cwd();
-    if (await fs.pathExists(projectPath) && (await fs.stat(projectPath)).isDirectory()) {
-      const uprojectFiles = await fs.readdir(projectPath).then(files =>
-        files.filter(f => f.endsWith('.uproject'))
-      );
+    const projectPath = await ProjectPathResolver.resolveOrThrow(
+      options.projectPath || process.cwd()
+    );
 
-      if (uprojectFiles.length > 0) {
-        projectPath = path.join(projectPath, uprojectFiles[0]);
-      } else {
-        throw new Error(`No .uproject file found in project directory: ${projectPath}`);
-      }
-    }
-
-    let enginePath = options.enginePath;
-    if (!enginePath) {
-      const { EngineResolver } = await import('./engine-resolver');
-      const engineResult = await EngineResolver.resolveEngine(projectPath);
-      if (!engineResult.engine) {
-        throw new Error('Could not determine engine path. Please specify --engine-path');
-      }
-      enginePath = engineResult.engine.path;
-    }
-
-    if (!(await fs.pathExists(enginePath))) {
-      throw new Error(`Engine path does not exist: ${enginePath}`);
-    }
+    const enginePath = await EngineResolver.resolveEnginePath({
+      projectPath,
+      enginePath: options.enginePath,
+    });
 
     let resolvedTarget = target;
     const availableTargets = await BuildExecutor.getAvailableTargets(projectPath);
@@ -124,25 +117,29 @@ export class BuildExecutor {
       const isGenericType = genericTypes.includes(target);
 
       if (isGenericType) {
-        const matchingTarget = availableTargets.find(t => t.type === target);
+        const matchingTarget = availableTargets.find((t) => t.type === target);
         if (matchingTarget) {
           resolvedTarget = matchingTarget.name;
           this.logger.debug(`Resolved generic target "${target}" to "${resolvedTarget}"`);
         } else {
-          const fallbackTarget = availableTargets.find(t =>
+          const fallbackTarget = availableTargets.find((t) =>
             t.name.toLowerCase().includes(target.toLowerCase())
           );
           if (fallbackTarget) {
             resolvedTarget = fallbackTarget.name;
             this.logger.debug(`Fallback: resolved target "${target}" to "${resolvedTarget}"`);
           } else {
-            throw new Error(`No ${target} target found in project. Available targets: ${availableTargets.map(t => t.name).join(', ')}`);
+            throw new Error(
+              `No ${target} target found in project. Available targets: ${availableTargets.map((t) => t.name).join(', ')}`
+            );
           }
         }
       } else {
-        const targetExists = availableTargets.some(t => t.name === target);
+        const targetExists = availableTargets.some((t) => t.name === target);
         if (!targetExists) {
-          throw new Error(`Target "${target}" not found in project. Available targets: ${availableTargets.map(t => t.name).join(', ')}`);
+          throw new Error(
+            `Target "${target}" not found in project. Available targets: ${availableTargets.map((t) => t.name).join(', ')}`
+          );
         }
       }
     } else {
@@ -161,7 +158,7 @@ export class BuildExecutor {
       logger: options.logger || this.logger,
       stdout: options.stdout || this.stdout,
       stderr: options.stderr || this.stderr,
-      silent: options.silent || false
+      silent: options.silent || false,
     };
   }
 
@@ -174,7 +171,7 @@ export class BuildExecutor {
       options.platform,
       options.config,
       `-project="${options.projectPath}"`,
-      '-NoMutex'
+      '-NoMutex',
     ];
 
     if (options.clean) {
@@ -193,7 +190,7 @@ export class BuildExecutor {
     const childProcess = execa(command, {
       stdio: 'pipe',
       cwd: path.dirname(buildBatPath),
-      shell: true
+      shell: true,
     });
 
     let stdout = '';
@@ -219,7 +216,7 @@ export class BuildExecutor {
     return {
       stdout: result.stdout || stdout,
       stderr: result.stderr || stderr,
-      exitCode: result.exitCode ?? 0
+      exitCode: result.exitCode ?? 0,
     };
   }
 
@@ -245,7 +242,7 @@ export class BuildExecutor {
       options.platform,
       options.config,
       `-project="${options.projectPath}"`,
-      '-NoMutex'
+      '-NoMutex',
     ];
 
     if (options.clean) {
@@ -264,7 +261,7 @@ export class BuildExecutor {
     const childProcess = execa(command, {
       stdio: 'pipe',
       cwd: path.dirname(ubtPath),
-      shell: true
+      shell: true,
     });
 
     let stdout = '';
@@ -290,11 +287,13 @@ export class BuildExecutor {
     return {
       stdout: result.stdout || stdout,
       stderr: result.stderr || stderr,
-      exitCode: result.exitCode ?? 0
+      exitCode: result.exitCode ?? 0,
     };
   }
 
-  static async getAvailableTargets(projectPath: string): Promise<Array<{ name: string; type: string }>> {
+  static async getAvailableTargets(
+    projectPath: string
+  ): Promise<Array<{ name: string; type: string }>> {
     try {
       let projectDir = projectPath;
       if (projectPath.endsWith('.uproject')) {
@@ -306,11 +305,11 @@ export class BuildExecutor {
         return [];
       }
 
-      const targetFiles = await fs.readdir(sourceDir).then(files =>
-        files.filter(f => f.endsWith('.Target.cs'))
-      );
+      const targetFiles = await fs
+        .readdir(sourceDir)
+        .then((files) => files.filter((f) => f.endsWith('.Target.cs')));
 
-      return targetFiles.map(file => {
+      return targetFiles.map((file) => {
         const name = path.basename(file, '.Target.cs');
         let type = 'Game';
         if (name.toLowerCase().includes('editor')) {
@@ -330,12 +329,12 @@ export class BuildExecutor {
 
   static async getDefaultOptions(projectPath: string): Promise<Partial<BuildOptions>> {
     const targets = await BuildExecutor.getAvailableTargets(projectPath);
-    const hasEditorTarget = targets.some(t => t.type === 'Editor');
+    const hasEditorTarget = targets.some((t) => t.type === 'Editor');
 
     return {
       target: hasEditorTarget ? 'Editor' : 'Game',
       config: 'Development',
-      platform: 'Win64'
+      platform: 'Win64',
     };
   }
 
@@ -344,12 +343,14 @@ export class BuildExecutor {
       logger: options.logger,
       stdout: options.stdout,
       stderr: options.stderr,
-      silent: options.silent
+      silent: options.silent,
     });
     return executor.execute(options);
   }
 
-  async getAvailableTargetsInstance(projectPath: string): Promise<Array<{ name: string; type: string }>> {
+  async getAvailableTargetsInstance(
+    projectPath: string
+  ): Promise<Array<{ name: string; type: string }>> {
     return BuildExecutor.getAvailableTargets(projectPath);
   }
 
