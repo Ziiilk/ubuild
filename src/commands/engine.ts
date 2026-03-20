@@ -4,6 +4,10 @@ import { EngineResolver } from '../core/engine-resolver';
 import { Logger } from '../utils/logger';
 import { ProjectDetector } from '../core/project-detector';
 
+function writeLine(message = ''): void {
+  Logger.write(`${message}\n`);
+}
+
 export function engineCommand(program: Command): void {
   program
     .command('engine')
@@ -25,31 +29,33 @@ export function engineCommand(program: Command): void {
         const result = await EngineResolver.resolveEngine(projectPath);
 
         if (options.json) {
-          console.log(JSON.stringify(result, null, 2));
+          Logger.json(result);
           return;
         }
 
         if (options.verbose) {
           Logger.subTitle('Engine Detection Details');
           const allInstallations = await EngineResolver.findEngineInstallations();
-          console.log(`Total engines detected: ${allInstallations.length}`);
+          writeLine(`Total engines detected: ${allInstallations.length}`);
 
           if (allInstallations.length > 0) {
             allInstallations.forEach((engine, index) => {
-              console.log(`\n  Engine ${index + 1}:`);
-              console.log(`    Path: ${engine.path}`);
-              console.log(`    Source: ${engine.source || 'unknown'}`);
-              console.log(`    Association ID: ${engine.associationId}`);
-              console.log(`    Display Name: ${engine.displayName || '(none)'}`);
+              writeLine(`\n  Engine ${index + 1}:`);
+              writeLine(`    Path: ${engine.path}`);
+              writeLine(`    Source: ${engine.source || 'unknown'}`);
+              writeLine(`    Association ID: ${engine.associationId}`);
+              writeLine(`    Display Name: ${engine.displayName || '(none)'}`);
               if (engine.version) {
-                console.log(`    Version: ${engine.version.MajorVersion}.${engine.version.MinorVersion}.${engine.version.PatchVersion}`);
+                writeLine(
+                  `    Version: ${engine.version.MajorVersion}.${engine.version.MinorVersion}.${engine.version.PatchVersion}`
+                );
               }
               if (engine.installedDate) {
-                console.log(`    Installed: ${engine.installedDate}`);
+                writeLine(`    Installed: ${engine.installedDate}`);
               }
             });
           }
-          console.log();
+          writeLine();
         }
 
         if (result.error) {
@@ -59,22 +65,26 @@ export function engineCommand(program: Command): void {
 
         if (result.engine && result.uprojectEngine) {
           const engine = result.engine;
-          Logger.success(`Found engine for project: ${chalk.bold(engine.displayName || engine.associationId)}`);
+          Logger.success(
+            `Found engine for project: ${chalk.bold(engine.displayName || engine.associationId)}`
+          );
 
           Logger.subTitle('Engine Details');
-          console.log(`  Path: ${engine.path}`);
+          writeLine(`  Path: ${engine.path}`);
 
           if (engine.version) {
-            console.log(`  Version: ${engine.version.MajorVersion}.${engine.version.MinorVersion}.${engine.version.PatchVersion}`);
-            console.log(`  Build ID: ${engine.version.BuildId}`);
-            console.log(`  Branch: ${engine.version.BranchName}`);
-            console.log(`  Changelist: ${engine.version.Changelist}`);
-            console.log(`  Promoted Build: ${engine.version.IsPromotedBuild ? 'Yes' : 'No'}`);
+            writeLine(
+              `  Version: ${engine.version.MajorVersion}.${engine.version.MinorVersion}.${engine.version.PatchVersion}`
+            );
+            writeLine(`  Build ID: ${engine.version.BuildId}`);
+            writeLine(`  Branch: ${engine.version.BranchName}`);
+            writeLine(`  Changelist: ${engine.version.Changelist}`);
+            writeLine(`  Promoted Build: ${engine.version.IsPromotedBuild ? 'Yes' : 'No'}`);
           }
 
-          console.log(`  Association ID: ${engine.associationId}`);
+          writeLine(`  Association ID: ${engine.associationId}`);
           if (engine.installedDate) {
-            console.log(`  Installed: ${engine.installedDate}`);
+            writeLine(`  Installed: ${engine.installedDate}`);
           }
         } else if (!result.engine) {
           Logger.warning('No engine installation found');
@@ -82,36 +92,37 @@ export function engineCommand(program: Command): void {
 
         if (result.uprojectEngine) {
           Logger.subTitle('Project Engine Association');
-          console.log(`  GUID: ${result.uprojectEngine.guid}`);
+          writeLine(`  GUID: ${result.uprojectEngine.guid}`);
           if (result.uprojectEngine.name) {
-            console.log(`  Name: ${result.uprojectEngine.name}`);
+            writeLine(`  Name: ${result.uprojectEngine.name}`);
           }
           if (result.uprojectEngine.path) {
-            console.log(`  Path: ${result.uprojectEngine.path}`);
+            writeLine(`  Path: ${result.uprojectEngine.path}`);
           }
           if (result.uprojectEngine.version) {
-            console.log(`  Version: ${result.uprojectEngine.version}`);
+            writeLine(`  Version: ${result.uprojectEngine.version}`);
           }
 
           if (!result.engine) {
-            Logger.warning('Engine association found in project, but no matching engine installation detected');
+            Logger.warning(
+              'Engine association found in project, but no matching engine installation detected'
+            );
           }
         }
 
         if (result.warnings.length > 0) {
           Logger.subTitle('Warnings');
-          result.warnings.forEach(warning => {
-            console.log(`  • ${warning}`);
+          result.warnings.forEach((warning) => {
+            writeLine(`  • ${warning}`);
           });
         }
 
-        console.log();
+        writeLine();
         if (result.engine && result.uprojectEngine) {
           Logger.success('Engine information retrieved successfully');
         } else if (!result.engine) {
           Logger.warning('No engine installation found');
         }
-
       } catch (error) {
         Logger.error(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
         process.exit(1);

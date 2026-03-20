@@ -3,6 +3,10 @@ import chalk from 'chalk';
 import { ProjectDetector } from '../core/project-detector';
 import { Logger } from '../utils/logger';
 
+function writeLine(message = ''): void {
+  Logger.write(`${message}\n`);
+}
+
 export function listCommand(program: Command): void {
   program
     .command('list')
@@ -16,11 +20,11 @@ export function listCommand(program: Command): void {
 
         const result = await ProjectDetector.detectProject({
           cwd: process.cwd(),
-          recursive: options.recursive
+          recursive: options.recursive,
         });
 
         if (options.json) {
-          console.log(JSON.stringify(result, null, 2));
+          Logger.json(result);
           return;
         }
 
@@ -28,7 +32,7 @@ export function listCommand(program: Command): void {
           Logger.error(result.error || 'Project detection failed');
           if (result.warnings.length > 0) {
             Logger.warning('Warnings:');
-            result.warnings.forEach(warning => console.log(`  • ${warning}`));
+            result.warnings.forEach((warning) => writeLine(`  • ${warning}`));
           }
           process.exit(1);
         }
@@ -41,52 +45,51 @@ export function listCommand(program: Command): void {
         const project = result.project;
 
         Logger.success(`Found project: ${chalk.bold(project.name)}`);
-        console.log();
+        writeLine();
 
         Logger.subTitle('Basic Information');
-        console.log(`  Path: ${project.path}`);
-        console.log(`  Source Directory: ${project.sourceDir || 'Not found'}`);
-        console.log(`  Engine Association: ${project.uproject.EngineAssociation}`);
+        writeLine(`  Path: ${project.path}`);
+        writeLine(`  Source Directory: ${project.sourceDir || 'Not found'}`);
+        writeLine(`  Engine Association: ${project.uproject.EngineAssociation}`);
 
         if (project.uproject.Modules.length > 0) {
           Logger.subTitle('Modules');
-          project.uproject.Modules.forEach(module => {
-            console.log(`  • ${module.Name} (${module.Type}) - Loading: ${module.LoadingPhase}`);
+          project.uproject.Modules.forEach((module) => {
+            writeLine(`  • ${module.Name} (${module.Type}) - Loading: ${module.LoadingPhase}`);
           });
         }
 
         if (project.targets.length > 0) {
           Logger.subTitle('Build Targets');
-          project.targets.forEach(target => {
-            console.log(`  • ${target.name} (${target.type})`);
+          project.targets.forEach((target) => {
+            writeLine(`  • ${target.name} (${target.type})`);
           });
         }
 
         if (project.modules.length > 0) {
           Logger.subTitle('Source Modules');
-          project.modules.forEach(module => {
-            console.log(`  • ${module.name}`);
+          project.modules.forEach((module) => {
+            writeLine(`  • ${module.name}`);
           });
         }
 
         if (project.uproject.Plugins && project.uproject.Plugins.length > 0) {
           Logger.subTitle('Plugins');
-          project.uproject.Plugins.forEach(plugin => {
+          project.uproject.Plugins.forEach((plugin) => {
             const status = plugin.Enabled ? chalk.green('Enabled') : chalk.gray('Disabled');
-            console.log(`  • ${plugin.Name} - ${status}`);
+            writeLine(`  • ${plugin.Name} - ${status}`);
           });
         }
 
         if (result.warnings.length > 0) {
           Logger.subTitle('Warnings');
-          result.warnings.forEach(warning => {
-            console.log(`  • ${warning}`);
+          result.warnings.forEach((warning) => {
+            writeLine(`  • ${warning}`);
           });
         }
 
-        console.log();
+        writeLine();
         Logger.success('Project detection complete');
-
       } catch (error) {
         Logger.error(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
         process.exit(1);
