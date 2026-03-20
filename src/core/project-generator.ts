@@ -2,8 +2,40 @@ import { execa } from 'execa';
 import path from 'path';
 import fs from 'fs-extra';
 import { GenerateOptions, GenerateResult, IDE } from '../types/generate';
+import { EngineResolver } from './engine-resolver';
 import { Logger } from '../utils/logger';
 import { Platform } from '../utils/platform';
+import { ProjectPathResolver } from './project-path-resolver';
+
+interface VSCodeTaskDefinition {
+  label?: string;
+}
+
+interface VSCodeTasksFile {
+  version?: string;
+  tasks?: VSCodeTaskDefinition[];
+}
+
+function isVSCodeTaskDefinition(task: unknown): task is VSCodeTaskDefinition {
+  if (typeof task !== 'object' || task === null) {
+    return false;
+  }
+
+  const candidate = task as VSCodeTaskDefinition;
+  return candidate.label === undefined || typeof candidate.label === 'string';
+}
+
+function isVSCodeTasksFile(value: unknown): value is VSCodeTasksFile {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const candidate = value as VSCodeTasksFile;
+  return (
+    candidate.tasks === undefined ||
+    (Array.isArray(candidate.tasks) && candidate.tasks.every(isVSCodeTaskDefinition))
+  );
+}
 
 export class ProjectGenerator {
   static async generate(options: GenerateOptions): Promise<GenerateResult> {
@@ -19,12 +51,12 @@ export class ProjectGenerator {
 
       if (ide === 'sln' || ide === 'vs2022') {
         await this.generateWithUBT(enginePath, projectPath, force, ide);
-        generatedFiles.push(...await this.findGeneratedSolutionFiles(projectPath));
+        generatedFiles.push(...(await this.findGeneratedSolutionFiles(projectPath)));
       } else if (ide === 'vscode') {
         await this.generateWithUBT(enginePath, projectPath, force, ide);
-        generatedFiles.push(...await this.findGeneratedSolutionFiles(projectPath));
-        generatedFiles.push(...await this.findVSCodeWorkspaceFiles(projectPath));
-        generatedFiles.push(...await this.findVSCodeConfigFiles(projectPath));
+        generatedFiles.push(...(await this.findGeneratedSolutionFiles(projectPath)));
+        generatedFiles.push(...(await this.findVSCodeWorkspaceFiles(projectPath)));
+        generatedFiles.push(...(await this.findVSCodeConfigFiles(projectPath)));
 
         const tasksFile = await this.generateVSCodeTasks(projectPath);
         if (tasksFile) {
@@ -32,65 +64,48 @@ export class ProjectGenerator {
         }
       } else if (ide === 'clion') {
         await this.generateWithUBT(enginePath, projectPath, force, ide);
-        generatedFiles.push(...await this.findGeneratedCLionFiles(projectPath));
+        generatedFiles.push(...(await this.findGeneratedCLionFiles(projectPath)));
       } else if (ide === 'xcode') {
         await this.generateWithUBT(enginePath, projectPath, force, ide);
-        generatedFiles.push(...await this.findGeneratedXcodeFiles(projectPath));
+        generatedFiles.push(...(await this.findGeneratedXcodeFiles(projectPath)));
       } else {
         await this.generateWithUBT(enginePath, projectPath, force, ide);
-        generatedFiles.push(...await this.findGeneratedSolutionFiles(projectPath));
+        generatedFiles.push(...(await this.findGeneratedSolutionFiles(projectPath)));
       }
 
       return {
         success: true,
-        generatedFiles
+        generatedFiles,
       };
-
     } catch (error) {
       return {
         success: false,
         generatedFiles,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
       };
     }
   }
 
-  private static async validateOptions(options: GenerateOptions): Promise<Required<GenerateOptions>> {
+  private static async validateOptions(
+    options: GenerateOptions
+  ): Promise<Required<GenerateOptions>> {
     const ide: IDE = options.ide || 'sln';
     const force = options.force || false;
 
-    let projectPath = options.projectPath || process.cwd();
-    if (await fs.pathExists(projectPath) && (await fs.stat(projectPath)).isDirectory()) {
-      const uprojectFiles = await fs.readdir(projectPath).then(files =>
-        files.filter(f => f.endsWith('.uproject'))
-      );
+    const projectPath = await ProjectPathResolver.resolveOrThrow(
+      options.projectPath || process.cwd()
+    );
 
-      if (uprojectFiles.length > 0) {
-        projectPath = path.join(projectPath, uprojectFiles[0]);
-      } else {
-        throw new Error(`No .uproject file found in project directory: ${projectPath}`);
-      }
-    }
-
-    let enginePath = options.enginePath;
-    if (!enginePath) {
-      const { EngineResolver } = await import('./engine-resolver');
-      const engineResult = await EngineResolver.resolveEngine(projectPath);
-      if (!engineResult.engine) {
-        throw new Error('Could not determine engine path. Please specify --engine-path');
-      }
-      enginePath = engineResult.engine.path;
-    }
-
-    if (!(await fs.pathExists(enginePath))) {
-      throw new Error(`Engine path does not exist: ${enginePath}`);
-    }
+    const enginePath = await EngineResolver.resolveEnginePath({
+      projectPath,
+      enginePath: options.enginePath,
+    });
 
     return {
       ide,
       projectPath,
       enginePath,
-      force
+      force,
     };
   }
 
@@ -113,12 +128,7 @@ export class ProjectGenerator {
       throw new Error(`UnrealBuildTool not found at: ${ubtPath}`);
     }
 
-    const args = [
-      '-projectfiles',
-      `-project="${projectPath}"`,
-      '-game',
-      '-engine'
-    ];
+    const args = ['-projectfiles', `-project="${projectPath}"`, '-game', '-engine'];
 
     if (ide === 'vscode') {
       args.push('-VSCode');
@@ -138,7 +148,7 @@ export class ProjectGenerator {
     const childProcess = execa(command, {
       stdio: 'pipe',
       cwd: path.dirname(ubtPath),
-      shell: true
+      shell: true,
     });
 
     if (childProcess.stdout) {
@@ -169,23 +179,23 @@ export class ProjectGenerator {
     const projectDir = path.dirname(projectPath);
     const solutionFiles: string[] = [];
 
-    const slnFiles = await fs.readdir(projectDir).then(files =>
-      files.filter(f => f.endsWith('.sln'))
-    );
+    const slnFiles = await fs
+      .readdir(projectDir)
+      .then((files) => files.filter((f) => f.endsWith('.sln')));
 
-    solutionFiles.push(...slnFiles.map(f => path.join(projectDir, f)));
+    solutionFiles.push(...slnFiles.map((f) => path.join(projectDir, f)));
 
-    const filterFiles = await fs.readdir(projectDir).then(files =>
-      files.filter(f => f.endsWith('.vcxproj.filters'))
-    );
+    const filterFiles = await fs
+      .readdir(projectDir)
+      .then((files) => files.filter((f) => f.endsWith('.vcxproj.filters')));
 
-    solutionFiles.push(...filterFiles.map(f => path.join(projectDir, f)));
+    solutionFiles.push(...filterFiles.map((f) => path.join(projectDir, f)));
 
-    const vcxprojFiles = await fs.readdir(projectDir).then(files =>
-      files.filter(f => f.endsWith('.vcxproj'))
-    );
+    const vcxprojFiles = await fs
+      .readdir(projectDir)
+      .then((files) => files.filter((f) => f.endsWith('.vcxproj')));
 
-    solutionFiles.push(...vcxprojFiles.map(f => path.join(projectDir, f)));
+    solutionFiles.push(...vcxprojFiles.map((f) => path.join(projectDir, f)));
 
     return solutionFiles;
   }
@@ -203,16 +213,18 @@ export class ProjectGenerator {
     const projectDir = path.dirname(projectPath);
     const entries = await fs.readdir(projectDir, { withFileTypes: true });
     const files = entries
-      .filter(e => e.isDirectory() && e.name.endsWith('.xcodeproj'))
-      .map(e => path.join(projectDir, e.name));
+      .filter((e) => e.isDirectory() && e.name.endsWith('.xcodeproj'))
+      .map((e) => path.join(projectDir, e.name));
     return files;
   }
 
   private static async findVSCodeWorkspaceFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
-    const files = await fs.readdir(projectDir).then(list =>
-      list.filter(f => f.endsWith('.code-workspace')).map(f => path.join(projectDir, f))
-    );
+    const files = await fs
+      .readdir(projectDir)
+      .then((list) =>
+        list.filter((f) => f.endsWith('.code-workspace')).map((f) => path.join(projectDir, f))
+      );
     return files;
   }
 
@@ -224,9 +236,9 @@ export class ProjectGenerator {
       return [];
     }
 
-    const vscodeFiles = await fs.readdir(vscodeDir).then(files =>
-      files.map(f => path.join(vscodeDir, f))
-    );
+    const vscodeFiles = await fs
+      .readdir(vscodeDir)
+      .then((files) => files.map((f) => path.join(vscodeDir, f)));
 
     return vscodeFiles;
   }
@@ -248,7 +260,7 @@ export class ProjectGenerator {
           args: ['build'],
           group: 'build',
           problemMatcher: ['$msCompile'],
-          detail: 'Build Unreal Engine project using ubuild'
+          detail: 'Build Unreal Engine project using ubuild',
         },
         {
           label: 'ubuild: Run Project',
@@ -256,23 +268,24 @@ export class ProjectGenerator {
           command: 'ubuild',
           args: ['run', '--build-first'],
           group: 'build',
-          detail: 'Build and run Unreal Engine project using ubuild'
-        }
-      ]
+          detail: 'Build and run Unreal Engine project using ubuild',
+        },
+      ],
     };
 
     if (await fs.pathExists(tasksPath)) {
       try {
         const existingContent = await fs.readJson(tasksPath);
-        if (existingContent.tasks) {
-          existingContent.tasks = existingContent.tasks.filter((t: any) =>
-            !(t.label && t.label.startsWith('ubuild:'))
+        if (isVSCodeTasksFile(existingContent) && existingContent.tasks) {
+          existingContent.tasks = existingContent.tasks.filter(
+            (task) => !(task.label && task.label.startsWith('ubuild:'))
           );
           existingContent.tasks.push(...tasksConfig.tasks);
           await fs.writeJson(tasksPath, existingContent, { spaces: 2 });
           return tasksPath;
         }
       } catch {
+        // Ignore invalid existing tasks.json and overwrite it below.
       }
     }
 
