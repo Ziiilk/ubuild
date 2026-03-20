@@ -42,3 +42,11 @@ export interface ProjectDetectionResult {
   error?: string;
   warnings: string[];
 }
+
+export interface ProjectPathResolution {
+  inputPath: string;
+  resolvedPath: string;
+  isDirectory: boolean;
+  wasResolvedFromDirectory: boolean;
+  hasUProjectExtension: boolean;
+}

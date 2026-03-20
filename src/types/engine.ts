@@ -32,3 +32,8 @@ export interface EngineDetectionResult {
   error?: string;
   warnings: string[];
 }
+
+export interface EnginePathResolutionOptions {
+  projectPath?: string;
+  enginePath?: string;
+}
