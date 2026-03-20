@@ -2,10 +2,14 @@ import path from 'path';
 import fs from 'fs-extra';
 import inquirer from 'inquirer';
 import { InitOptions, InitResult, ProjectType } from '../types/init';
-import type { EngineVersionInfo } from '../types/engine';
+import type { EngineInstallation, EngineVersionInfo } from '../types/engine';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
 import { EngineResolver } from './engine-resolver';
+
+interface EngineSelectionPromptAnswer {
+  selectedEngine: string;
+}
 
 export class ProjectInitializer {
   static async initialize(options: InitOptions): Promise<InitResult> {
@@ -134,7 +138,7 @@ export class ProjectInitializer {
     };
   }
 
-  private static async promptForEngineSelection(engines: any[]): Promise<string> {
+  private static async promptForEngineSelection(engines: EngineInstallation[]): Promise<string> {
     Logger.info('Multiple Unreal Engine installations found:');
 
     const choices = engines.map((engine, _index) => {
@@ -151,7 +155,7 @@ export class ProjectInitializer {
       };
     });
 
-    const { selectedEngine } = await inquirer.prompt([
+    const { selectedEngine } = await inquirer.prompt<EngineSelectionPromptAnswer>([
       {
         type: 'list',
         name: 'selectedEngine',
@@ -262,10 +266,11 @@ export class ProjectInitializer {
       const versionFile = path.join(enginePath, 'Engine', 'Build', 'Build.version');
       if (await fs.pathExists(versionFile)) {
         const content = await fs.readFile(versionFile, 'utf-8');
-        const versionInfo = JSON.parse(content);
+        const versionInfo: EngineVersionInfo = JSON.parse(content);
         return `${versionInfo.MajorVersion}.${versionInfo.MinorVersion}`;
       }
     } catch {
+      return '5.1';
     }
 
     return '5.1';
