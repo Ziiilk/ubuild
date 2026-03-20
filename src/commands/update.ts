@@ -1,11 +1,28 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { execa } from 'execa';
+import fs from 'fs-extra';
+import path from 'path';
 import { Logger } from '../utils/logger';
+
+interface PackageJsonVersion {
+  version: string;
+}
+
+async function getCurrentVersion(): Promise<string> {
+  const packageJsonPath = path.resolve(__dirname, '../../package.json');
+  const packageJson = (await fs.readJson(packageJsonPath)) as PackageJsonVersion;
+  return packageJson.version;
+}
 
 async function isGlobalInstall(): Promise<boolean> {
   try {
-    const { stdout: listOutput } = await execa('npm', ['list', '-g', '@zitool/ubuild', '--depth=0']);
+    const { stdout: listOutput } = await execa('npm', [
+      'list',
+      '-g',
+      '@zitool/ubuild',
+      '--depth=0',
+    ]);
     return listOutput.includes('@zitool/ubuild');
   } catch {
     return false;
@@ -20,7 +37,7 @@ export function updateCommand(program: Command): void {
       try {
         Logger.title('Update ubuild');
 
-        const currentVersion = require('../../package.json').version;
+        const currentVersion = await getCurrentVersion();
         Logger.info(`Current version: ${chalk.bold(currentVersion)}`);
 
         Logger.info('Checking for latest version...');

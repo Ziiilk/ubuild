@@ -8,6 +8,10 @@ export interface LoggerOptions {
   silent?: boolean;
 }
 
+interface WidthAwareWritable extends Writable {
+  columns?: number;
+}
+
 export class Logger {
   private prefix: string;
   private stdout: Writable;
@@ -23,6 +27,10 @@ export class Logger {
 
   private formatMessage(message: string): string {
     return this.prefix ? `[${this.prefix}] ${message}` : message;
+  }
+
+  private getOutputWidth(stream: Writable): number {
+    return (stream as WidthAwareWritable).columns || 80;
   }
 
   info(message: string): void {
@@ -59,13 +67,13 @@ export class Logger {
 
   clearProgress(): void {
     if (this.silent) return;
-    const width = (this.stdout as any).columns || 80;
+    const width = this.getOutputWidth(this.stdout);
     this.stdout.write(' '.repeat(width) + '\r');
   }
 
   divider(): void {
     if (this.silent) return;
-    const width = (this.stdout as any).columns || 80;
+    const width = this.getOutputWidth(this.stdout);
     this.stdout.write(chalk.gray('─'.repeat(Math.min(width, 80))) + '\n');
   }
 
@@ -140,5 +148,13 @@ export class Logger {
 
   static json(data: unknown): void {
     Logger.globalLogger.json(data);
+  }
+
+  static write(data: string): void {
+    Logger.globalLogger.write(data);
+  }
+
+  static writeError(data: string): void {
+    Logger.globalLogger.writeError(data);
   }
 }

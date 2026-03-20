@@ -11,7 +11,9 @@ export class FileSystem {
       const files = await fs.readdir(dir);
       return files.length === 0;
     } catch (error) {
-      throw new Error(`Failed to check if directory is empty: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to check if directory is empty: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -39,7 +41,8 @@ export class FileSystem {
             }
           }
         }
-      } catch (error) {
+      } catch {
+        return null;
       }
 
       return null;
@@ -93,7 +96,9 @@ export class FileSystem {
       const content = await fs.readFile(filePath, 'utf-8');
       return JSON.parse(content) as T;
     } catch (error) {
-      throw new Error(`Failed to read JSON file ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to read JSON file ${filePath}: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -101,7 +106,9 @@ export class FileSystem {
     try {
       await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
     } catch (error) {
-      throw new Error(`Failed to write JSON file ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to write JSON file ${filePath}: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
