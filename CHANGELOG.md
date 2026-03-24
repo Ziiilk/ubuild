@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.8]
+
+- `gencodebase` command now automatically updates `.vscode/settings.json` with clangd configuration using portable `${workspaceFolder}` paths
+
 ## [0.0.7]
 
 - Support concurrent `ubuild build` commands
