@@ -128,6 +128,8 @@ export class CompileCommandsGenerator {
       );
     }
 
+    await this.updateVSCodeSettings(projectDir);
+
     return actualCompileCommandsPath;
   }
 
@@ -179,5 +181,34 @@ export class CompileCommandsGenerator {
     }
 
     return resolvedTargets.join(' ');
+  }
+
+  private static async updateVSCodeSettings(projectDir: string): Promise<void> {
+    const vscodeDir = path.join(projectDir, '.vscode');
+    const settingsPath = path.join(vscodeDir, 'settings.json');
+
+    const clangdConfig = {
+      'clangd.arguments': ['--compile-commands-dir=${workspaceFolder}/.vscode'],
+    };
+
+    const cppConfig = {
+      'C_Cpp.default.compileCommands': '${workspaceFolder}/.vscode/compile_commands.json',
+    };
+
+    let settings: Record<string, unknown> = {};
+
+    if (await fs.pathExists(settingsPath)) {
+      try {
+        const content = await fs.readFile(settingsPath, 'utf-8');
+        settings = JSON.parse(content);
+      } catch {
+        settings = {};
+      }
+    }
+
+    settings = { ...settings, ...clangdConfig, ...cppConfig };
+
+    await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
+    Logger.success(`Updated VSCode settings: ${settingsPath}`);
   }
 }

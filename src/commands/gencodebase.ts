@@ -1,6 +1,5 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import path from 'path';
 import {
   CompileCommandsGenerator,
   type CompileCommandsGenerateOptions,
@@ -10,10 +9,6 @@ import { Logger } from '../utils/logger';
 export type GencodebaseCommandOptions = CompileCommandsGenerateOptions & {
   json?: boolean;
 };
-
-function writeLine(message = ''): void {
-  Logger.write(`${message}\n`);
-}
 
 export function gencodebaseCommand(program: Command): void {
   program
@@ -51,19 +46,7 @@ export function gencodebaseCommand(program: Command): void {
         }
 
         Logger.success(`Compile commands generated: ${chalk.bold(compileCommandsPath)}`);
-        writeLine();
-        Logger.subTitle('Usage with VSCode clangd:');
-        writeLine('  Add to .vscode/settings.json:');
-        writeLine(`  ${chalk.gray('{')}`);
-        writeLine(
-          `    "clangd.arguments": ["--compile-commands-dir=${path.dirname(compileCommandsPath)}"],`
-        );
-        writeLine(`    "C_Cpp.default.compileCommands": "${compileCommandsPath}"`);
-        writeLine(`  ${chalk.gray('}')}`);
-        writeLine();
-        Logger.info(
-          'Or use the C/C++ extension with: "C_Cpp.default.compileCommands": "${workspaceFolder}/compile_commands.json"'
-        );
+        Logger.success('VSCode settings updated: .vscode/settings.json');
       } catch (error) {
         Logger.error(
           `Failed to generate compile commands: ${error instanceof Error ? error.message : String(error)}`
