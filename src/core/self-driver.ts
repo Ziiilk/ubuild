@@ -98,8 +98,8 @@ export class SelfDriver {
   }
 
   /**
-   * 运行自进化循环 - 无限循环，直到用户中断
-   * 失败则重试，成功则提交，永不停止
+   * Runs the self-evolution loop - continues indefinitely until interrupted by user.
+   * Retries on failure, commits on success, never stops.
    */
   async run(): Promise<EvolutionResult> {
     this.log('🔄 Starting self-evolution...');
@@ -178,14 +178,14 @@ export class SelfDriver {
   }
 
   /**
-   * 检查是否被用户中断
+   * Checks if the process has been interrupted by the user.
    */
   private isInterrupted(): boolean {
     return false;
   }
 
   /**
-   * 诊断当前问题
+   * Diagnoses current codebase health issues.
    */
   private async diagnose(): Promise<Diagnosis> {
     const diagnosis: Diagnosis = {
@@ -194,7 +194,7 @@ export class SelfDriver {
       timestamp: new Date().toISOString(),
     };
 
-    // 运行测试
+    // Run tests
     try {
       const testResult = await execa('npm', ['test'], {
         cwd: this.projectRoot,
@@ -219,7 +219,7 @@ export class SelfDriver {
       );
     }
 
-    // 运行 lint
+    // Run lint
     try {
       const lintResult = await execa('npm', ['run', 'lint'], {
         cwd: this.projectRoot,
@@ -248,13 +248,13 @@ export class SelfDriver {
   }
 
   /**
-   * 分析并生成保守的演进建议
-   * 基于代码健康度动态生成，不依赖外部 roadmap
+   * Analyzes codebase health and generates conservative evolution suggestions.
+   * Dynamically generates suggestions based on code health without relying on external roadmaps.
    */
   private async analyzeEvolutionSuggestions(diagnosis: Diagnosis): Promise<EvolutionSuggestion[]> {
     const suggestions: EvolutionSuggestion[] = [];
 
-    // 1. 最高优先级：修复现有问题
+    // 1. Highest priority: fix existing issues
     if (diagnosis.testFailures.length > 0) {
       suggestions.push({
         priority: 'critical',
@@ -275,7 +275,7 @@ export class SelfDriver {
       });
     }
 
-    // 2. 检查构建健康度
+    // 2. Check build health
     try {
       const buildResult = await execa('npm', ['run', 'build'], {
         cwd: this.projectRoot,
@@ -398,7 +398,7 @@ export class SelfDriver {
   }
 
   /**
-   * 检查是否有测试文件
+   * Checks if test files exist in the project.
    */
   private async hasTestFiles(): Promise<boolean> {
     try {
@@ -426,7 +426,7 @@ export class SelfDriver {
   }
 
   /**
-   * 记录诊断结果
+   * Logs the diagnosis results.
    */
   private logDiagnosis(diagnosis: Diagnosis, suggestions: EvolutionSuggestion[]): void {
     const hasIssues = diagnosis.testFailures.length > 0 || diagnosis.lintErrors.length > 0;
@@ -450,7 +450,7 @@ export class SelfDriver {
   }
 
   /**
-   * 调用 OpenCode 进行改进
+   * Invokes OpenCode to apply improvements.
    */
   private async evolveWithOpenCode(
     diagnosis: Diagnosis,
@@ -487,7 +487,7 @@ export class SelfDriver {
   }
 
   /**
-   * 构建环境变量
+   * Builds environment variables for OpenCode execution.
    */
   private buildEnv(): Record<string, string> {
     const env: Record<string, string> = {};
@@ -506,8 +506,8 @@ export class SelfDriver {
   }
 
   /**
-   * 构建发送给 OpenCode 的 prompt
-   * 采用保守策略：fix > test > docs > refactor > feature
+   * Builds the prompt sent to OpenCode.
+   * Adopts a conservative strategy: fix > test > docs > refactor > feature
    */
   private buildPrompt(diagnosis: Diagnosis, suggestions: EvolutionSuggestion[]): string {
     const criticalIssues: string[] = [];
@@ -578,7 +578,7 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one conser
   }
 
   /**
-   * 全面验证 - 包含自我验证
+   * Comprehensive verification - includes self-verification.
    */
   private async verify(): Promise<VerificationResult> {
     const errors: string[] = [];
@@ -680,7 +680,7 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one conser
   }
 
   /**
-   * 检查是否有未提交的更改
+   * Checks if there are uncommitted changes.
    */
   private async hasChanges(): Promise<boolean> {
     try {
@@ -695,7 +695,7 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one conser
   }
 
   /**
-   * 提交更改 (不 push)
+   * Commits changes (without pushing).
    */
   private async commit(message: string): Promise<void> {
     try {
@@ -723,7 +723,7 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one conser
   }
 
   /**
-   * 回滚更改
+   * Reverts changes.
    */
   private async revert(): Promise<void> {
     try {
@@ -735,7 +735,7 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one conser
   }
 
   /**
-   * 生成提交消息
+   * Generates the commit message.
    */
   private generateCommitMessage(diagnosis: Diagnosis, suggestions: EvolutionSuggestion[]): string {
     const parts: string[] = [];
@@ -769,7 +769,7 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one conser
   }
 
   /**
-   * 休眠
+   * Sleeps for the specified duration.
    */
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
