@@ -7,61 +7,160 @@ type UProjectModule = UProject['Modules'][number];
 type UProjectPlugin = NonNullable<UProject['Plugins']>[number];
 type ProjectTargetType = 'Editor' | 'Game' | 'Client' | 'Server';
 
+/**
+ * Represents a fake project module for testing.
+ * Used to configure modules when creating fake projects.
+ */
 export interface FakeProjectModule {
+  /** Module name */
   name: string;
+  /** Module type (Runtime, Editor, Developer, Program, Server) */
   type?: UProjectModule['Type'];
+  /** Loading phase for the module */
   loadingPhase?: UProjectModule['LoadingPhase'];
+  /** Directory name for the module (defaults to module name) */
   directory?: string;
 }
 
+/**
+ * Represents a fake build target for testing.
+ * Used to configure targets when creating fake projects.
+ */
 export interface FakeProjectTarget {
+  /** Target name */
   name: string;
+  /** Target type (Editor, Game, Client, Server) */
   type?: ProjectTargetType;
 }
 
+/**
+ * Options for creating a fake Unreal Engine project.
+ * Allows customization of project structure and content.
+ *
+ * @example
+ * ```typescript
+ * const options: CreateFakeProjectOptions = {
+ *   projectName: 'MyGame',
+ *   type: 'cpp',
+ *   modules: [{ name: 'MyGame', type: 'Runtime' }],
+ *   withSource: true
+ * };
+ * ```
+ */
 export interface CreateFakeProjectOptions {
+  /** Project name (default: 'TestProject') */
   projectName?: string;
+  /** Directory name for the project (default: projectName) */
   projectDirName?: string;
+  /** Engine association GUID or version string (default: '5.3') */
   engineAssociation?: string;
+  /** UProject file format version (default: 3) */
   fileVersion?: number;
+  /** Array of project modules to create */
   modules?: FakeProjectModule[];
+  /** Array of plugins to include in the project */
   plugins?: UProjectPlugin[];
+  /** Array of build targets to create */
   targets?: FakeProjectTarget[];
+  /** Whether to create Source directory and files (default: true) */
   withSource?: boolean;
 }
 
+/**
+ * Fixture containing all paths and data for a fake Unreal Engine project.
+ * Returned by createFakeProject function.
+ */
 export interface FakeProjectFixture {
+  /** Absolute path to the project directory */
   projectDir: string;
+  /** Project name */
   projectName: string;
+  /** Absolute path to the Source directory */
   sourceDir: string;
+  /** Parsed uproject data */
   uproject: UProject;
+  /** Absolute path to the .uproject file */
   uprojectPath: string;
+  /** Array of paths to created .Target.cs files */
   targetPaths: string[];
+  /** Array of paths to created .Build.cs files */
   modulePaths: string[];
 }
 
+/**
+ * Options for creating a fake Unreal Engine installation.
+ * Allows customization of engine structure and version info.
+ *
+ * @example
+ * ```typescript
+ * const options: CreateFakeEngineOptions = {
+ *   associationId: 'UE_5.3',
+ *   displayName: 'Unreal Engine 5.3',
+ *   includeBuildBat: true,
+ *   versionInfo: { MajorVersion: 5, MinorVersion: 3 }
+ * };
+ * ```
+ */
 export interface CreateFakeEngineOptions {
+  /** Directory name for the engine (default: 'UE_{major}_{minor}') */
   engineDirName?: string;
+  /** Engine association ID (default: 'UE_{major}.{minor}') */
   associationId?: string;
+  /** Display name for the engine */
   displayName?: string;
+  /** Source of engine detection */
   source?: EngineInstallation['source'];
+  /** Partial version info (defaults applied for missing fields) */
   versionInfo?: Partial<EngineVersionInfo>;
+  /** Whether to include Build.bat (default: true) */
   includeBuildBat?: boolean;
+  /** Whether to include UnrealBuildTool.exe (default: true) */
   includeUnrealBuildTool?: boolean;
+  /** Whether to include UnrealEditor.exe (default: true) */
   includeEditorExecutable?: boolean;
 }
 
+/**
+ * Fixture containing all paths and data for a fake Unreal Engine installation.
+ * Returned by createFakeEngine function.
+ */
 export interface FakeEngineFixture {
+  /** Absolute path to the engine installation directory */
   enginePath: string;
+  /** Absolute path to Build.bat */
   buildBatPath: string;
+  /** Absolute path to UnrealBuildTool.exe */
   unrealBuildToolPath: string;
+  /** Absolute path to UnrealEditor.exe */
   editorExecutablePath: string;
+  /** Absolute path to Build.version file */
   buildVersionPath: string;
+  /** Absolute path to UnrealEditor.version file */
   editorVersionPath: string;
+  /** Engine installation data */
   installation: EngineInstallation;
+  /** Complete version information */
   versionInfo: EngineVersionInfo;
 }
 
+/**
+ * Creates a fake Unreal Engine project structure for testing.
+ * Generates .uproject file, source files, and target files.
+ *
+ * @example
+ * ```typescript
+ * const project = await createFakeProject(tempDir, {
+ *   projectName: 'MyGame',
+ *   type: 'cpp',
+ *   modules: [{ name: 'MyGame' }]
+ * });
+ * console.log(project.uprojectPath); // /tmp/test/MyGame/MyGame.uproject
+ * ```
+ *
+ * @param rootDir - Root directory where the project will be created
+ * @param options - Configuration options for the fake project
+ * @returns A fixture containing all project paths and data
+ */
 export async function createFakeProject(
   rootDir: string,
   options: CreateFakeProjectOptions = {}
@@ -121,6 +220,22 @@ export async function createFakeProject(
   };
 }
 
+/**
+ * Creates a fake Unreal Engine installation for testing.
+ * Generates directory structure, version files, and optional executables.
+ *
+ * @example
+ * ```typescript
+ * const engine = await createFakeEngine(tempDir, {
+ *   versionInfo: { MajorVersion: 5, MinorVersion: 3 }
+ * });
+ * console.log(engine.buildBatPath); // /tmp/test/UE_5_3/Engine/Build/BatchFiles/Build.bat
+ * ```
+ *
+ * @param rootDir - Root directory where the engine will be created
+ * @param options - Configuration options for the fake engine
+ * @returns A fixture containing all engine paths and data
+ */
 export async function createFakeEngine(
   rootDir: string,
   options: CreateFakeEngineOptions = {}
