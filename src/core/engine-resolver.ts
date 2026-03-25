@@ -12,7 +12,17 @@ import { Platform } from '../utils/platform';
 import { Logger } from '../utils/logger';
 import { ProjectPathResolver } from './project-path-resolver';
 
+/**
+ * Resolves Unreal Engine installations from various sources including
+ * Windows Registry, Epic Launcher, environment variables, and manual paths.
+ */
 export class EngineResolver {
+  /**
+   * Resolves the engine path using the provided options or auto-detection.
+   * @param options - Path resolution options including project path and engine path override
+   * @returns Promise resolving to the resolved engine installation path
+   * @throws Error if engine path cannot be resolved or does not exist
+   */
   static async resolveEnginePath(options: EnginePathResolutionOptions = {}): Promise<string> {
     const { projectPath, enginePath } = options;
 
@@ -36,6 +46,11 @@ export class EngineResolver {
     return engineResult.engine.path;
   }
 
+  /**
+   * Resolves the engine installation for a given project.
+   * @param projectPath - Optional path to the project to find associated engine
+   * @returns Promise resolving to engine detection result with matched engine info
+   */
   static async resolveEngine(projectPath?: string): Promise<EngineDetectionResult> {
     const warnings: string[] = [];
 
@@ -142,6 +157,10 @@ export class EngineResolver {
     }
   }
 
+  /**
+   * Finds all Unreal Engine installations from registry, launcher, and environment.
+   * @returns Promise resolving to array of detected engine installations
+   */
   public static async findEngineInstallations(): Promise<EngineInstallation[]> {
     const installations: EngineInstallation[] = [];
 

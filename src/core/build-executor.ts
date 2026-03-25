@@ -9,11 +9,19 @@ import { Platform } from '../utils/platform';
 import { ProjectPathResolver } from './project-path-resolver';
 import { TargetResolver } from './target-resolver';
 
+/**
+ * Executes Unreal Engine project builds using UnrealBuildTool or Build.bat.
+ * Supports various build targets, configurations, and platforms.
+ */
 export class BuildExecutor {
   private logger: Logger;
   private stdout: Writable;
   private stderr: Writable;
 
+  /**
+   * Creates a new BuildExecutor instance.
+   * @param options - Configuration options for logging and output streams
+   */
   constructor(
     options: { logger?: Logger; stdout?: Writable; stderr?: Writable; silent?: boolean } = {}
   ) {
@@ -28,6 +36,11 @@ export class BuildExecutor {
       });
   }
 
+  /**
+   * Executes a build with the specified options.
+   * @param options - Build configuration options
+   * @returns Promise resolving to build result with success status and output
+   */
   async execute(options: BuildOptions): Promise<BuildResult> {
     const startTime = Date.now();
 
@@ -266,6 +279,11 @@ export class BuildExecutor {
     };
   }
 
+  /**
+   * Gets available build targets for a project by scanning .Target.cs files.
+   * @param projectPath - Path to the project directory or .uproject file
+   * @returns Promise resolving to array of available targets with names and types
+   */
   static async getAvailableTargets(
     projectPath: string
   ): Promise<Array<{ name: string; type: string }>> {
@@ -305,6 +323,11 @@ export class BuildExecutor {
     }
   }
 
+  /**
+   * Gets default build options based on available project targets.
+   * @param projectPath - Path to the project directory or .uproject file
+   * @returns Promise resolving to partial build options with sensible defaults
+   */
   static async getDefaultOptions(projectPath: string): Promise<Partial<BuildOptions>> {
     const targets = await BuildExecutor.getAvailableTargets(projectPath);
     const hasEditorTarget = targets.some((t) => t.type === 'Editor');
@@ -316,6 +339,11 @@ export class BuildExecutor {
     };
   }
 
+  /**
+   * Static helper to execute a build without creating an instance.
+   * @param options - Build configuration options
+   * @returns Promise resolving to build result
+   */
   static async execute(options: BuildOptions): Promise<BuildResult> {
     const executor = new BuildExecutor({
       logger: options.logger,

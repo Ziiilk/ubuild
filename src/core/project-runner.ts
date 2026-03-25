@@ -11,28 +11,51 @@ import { EngineResolver } from './engine-resolver';
 import { ProjectPathResolver } from './project-path-resolver';
 import { TargetResolver } from './target-resolver';
 
+/** Options for running an Unreal Engine project executable. */
 export interface RunOptions {
+  /** Target to run (Editor, Game, Client, Server) */
   target?: string;
+  /** Build configuration (Debug, DebugGame, Development, Shipping, Test) */
   config?: string;
+  /** Target platform (Win64, Win32, Linux, Mac, Android, IOS) */
   platform?: string;
+  /** Path to project directory or .uproject file */
   project?: string;
+  /** Path to Unreal Engine installation */
   enginePath?: string;
+  /** Show what would be run without executing */
   dryRun?: boolean;
+  /** Build the project before running */
   buildFirst?: boolean;
+  /** Skip building, just run existing executable */
   noBuild?: boolean;
+  /** Additional arguments to pass to the executable */
   args?: string[];
+  /** Logger instance for output */
   logger?: Logger;
+  /** Writable stream for stdout */
   stdout?: Writable;
+  /** Writable stream for stderr */
   stderr?: Writable;
+  /** Suppress all output */
   silent?: boolean;
+  /** Run process in detached mode */
   detached?: boolean;
 }
 
+/**
+ * Runs Unreal Engine projects by finding and executing the appropriate executable.
+ * Supports Editor and Game targets with various configurations.
+ */
 export class ProjectRunner {
   private logger: Logger;
   private stdout: Writable;
   private stderr: Writable;
 
+  /**
+   * Creates a new ProjectRunner instance.
+   * @param options - Configuration options for logging and output streams
+   */
   constructor(
     options: { logger?: Logger; stdout?: Writable; stderr?: Writable; silent?: boolean } = {}
   ) {
@@ -47,10 +70,20 @@ export class ProjectRunner {
       });
   }
 
+  /**
+   * Gets the logger instance used by this runner.
+   * @returns The Logger instance
+   */
   getLogger(): Logger {
     return this.logger;
   }
 
+  /**
+   * Runs the project with the specified options.
+   * @param options - Run configuration options
+   * @returns Promise that resolves when the run completes
+   * @throws Error if validation fails or executable cannot be found
+   */
   async run(options: RunOptions): Promise<void> {
     this.logger.title('Run Unreal Engine Project');
 
@@ -348,6 +381,11 @@ export class ProjectRunner {
   }
 }
 
+/**
+ * Convenience function to run a project without creating a ProjectRunner instance.
+ * @param options - Run configuration options
+ * @returns Promise that resolves when the run completes
+ */
 export async function runProject(options: RunOptions): Promise<void> {
   const runner = new ProjectRunner({
     logger: options.logger,

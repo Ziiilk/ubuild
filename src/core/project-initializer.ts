@@ -11,7 +11,16 @@ interface EngineSelectionPromptAnswer {
   selectedEngine: string;
 }
 
+/**
+ * Initializes new Unreal Engine projects with various templates and configurations.
+ * Supports C++, Blueprint, and blank project types.
+ */
 export class ProjectInitializer {
+  /**
+   * Initializes a new Unreal Engine project with the specified options.
+   * @param options - Initialization options including name, type, and engine path
+   * @returns Promise resolving to initialization result with created files
+   */
   static async initialize(options: InitOptions): Promise<InitResult> {
     const createdFiles: string[] = [];
 

@@ -1,10 +1,26 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { glob } from 'glob';
-import { UProject, ProjectInfo, ProjectDetectionOptions, ProjectDetectionResult } from '../types/project';
+import {
+  UProject,
+  ProjectInfo,
+  ProjectDetectionOptions,
+  ProjectDetectionResult,
+} from '../types/project';
 
+/**
+ * Detects and validates Unreal Engine projects from .uproject files.
+ * Provides methods to find, parse, and validate project configurations.
+ */
 export class ProjectDetector {
-  static async detectProject(options: ProjectDetectionOptions = {}): Promise<ProjectDetectionResult> {
+  /**
+   * Detects an Unreal Engine project in the specified directory.
+   * @param options - Detection options including cwd and recursive search flag
+   * @returns Promise resolving to project detection result with validation status
+   */
+  static async detectProject(
+    options: ProjectDetectionOptions = {}
+  ): Promise<ProjectDetectionResult> {
     const cwd = options.cwd || process.cwd();
     const warnings: string[] = [];
 
@@ -15,7 +31,7 @@ export class ProjectDetector {
         return {
           isValid: false,
           error: 'No Unreal Engine project (.uproject) file found',
-          warnings
+          warnings,
         };
       }
 
@@ -29,7 +45,7 @@ export class ProjectDetector {
         return {
           isValid: false,
           error: `Invalid .uproject file: ${validationResult.error}`,
-          warnings: [...warnings, ...validationResult.warnings]
+          warnings: [...warnings, ...validationResult.warnings],
         };
       }
 
@@ -52,20 +68,19 @@ export class ProjectDetector {
         uproject,
         sourceDir: hasSourceDir ? sourceDir : '',
         targets,
-        modules
+        modules,
       };
 
       return {
         isValid: true,
         project: projectInfo,
-        warnings
+        warnings,
       };
-
     } catch (error) {
       return {
         isValid: false,
         error: error instanceof Error ? error.message : String(error),
-        warnings
+        warnings,
       };
     }
   }
@@ -80,7 +95,11 @@ export class ProjectDetector {
     return JSON.parse(content);
   }
 
-  private static validateUProject(uproject: UProject): { isValid: boolean; error?: string; warnings: string[] } {
+  private static validateUProject(uproject: UProject): {
+    isValid: boolean;
+    error?: string;
+    warnings: string[];
+  } {
     const warnings: string[] = [];
 
     if (uproject.FileVersion === undefined) {
@@ -105,7 +124,7 @@ export class ProjectDetector {
   private static async findTargetFiles(sourceDir: string): Promise<ProjectInfo['targets']> {
     const files = await glob('*.Target.cs', { cwd: sourceDir, absolute: false });
 
-    const targets = files.map(file => {
+    const targets = files.map((file) => {
       const fileName = path.basename(file, '.Target.cs');
       let type: 'Editor' | 'Game' | 'Client' | 'Server' = 'Game';
 
@@ -120,7 +139,7 @@ export class ProjectDetector {
       return {
         name: fileName,
         type,
-        path: path.join(sourceDir, file)
+        path: path.join(sourceDir, file),
       };
     });
 
@@ -130,11 +149,11 @@ export class ProjectDetector {
   private static async findModuleFiles(sourceDir: string): Promise<ProjectInfo['modules']> {
     const files = await glob('**/*.Build.cs', { cwd: sourceDir, absolute: false });
 
-    const modules = files.map(file => {
+    const modules = files.map((file) => {
       const moduleName = path.basename(file, '.Build.cs');
       return {
         name: moduleName,
-        path: path.join(sourceDir, file)
+        path: path.join(sourceDir, file),
       };
     });
 

@@ -37,7 +37,16 @@ function isVSCodeTasksFile(value: unknown): value is VSCodeTasksFile {
   );
 }
 
+/**
+ * Generates IDE project files for Unreal Engine projects.
+ * Supports Visual Studio, VSCode, CLion, and Xcode through UBT integration.
+ */
 export class ProjectGenerator {
+  /**
+   * Generates project files for the specified IDE.
+   * @param options - Generation options including IDE type and project path
+   * @returns Promise resolving to generation result with list of created files
+   */
   static async generate(options: GenerateOptions): Promise<GenerateResult> {
     const generatedFiles: string[] = [];
 

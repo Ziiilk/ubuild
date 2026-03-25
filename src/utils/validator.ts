@@ -9,11 +9,25 @@ import {
   PROJECT_TYPES,
 } from './constants';
 
+/**
+ * Validates various inputs for Unreal Engine project operations.
+ * Includes validation for project names, engine paths, build targets, and more.
+ */
 export class Validator {
+  /**
+   * Validates a project name format (alphanumeric, underscores, hyphens).
+   * @param name - The project name to validate
+   * @returns True if the name is valid
+   */
   static isValidProjectName(name: string): boolean {
     return /^[a-zA-Z0-9_-]+$/.test(name);
   }
 
+  /**
+   * Validates that an engine path exists and contains required directories.
+   * @param enginePath - The path to validate
+   * @returns Promise resolving to true if the path is a valid engine installation
+   */
   static async isValidEnginePath(enginePath: string): Promise<boolean> {
     try {
       const normalizedPath = path.normalize(enginePath);
@@ -42,6 +56,11 @@ export class Validator {
     }
   }
 
+  /**
+   * Validates a build target name.
+   * @param target - The target to validate
+   * @returns True if valid or non-empty string for custom targets
+   */
   static isValidBuildTarget(target: string): boolean {
     // Accept known targets or any non-empty string (for custom targets)
     return (
@@ -49,22 +68,47 @@ export class Validator {
     );
   }
 
+  /**
+   * Validates a build configuration string.
+   * @param config - The configuration to validate
+   * @returns True if the configuration is valid
+   */
   static isValidBuildConfig(config: string): boolean {
     return BUILD_CONFIGS.includes(config as (typeof BUILD_CONFIGS)[number]);
   }
 
+  /**
+   * Validates a build platform string.
+   * @param platform - The platform to validate
+   * @returns True if the platform is valid
+   */
   static isValidBuildPlatform(platform: string): boolean {
     return BUILD_PLATFORMS.includes(platform as (typeof BUILD_PLATFORMS)[number]);
   }
 
+  /**
+   * Validates an IDE type string.
+   * @param ide - The IDE type to validate
+   * @returns True if the IDE type is valid
+   */
   static isValidIDE(ide: string): boolean {
     return IDE_TYPES.includes(ide as (typeof IDE_TYPES)[number]);
   }
 
+  /**
+   * Validates a project type string.
+   * @param type - The project type to validate
+   * @returns True if the project type is valid
+   */
   static isValidProjectType(type: string): boolean {
     return PROJECT_TYPES.includes(type as (typeof PROJECT_TYPES)[number]);
   }
 
+  /**
+   * Validates that a file is a valid .uproject file.
+   * @param uprojectPath - Path to the .uproject file
+   * @returns Promise resolving to true if the file is a valid project file
+   */
   static async isValidUProjectFile(uprojectPath: string): Promise<boolean> {
     try {
       if (!uprojectPath.endsWith('.uproject')) {
@@ -89,6 +133,12 @@ export class Validator {
     }
   }
 
+  /**
+   * Checks if a directory is safe for project initialization.
+   * @param directory - The directory to check
+   * @param force - Whether to override safety checks
+   * @returns Promise resolving to safety check result with message
+   */
   static async isSafeForInit(
     directory: string,
     force = false
