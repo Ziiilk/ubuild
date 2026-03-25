@@ -9,6 +9,7 @@ import { Validator } from '../utils/validator';
 import { BuildExecutor } from './build-executor';
 import { EngineResolver } from './engine-resolver';
 import { ProjectPathResolver } from './project-path-resolver';
+import { TargetResolver } from './target-resolver';
 
 export interface RunOptions {
   target?: string;
@@ -268,17 +269,8 @@ export class ProjectRunner {
       }
 
       let targetName = this.getTarget(options);
-      const availableTargets = await BuildExecutor.getAvailableTargets(projectPath);
-      if (availableTargets.length > 0) {
-        const genericTypes = ['Editor', 'Game', 'Client', 'Server'];
-        const isGenericType = genericTypes.includes(options.target || '');
-        if (isGenericType) {
-          const matchingTarget = availableTargets.find((target) => target.type === options.target);
-          if (matchingTarget) {
-            targetName = matchingTarget.name;
-          }
-        }
-      }
+      const resolvedTarget = await TargetResolver.resolveTarget(projectPath, targetName);
+      targetName = resolvedTarget;
 
       if (targetName.toLowerCase().includes('editor')) {
         let enginePath: string;

@@ -43,6 +43,7 @@ export class Validator {
   }
 
   static isValidBuildTarget(target: string): boolean {
+    // Accept known targets or any non-empty string (for custom targets)
     return (
       BUILD_TARGETS.includes(target as (typeof BUILD_TARGETS)[number]) || target.trim().length > 0
     );
@@ -77,7 +78,7 @@ export class Validator {
       const content = await fs.readFile(uprojectPath, 'utf-8');
       const uproject = JSON.parse(content);
 
-      return (
+      return Boolean(
         uproject.FileVersion === 3 && uproject.EngineAssociation && Array.isArray(uproject.Modules)
       );
     } catch (error) {

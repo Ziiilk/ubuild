@@ -37,21 +37,19 @@ const isEvolveRequested = process.argv.slice(2).includes('evolve');
 const isDevMode =
   process.env.NODE_ENV === 'development' || process.env.UBUILD_EVOLVE_ENABLED === 'true';
 
-// console.log('[DEBUG] isEvolveRequested:', isEvolveRequested, 'isDevMode:', isDevMode, 'argv:', process.argv);
-
-if (isEvolveRequested || isDevMode) {
-  // Require synchronously to register command before parsing
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { evolveCommand } = require('../commands/evolve');
-    evolveCommand(program);
-  } catch (error) {
-    // Evolve command is optional - ignore if module not available
-    Logger.debug(
-      `Evolve command not available: ${error instanceof Error ? error.message : String(error)}`
-    );
+(async (): Promise<void> => {
+  if (isEvolveRequested || isDevMode) {
+    try {
+      const { evolveCommand } = await import('../commands/evolve');
+      evolveCommand(program);
+    } catch (error) {
+      // Evolve command is optional - ignore if module not available
+      Logger.debug(
+        `Evolve command not available: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
-}
+})();
 
 program.configureHelp({
   sortSubcommands: true,

@@ -3,10 +3,10 @@ import path from 'path';
 import fs from 'fs-extra';
 import { execa } from 'execa';
 import { EngineResolver } from './engine-resolver';
-import { BuildExecutor } from './build-executor';
 import { ProjectPathResolver } from './project-path-resolver';
 import { Platform } from '../utils/platform';
 import { Logger } from '../utils/logger';
+import { TargetResolver } from './target-resolver';
 
 export interface CompileCommandsGenerateOptions {
   target?: string;
@@ -140,53 +140,12 @@ export class CompileCommandsGenerator {
   }
 
   private static async resolveTargetName(projectPath: string, target: string): Promise<string> {
-    const availableTargets = await BuildExecutor.getAvailableTargets(projectPath);
-
-    if (availableTargets.length === 0) {
-      return target;
-    }
-
-    const targetList = target.split(' ').filter(Boolean);
-    const resolvedTargets: string[] = [];
-
-    const genericTypes = ['Editor', 'Game', 'Client', 'Server'];
-
-    for (const requestedTarget of targetList) {
-      const isGenericType = genericTypes.includes(requestedTarget);
-
-      if (isGenericType) {
-        const matchingTarget = availableTargets.find(
-          (availableTarget) => availableTarget.type === requestedTarget
-        );
-        if (matchingTarget) {
-          resolvedTargets.push(matchingTarget.name);
-          continue;
-        }
-
-        const fallbackTarget = availableTargets.find((availableTarget) =>
-          availableTarget.name.toLowerCase().includes(requestedTarget.toLowerCase())
-        );
-        if (fallbackTarget) {
-          resolvedTargets.push(fallbackTarget.name);
-          continue;
-        }
-      }
-
-      const targetExists = availableTargets.some(
-        (availableTarget) => availableTarget.name === requestedTarget
-      );
-      if (targetExists) {
-        resolvedTargets.push(requestedTarget);
-      } else if (availableTargets.length > 0) {
-        resolvedTargets.push(availableTargets[0].name);
-      }
-    }
-
-    if (resolvedTargets.length === 0) {
+    const resolved = await TargetResolver.resolveTargetName(projectPath, target);
+    // If resolution fails (returns undefined), use a sensible default
+    if (!resolved) {
       return 'Editor Game';
     }
-
-    return resolvedTargets.join(' ');
+    return resolved;
   }
 
   private static async updateVSCodeSettings(projectDir: string, silent = false): Promise<void> {
@@ -207,7 +166,10 @@ export class CompileCommandsGenerator {
       try {
         const content = await fs.readFile(settingsPath, 'utf-8');
         settings = JSON.parse(content);
-      } catch {
+      } catch (parseError) {
+        Logger.debug(
+          `Failed to parse existing settings.json, starting fresh: ${parseError instanceof Error ? parseError.message : String(parseError)}`
+        );
         settings = {};
       }
     }

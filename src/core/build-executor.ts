@@ -2,17 +2,12 @@ import { execa } from 'execa';
 import path from 'path';
 import fs from 'fs-extra';
 import { Writable } from 'stream';
-import {
-  BuildOptions,
-  BuildResult,
-  BuildTarget,
-  BuildConfiguration,
-  BuildPlatform,
-} from '../types/build';
+import { BuildOptions, BuildResult } from '../types/build';
 import { EngineResolver } from './engine-resolver';
 import { Logger } from '../utils/logger';
 import { Platform } from '../utils/platform';
 import { ProjectPathResolver } from './project-path-resolver';
+import { TargetResolver } from './target-resolver';
 
 export class BuildExecutor {
   private logger: Logger;
@@ -93,9 +88,9 @@ export class BuildExecutor {
   }
 
   private async validateOptions(options: BuildOptions): Promise<Required<BuildOptions>> {
-    const target: BuildTarget = options.target || 'Editor';
-    const config: BuildConfiguration = options.config || 'Development';
-    const platform: BuildPlatform = (options.platform || 'Win64') as BuildPlatform;
+    const target: string = options.target || 'Editor';
+    const config: string = options.config || 'Development';
+    const platform: string = options.platform || 'Win64';
     const clean = options.clean || false;
     const verbose = options.verbose || false;
     const additionalArgs = options.additionalArgs || [];
@@ -113,34 +108,14 @@ export class BuildExecutor {
     const availableTargets = await BuildExecutor.getAvailableTargets(projectPath);
 
     if (availableTargets.length > 0) {
-      const genericTypes = ['Editor', 'Game', 'Client', 'Server'];
-      const isGenericType = genericTypes.includes(target);
-
-      if (isGenericType) {
-        const matchingTarget = availableTargets.find((t) => t.type === target);
-        if (matchingTarget) {
-          resolvedTarget = matchingTarget.name;
-          this.logger.debug(`Resolved generic target "${target}" to "${resolvedTarget}"`);
-        } else {
-          const fallbackTarget = availableTargets.find((t) =>
-            t.name.toLowerCase().includes(target.toLowerCase())
-          );
-          if (fallbackTarget) {
-            resolvedTarget = fallbackTarget.name;
-            this.logger.debug(`Fallback: resolved target "${target}" to "${resolvedTarget}"`);
-          } else {
-            throw new Error(
-              `No ${target} target found in project. Available targets: ${availableTargets.map((t) => t.name).join(', ')}`
-            );
-          }
-        }
+      const result = await TargetResolver.resolveTarget(projectPath, target);
+      if (result) {
+        resolvedTarget = result;
+        this.logger.debug(`Resolved target "${target}" to "${resolvedTarget}"`);
       } else {
-        const targetExists = availableTargets.some((t) => t.name === target);
-        if (!targetExists) {
-          throw new Error(
-            `Target "${target}" not found in project. Available targets: ${availableTargets.map((t) => t.name).join(', ')}`
-          );
-        }
+        throw new Error(
+          `No ${target} target found in project. Available targets: ${availableTargets.map((t) => t.name).join(', ')}`
+        );
       }
     } else {
       this.logger.debug('No target files found, using generic target name');

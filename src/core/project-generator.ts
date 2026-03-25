@@ -284,8 +284,10 @@ export class ProjectGenerator {
           await fs.writeJson(tasksPath, existingContent, { spaces: 2 });
           return tasksPath;
         }
-      } catch {
-        // Ignore invalid existing tasks.json and overwrite it below.
+      } catch (parseError) {
+        Logger.debug(
+          `Failed to parse existing tasks.json, regenerating: ${parseError instanceof Error ? parseError.message : String(parseError)}`
+        );
       }
     }
 
