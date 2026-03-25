@@ -17,11 +17,13 @@ export interface CompileCommandsGenerateOptions {
   includePluginSources?: boolean;
   includeEngineSources?: boolean;
   useEngineIncludes?: boolean;
+  silent?: boolean;
 }
 
 export class CompileCommandsGenerator {
   static async generate(options: CompileCommandsGenerateOptions): Promise<string> {
     const projectPath = await ProjectPathResolver.resolveOrThrow(options.project || process.cwd());
+    const silent = options.silent || false;
 
     if (!(await fs.pathExists(projectPath))) {
       throw new Error(`Project file not found: ${projectPath}`);
@@ -71,15 +73,19 @@ export class CompileCommandsGenerator {
       args.push('-UseEngineIncludes');
     }
 
-    Logger.info(
-      `Generating compile commands for: ${chalk.bold(targetNames.join(', '))} | ${chalk.bold(platform)} | ${chalk.bold(config)}`
-    );
-    Logger.info(`Project: ${projectPath}`);
-    Logger.info(`Engine: ${enginePath}`);
-    Logger.divider();
+    if (!silent) {
+      Logger.info(
+        `Generating compile commands for: ${chalk.bold(targetNames.join(', '))} | ${chalk.bold(platform)} | ${chalk.bold(config)}`
+      );
+      Logger.info(`Project: ${projectPath}`);
+      Logger.info(`Engine: ${enginePath}`);
+      Logger.divider();
+    }
 
     const command = `"${ubtPath}" ${args.join(' ')}`;
-    Logger.debug(`Executing: ${command}`);
+    if (!silent) {
+      Logger.debug(`Executing: ${command}`);
+    }
 
     const childProcess = execa(command, {
       stdio: 'pipe',
@@ -128,7 +134,7 @@ export class CompileCommandsGenerator {
       );
     }
 
-    await this.updateVSCodeSettings(projectDir);
+    await this.updateVSCodeSettings(projectDir, silent);
 
     return actualCompileCommandsPath;
   }
@@ -183,7 +189,7 @@ export class CompileCommandsGenerator {
     return resolvedTargets.join(' ');
   }
 
-  private static async updateVSCodeSettings(projectDir: string): Promise<void> {
+  private static async updateVSCodeSettings(projectDir: string, silent = false): Promise<void> {
     const vscodeDir = path.join(projectDir, '.vscode');
     const settingsPath = path.join(vscodeDir, 'settings.json');
 
@@ -209,6 +215,8 @@ export class CompileCommandsGenerator {
     settings = { ...settings, ...clangdConfig, ...cppConfig };
 
     await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
-    Logger.success(`Updated VSCode settings: ${settingsPath}`);
+    if (!silent) {
+      Logger.success(`Updated VSCode settings: ${settingsPath}`);
+    }
   }
 }

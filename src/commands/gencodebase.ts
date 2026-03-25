@@ -36,7 +36,12 @@ export function gencodebaseCommand(program: Command): void {
     .option('--json', 'Output result as JSON')
     .action(async (options: GencodebaseCommandOptions) => {
       try {
-        Logger.title('Generate Compile Commands Database');
+        // When JSON output is requested, suppress non-JSON logging
+        if (options.json) {
+          options.silent = true;
+        } else {
+          Logger.title('Generate Compile Commands Database');
+        }
 
         const compileCommandsPath = await CompileCommandsGenerator.generate(options);
 
