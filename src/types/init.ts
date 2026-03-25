@@ -1,7 +1,17 @@
 /** Supported project types for initialization. */
 export type ProjectType = 'cpp' | 'blueprint' | 'blank';
 
-/** Options for initializing a new project. */
+/** Options for initializing a new project.
+ *
+ * @example
+ * ```typescript
+ * const options: InitOptions = {
+ *   name: 'MyGame',
+ *   type: 'cpp',
+ *   template: 'ThirdPerson'
+ * };
+ * ```
+ */
 export interface InitOptions {
   /** Project name (alphanumeric, underscores, hyphens) */
   name: string;
@@ -17,7 +27,19 @@ export interface InitOptions {
   force?: boolean;
 }
 
-/** Result of a project initialization operation. */
+/** Result of a project initialization operation.
+ *
+ * @example
+ * ```typescript
+ * const result: InitResult = {
+ *   success: true,
+ *   projectPath: '/projects/MyGame',
+ *   uprojectPath: '/projects/MyGame/MyGame.uproject',
+ *   engineAssociation: '5.3',
+ *   createdFiles: ['MyGame.uproject', 'Source/MyGame/MyGame.Build.cs']
+ * };
+ * ```
+ */
 export interface InitResult {
   /** Whether initialization succeeded */
   success: boolean;

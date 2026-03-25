@@ -1,7 +1,17 @@
 /** Supported IDE types for project generation. */
 export type IDE = 'sln' | 'vscode' | 'clion' | 'xcode' | 'vs2022';
 
-/** Options for generating IDE project files. */
+/** Options for generating IDE project files.
+ *
+ * @example
+ * ```typescript
+ * const options: GenerateOptions = {
+ *   ide: 'vscode',
+ *   projectPath: './MyProject',
+ *   force: true
+ * };
+ * ```
+ */
 export interface GenerateOptions {
   /** Target IDE type */
   ide?: IDE;
@@ -13,7 +23,16 @@ export interface GenerateOptions {
   force?: boolean;
 }
 
-/** Result of a project generation operation. */
+/** Result of a project generation operation.
+ *
+ * @example
+ * ```typescript
+ * const result: GenerateResult = {
+ *   success: true,
+ *   generatedFiles: ['MyProject.sln', 'MyProject.vcxproj']
+ * };
+ * ```
+ */
 export interface GenerateResult {
   /** Whether generation succeeded */
   success: boolean;
