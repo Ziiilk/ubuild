@@ -32,12 +32,17 @@ runCommand(program);
 updateCommand(program);
 gencodebaseCommand(program);
 
-// Conditionally register evolve command (development only or when evolve is requested)
-const isEvolveRequested = process.argv.slice(2).includes('evolve');
-const isDevMode =
-  process.env.NODE_ENV === 'development' || process.env.UBUILD_EVOLVE_ENABLED === 'true';
+program.configureHelp({
+  sortSubcommands: true,
+  subcommandTerm: (cmd) => cmd.name(),
+});
 
-(async (): Promise<void> => {
+async function main(): Promise<void> {
+  // Conditionally register evolve command (development only or when evolve is requested)
+  const isEvolveRequested = process.argv.slice(2).includes('evolve');
+  const isDevMode =
+    process.env.NODE_ENV === 'development' || process.env.UBUILD_EVOLVE_ENABLED === 'true';
+
   if (isEvolveRequested || isDevMode) {
     try {
       const { evolveCommand } = await import('../commands/evolve');
@@ -49,16 +54,13 @@ const isDevMode =
       );
     }
   }
-})();
 
-program.configureHelp({
-  sortSubcommands: true,
-  subcommandTerm: (cmd) => cmd.name(),
-});
-
-try {
-  program.parse(process.argv);
-} catch (error) {
-  console.error(chalk.red('Error:'), error instanceof Error ? error.message : String(error));
-  process.exit(1);
+  try {
+    await program.parseAsync(process.argv);
+  } catch (error) {
+    console.error(chalk.red('Error:'), error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }
+
+main();
