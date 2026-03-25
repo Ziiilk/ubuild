@@ -1,41 +1,69 @@
 import { execa } from 'execa';
 import { Logger } from '../utils/logger';
 
+/** Options for configuring the self-evolution driver. */
 export interface SelfEvolverOptions {
+  /** Interval in milliseconds between evolution iterations (default: 5000) */
   interval?: number;
+  /** API key for external AI services */
   apiKey?: string;
+  /** AI model identifier to use for evolution */
   model?: string;
+  /** Custom logger function for evolution output */
   logger?: (msg: string) => void;
 }
 
+/** Diagnosis of the current codebase health state. */
 export interface Diagnosis {
+  /** List of test file names that failed */
   testFailures: string[];
+  /** List of lint error messages found */
   lintErrors: string[];
+  /** ISO timestamp when the diagnosis was performed */
   timestamp: string;
 }
 
+/** Result of verifying the codebase health and functionality. */
 export interface VerificationResult {
+  /** Whether all verification checks passed */
   success: boolean;
+  /** Whether the build completed successfully */
   buildSucceeds: boolean;
+  /** Whether all tests passed */
   testsPass: boolean;
+  /** Whether linting found no errors */
   lintClean: boolean;
+  /** Whether the evolve command is functional */
   evolveFunctional: boolean;
+  /** Whether core CLI commands work correctly */
   coreCommandsWork: boolean;
+  /** List of error messages from failed checks */
   errors: string[];
 }
 
+/** Suggestion for code evolution with priority and effort estimation. */
 export interface EvolutionSuggestion {
+  /** Priority level: critical (must fix), high, medium, or low */
   priority: 'critical' | 'high' | 'medium' | 'low';
+  /** Category of improvement: fix, test, docs, refactor, or feature */
   category: 'fix' | 'test' | 'docs' | 'refactor' | 'feature';
+  /** Human-readable description of the suggested change */
   description: string;
+  /** Explanation of why this change is recommended */
   reason: string;
+  /** Estimated effort required: small, medium, or large */
   estimatedEffort: 'small' | 'medium' | 'large';
 }
 
+/** Result of the self-evolution process. */
 export interface EvolutionResult {
+  /** Whether the evolution process succeeded */
   success: boolean;
+  /** Total number of iterations performed */
   iterations: number;
+  /** List of improvement commit messages made */
   improvements: string[];
+  /** List of errors encountered during evolution */
   errors: string[];
 }
 
