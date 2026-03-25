@@ -31,6 +31,7 @@ import { initCommand } from '../commands/init';
 import { runCommand } from '../commands/run';
 import { updateCommand } from '../commands/update';
 import { gencodebaseCommand } from '../commands/gencodebase';
+import { cleanCommand } from '../commands/clean';
 import { version, description } from '../../package.json';
 
 const program = new Command();
@@ -51,6 +52,7 @@ initCommand(program);
 runCommand(program);
 updateCommand(program);
 gencodebaseCommand(program);
+cleanCommand(program);
 
 program.configureHelp({
   sortSubcommands: true,
