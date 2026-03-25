@@ -31,6 +31,24 @@ runCommand(program);
 updateCommand(program);
 gencodebaseCommand(program);
 
+// Conditionally register evolve command (development only or when evolve is requested)
+const isEvolveRequested = process.argv.slice(2).includes('evolve');
+const isDevMode =
+  process.env.NODE_ENV === 'development' || process.env.UBUILD_EVOLVE_ENABLED === 'true';
+
+// console.log('[DEBUG] isEvolveRequested:', isEvolveRequested, 'isDevMode:', isDevMode, 'argv:', process.argv);
+
+if (isEvolveRequested || isDevMode) {
+  // Require synchronously to register command before parsing
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { evolveCommand } = require('../commands/evolve');
+    evolveCommand(program);
+  } catch {
+    // Ignore if module not available
+  }
+}
+
 program.configureHelp({
   sortSubcommands: true,
   subcommandTerm: (cmd) => cmd.name(),
