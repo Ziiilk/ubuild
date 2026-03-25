@@ -27,6 +27,10 @@
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zitool/ubuild.git"
+  },
   "dependencies": {
     "chalk": "^4.1.2",
     "commander": "^11.0.0",
