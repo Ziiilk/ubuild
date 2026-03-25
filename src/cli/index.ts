@@ -1,5 +1,25 @@
 #!/usr/bin/env node
 
+/**
+ * ubuild CLI entry point
+ *
+ * Main command-line interface for the ubuild tool. Registers all commands
+ * and handles program initialization, argument parsing, and execution.
+ *
+ * @module cli/index
+ * @example
+ * ```bash
+ * # Show help
+ * ubuild --help
+ *
+ * # Detect project
+ * ubuild list
+ *
+ * # Build project
+ * ubuild build --target Editor --config Development
+ * ```
+ */
+
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { Logger } from '../utils/logger';
