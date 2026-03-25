@@ -4,6 +4,10 @@ import { ProjectBuilder } from '../core/project-builder';
 export { ProjectBuilder, executeBuild } from '../core/project-builder';
 export type { BuildCommandOptions } from '../core/project-builder';
 
+/**
+ * Registers the build command with the Commander program.
+ * @param program - The Commander program instance
+ */
 export function buildCommand(program: Command): void {
   program
     .command('build')

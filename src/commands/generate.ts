@@ -6,16 +6,29 @@ import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
 import { IDE } from '../types/generate';
 
+/** Options for the generate command. */
 export interface GenerateCommandOptions {
+  /** Target IDE type (sln, vscode, clion, xcode, vs2022) */
   ide?: string;
+  /** Path to project directory or .uproject file */
   projectPath?: string;
+  /** Path to Unreal Engine installation */
   enginePath?: string;
+  /** Force regeneration of project files */
   force?: boolean;
+  /** List available IDE types */
   listIdes?: boolean;
+  /** Writable stream for stdout output */
   stdout?: Writable;
+  /** Writable stream for stderr output */
   stderr?: Writable;
 }
 
+/**
+ * Executes the generate command to create IDE project files.
+ * @param options - Command execution options
+ * @returns Promise that resolves when execution completes
+ */
 export async function executeGenerate(options: GenerateCommandOptions): Promise<void> {
   const stdout = options.stdout || process.stdout;
   const stderr = options.stderr || process.stderr;
@@ -79,6 +92,10 @@ export async function executeGenerate(options: GenerateCommandOptions): Promise<
   }
 }
 
+/**
+ * Registers the generate command with the Commander program.
+ * @param program - The Commander program instance
+ */
 export function generateCommand(program: Command): void {
   program
     .command('generate')
@@ -100,6 +117,10 @@ export function generateCommand(program: Command): void {
     });
 }
 
+/**
+ * Lists all available IDE types with their descriptions.
+ * @param logger - Logger instance for output
+ */
 function listAvailableIDEs(logger: Logger): void {
   logger.subTitle('Available IDE Types');
 

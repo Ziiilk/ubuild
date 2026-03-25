@@ -7,10 +7,16 @@ import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
 import { writeLine } from '../utils/output';
 
+/** Command line options specific to the init command. */
 type InitCommandActionOptions = InitOptions & {
+  /** Show what would be created without actually creating */
   dryRun?: boolean;
 };
 
+/**
+ * Registers the init command with the Commander program.
+ * @param program - The Commander program instance
+ */
 export function initCommand(program: Command): void {
   program
     .command('init')
@@ -129,6 +135,11 @@ export function initCommand(program: Command): void {
     });
 }
 
+/**
+ * Displays a dry run preview of what would be created during project initialization.
+ * @param options - Initialization options
+ * @returns Promise that resolves when preview is complete
+ */
 async function dryRunInit(options: InitCommandActionOptions): Promise<void> {
   Logger.subTitle('Dry Run - Project Initialization');
 

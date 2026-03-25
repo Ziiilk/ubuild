@@ -4,6 +4,10 @@ import { ProjectRunner } from '../core/project-runner';
 export { ProjectRunner, runProject } from '../core/project-runner';
 export type { RunOptions } from '../core/project-runner';
 
+/**
+ * Registers the run command with the Commander program.
+ * @param program - The Commander program instance
+ */
 export function runCommand(program: Command): void {
   program
     .command('run')

@@ -4,13 +4,23 @@ import { Writable } from 'stream';
 import { ProjectDetector } from '../core/project-detector';
 import { Logger } from '../utils/logger';
 
+/** Options for the list command. */
 export interface ListCommandOptions {
+  /** Whether to search recursively for .uproject files */
   recursive?: boolean;
+  /** Whether to output result as JSON */
   json?: boolean;
+  /** Writable stream for stdout output */
   stdout?: Writable;
+  /** Writable stream for stderr output */
   stderr?: Writable;
 }
 
+/**
+ * Executes the list command to detect and display Unreal Engine project information.
+ * @param options - Command execution options
+ * @returns Promise that resolves when execution completes
+ */
 export async function executeList(options: ListCommandOptions): Promise<void> {
   const stdout = options.stdout || process.stdout;
   const stderr = options.stderr || process.stderr;
@@ -98,6 +108,10 @@ export async function executeList(options: ListCommandOptions): Promise<void> {
   }
 }
 
+/**
+ * Registers the list command with the Commander program.
+ * @param program - The Commander program instance
+ */
 export function listCommand(program: Command): void {
   program
     .command('list')
