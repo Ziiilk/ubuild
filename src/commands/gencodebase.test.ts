@@ -141,6 +141,227 @@ describe('gencodebaseCommand', () => {
       );
     });
   });
+
+  it('displays success message in non-JSON mode', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'NebulaGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      await fs.writeFile(path.join(engine.enginePath, 'compile_commands.json'), '[]', 'utf-8');
+
+      mockResolveEngine.mockResolvedValue({
+        engine: {
+          path: engine.enginePath,
+          displayName: engine.installation.displayName,
+        },
+        warnings: [],
+      });
+      mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+      mockGetAvailableTargets.mockResolvedValue([
+        { name: `${project.projectName}Editor`, type: 'Editor' },
+      ]);
+      mockExeca.mockReturnValue(createFakeExecaChild({ exitCode: 0 }));
+
+      await runRegisteredCommand(['gencodebase', '--project', project.projectDir]);
+
+      expect(Logger.title).toHaveBeenCalledWith('Generate Compile Commands Database');
+      expect(Logger.success).toHaveBeenCalledWith(
+        expect.stringContaining('Compile commands generated:')
+      );
+      expect(Logger.success).toHaveBeenCalledWith('VSCode settings updated: .vscode/settings.json');
+      expect(Logger.json).not.toHaveBeenCalled();
+    });
+  });
+
+  it('passes custom target, config, and platform options to UBT', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'NebulaGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      await fs.writeFile(path.join(engine.enginePath, 'compile_commands.json'), '[]', 'utf-8');
+
+      mockResolveEngine.mockResolvedValue({
+        engine: {
+          path: engine.enginePath,
+          displayName: engine.installation.displayName,
+        },
+        warnings: [],
+      });
+      mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+      mockGetAvailableTargets.mockResolvedValue([
+        { name: `${project.projectName}Game`, type: 'Game' },
+      ]);
+      mockExeca.mockReturnValue(createFakeExecaChild({ exitCode: 0 }));
+
+      await runRegisteredCommand([
+        'gencodebase',
+        '--project',
+        project.projectDir,
+        '--target',
+        'Game',
+        '--config',
+        'Shipping',
+        '--platform',
+        'Linux',
+      ]);
+
+      expect(mockExeca).toHaveBeenCalledWith(
+        expect.stringContaining('-Target="NebulaGameGame Linux Shipping"'),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('excludes plugin sources flag when --no-include-plugin-sources is set', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'NebulaGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      await fs.writeFile(path.join(engine.enginePath, 'compile_commands.json'), '[]', 'utf-8');
+
+      mockResolveEngine.mockResolvedValue({
+        engine: {
+          path: engine.enginePath,
+          displayName: engine.installation.displayName,
+        },
+        warnings: [],
+      });
+      mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+      mockGetAvailableTargets.mockResolvedValue([
+        { name: `${project.projectName}Editor`, type: 'Editor' },
+      ]);
+      mockExeca.mockReturnValue(createFakeExecaChild({ exitCode: 0 }));
+
+      await runRegisteredCommand([
+        'gencodebase',
+        '--project',
+        project.projectDir,
+        '--no-include-plugin-sources',
+      ]);
+
+      const command = mockExeca.mock.calls[0][0] as string;
+      expect(command).not.toContain('-IncludePluginSources');
+      expect(command).toContain('-IncludeEngineSources');
+      expect(command).toContain('-UseEngineIncludes');
+    });
+  });
+
+  it('excludes engine sources flag when --no-include-engine-sources is set', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'NebulaGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      await fs.writeFile(path.join(engine.enginePath, 'compile_commands.json'), '[]', 'utf-8');
+
+      mockResolveEngine.mockResolvedValue({
+        engine: {
+          path: engine.enginePath,
+          displayName: engine.installation.displayName,
+        },
+        warnings: [],
+      });
+      mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+      mockGetAvailableTargets.mockResolvedValue([
+        { name: `${project.projectName}Editor`, type: 'Editor' },
+      ]);
+      mockExeca.mockReturnValue(createFakeExecaChild({ exitCode: 0 }));
+
+      await runRegisteredCommand([
+        'gencodebase',
+        '--project',
+        project.projectDir,
+        '--no-include-engine-sources',
+      ]);
+
+      const command = mockExeca.mock.calls[0][0] as string;
+      expect(command).toContain('-IncludePluginSources');
+      expect(command).not.toContain('-IncludeEngineSources');
+      expect(command).toContain('-UseEngineIncludes');
+    });
+  });
+
+  it('excludes engine includes flag when --no-use-engine-includes is set', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'NebulaGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      await fs.writeFile(path.join(engine.enginePath, 'compile_commands.json'), '[]', 'utf-8');
+
+      mockResolveEngine.mockResolvedValue({
+        engine: {
+          path: engine.enginePath,
+          displayName: engine.installation.displayName,
+        },
+        warnings: [],
+      });
+      mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+      mockGetAvailableTargets.mockResolvedValue([
+        { name: `${project.projectName}Editor`, type: 'Editor' },
+      ]);
+      mockExeca.mockReturnValue(createFakeExecaChild({ exitCode: 0 }));
+
+      await runRegisteredCommand([
+        'gencodebase',
+        '--project',
+        project.projectDir,
+        '--no-use-engine-includes',
+      ]);
+
+      const command = mockExeca.mock.calls[0][0] as string;
+      expect(command).toContain('-IncludePluginSources');
+      expect(command).toContain('-IncludeEngineSources');
+      expect(command).not.toContain('-UseEngineIncludes');
+    });
+  });
+
+  it('handles errors thrown by CompileCommandsGenerator gracefully', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'NebulaGame' });
+      const engine = await createFakeEngine(rootDir);
+      const exitSpy = jest
+        .spyOn(process, 'exit')
+        .mockImplementation((code?: string | number | null): never => {
+          throw new Error(`process.exit:${code}`);
+        });
+
+      mockGetAvailableTargets.mockResolvedValue([
+        { name: `${project.projectName}Editor`, type: 'Editor' },
+      ]);
+      mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+      mockExeca.mockRejectedValue(new Error('UBT execution failed: out of memory'));
+
+      await expect(
+        runRegisteredCommand(['gencodebase', '--project', project.projectDir])
+      ).rejects.toThrow('process.exit:1');
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(Logger.error).toHaveBeenCalledWith(
+        'Failed to generate compile commands: UBT execution failed: out of memory'
+      );
+    });
+  });
+
+  it('handles errors from EngineResolver gracefully', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'NebulaGame' });
+      const exitSpy = jest
+        .spyOn(process, 'exit')
+        .mockImplementation((code?: string | number | null): never => {
+          throw new Error(`process.exit:${code}`);
+        });
+
+      mockResolveEnginePath.mockRejectedValue(new Error('Engine not found at specified path'));
+
+      await expect(
+        runRegisteredCommand(['gencodebase', '--project', project.projectDir])
+      ).rejects.toThrow('process.exit:1');
+
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(Logger.error).toHaveBeenCalledWith(
+        'Failed to generate compile commands: Engine not found at specified path'
+      );
+    });
+  });
 });
 
 async function runRegisteredCommand(args: string[]): Promise<void> {
