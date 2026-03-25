@@ -95,6 +95,13 @@ export class ProjectGenerator {
     }
   }
 
+  /**
+   * Validates and normalizes generation options.
+   * @param options - Raw generation options from user input
+   * @returns Promise resolving to validated and normalized options with defaults applied
+   * @throws Error if project path cannot be resolved
+   * @throws Error if engine path cannot be resolved
+   */
   private static async validateOptions(
     options: GenerateOptions
   ): Promise<Required<GenerateOptions>> {
@@ -118,6 +125,16 @@ export class ProjectGenerator {
     };
   }
 
+  /**
+   * Generates project files using UnrealBuildTool.
+   * @param enginePath - Path to the Unreal Engine installation
+   * @param projectPath - Path to the .uproject file
+   * @param force - Whether to force regeneration
+   * @param ide - IDE type to generate files for
+   * @returns Promise resolving when generation is complete
+   * @throws Error if UnrealBuildTool is not found
+   * @throws Error if generation fails
+   */
   private static async generateWithUBT(
     enginePath: string,
     projectPath: string,
@@ -184,6 +201,11 @@ export class ProjectGenerator {
     Logger.success('Project files generated successfully');
   }
 
+  /**
+   * Finds generated Visual Studio solution files.
+   * @param projectPath - Path to the .uproject file
+   * @returns Promise resolving to array of generated solution file paths
+   */
   private static async findGeneratedSolutionFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
     const solutionFiles: string[] = [];
@@ -209,6 +231,11 @@ export class ProjectGenerator {
     return solutionFiles;
   }
 
+  /**
+   * Finds generated CLion/CMake files.
+   * @param projectPath - Path to the .uproject file
+   * @returns Promise resolving to array of generated CLion file paths
+   */
   private static async findGeneratedCLionFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
     const cmakePath = path.join(projectDir, 'CMakeLists.txt');
@@ -218,6 +245,11 @@ export class ProjectGenerator {
     return [];
   }
 
+  /**
+   * Finds generated Xcode project files.
+   * @param projectPath - Path to the .uproject file
+   * @returns Promise resolving to array of generated Xcode file paths
+   */
   private static async findGeneratedXcodeFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
     const entries = await fs.readdir(projectDir, { withFileTypes: true });
@@ -227,6 +259,11 @@ export class ProjectGenerator {
     return files;
   }
 
+  /**
+   * Finds generated VSCode workspace files.
+   * @param projectPath - Path to the .uproject file
+   * @returns Promise resolving to array of generated workspace file paths
+   */
   private static async findVSCodeWorkspaceFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
     const files = await fs
@@ -237,6 +274,11 @@ export class ProjectGenerator {
     return files;
   }
 
+  /**
+   * Finds VSCode configuration files in the .vscode directory.
+   * @param projectPath - Path to the .uproject file
+   * @returns Promise resolving to array of VSCode config file paths
+   */
   private static async findVSCodeConfigFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
     const vscodeDir = path.join(projectDir, '.vscode');
@@ -252,6 +294,11 @@ export class ProjectGenerator {
     return vscodeFiles;
   }
 
+  /**
+   * Generates or updates VSCode tasks.json with ubuild tasks.
+   * @param projectPath - Path to the .uproject file
+   * @returns Promise resolving to the tasks.json path, or null if not generated
+   */
   private static async generateVSCodeTasks(projectPath: string): Promise<string | null> {
     const projectDir = path.dirname(projectPath);
     const vscodeDir = path.join(projectDir, '.vscode');

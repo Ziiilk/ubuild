@@ -100,6 +100,14 @@ export class BuildExecutor {
     }
   }
 
+  /**
+   * Validates and normalizes build options.
+   * @param options - Raw build options from user input
+   * @returns Promise resolving to validated and normalized options with defaults applied
+   * @throws Error if project path cannot be resolved
+   * @throws Error if engine path cannot be resolved
+   * @throws Error if target cannot be resolved
+   */
   private async validateOptions(options: BuildOptions): Promise<Required<BuildOptions>> {
     const target: string = options.target || 'Editor';
     const config: string = options.config || 'Development';
@@ -150,6 +158,12 @@ export class BuildExecutor {
     };
   }
 
+  /**
+   * Executes the build using Build.bat script.
+   * @param buildBatPath - Path to the Build.bat script
+   * @param options - Validated build options
+   * @returns Promise resolving to execution result with stdout, stderr, and exit code
+   */
   private async executeBuildBat(
     buildBatPath: string,
     options: Required<BuildOptions>
@@ -208,6 +222,13 @@ export class BuildExecutor {
     };
   }
 
+  /**
+   * Executes the build using UnrealBuildTool directly.
+   * @param enginePath - Path to the Unreal Engine installation
+   * @param options - Validated build options
+   * @returns Promise resolving to execution result with stdout, stderr, and exit code
+   * @throws Error if UnrealBuildTool executable is not found
+   */
   private async executeUnrealBuildTool(
     enginePath: string,
     options: Required<BuildOptions>

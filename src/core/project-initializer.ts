@@ -95,6 +95,13 @@ export class ProjectInitializer {
     }
   }
 
+  /**
+   * Validates and normalizes initialization options.
+   * @param options - Raw initialization options from user input
+   * @returns Promise resolving to validated and normalized options with defaults applied
+   * @throws Error if project name is missing or invalid
+   * @throws Error if no engine installations are found
+   */
   private static async validateOptions(options: InitOptions): Promise<Required<InitOptions>> {
     const name = options.name;
     if (!name) {
@@ -147,6 +154,11 @@ export class ProjectInitializer {
     };
   }
 
+  /**
+   * Prompts the user to select an engine from available installations.
+   * @param engines - Array of available engine installations
+   * @returns Promise resolving to the selected engine path
+   */
   private static async promptForEngineSelection(engines: EngineInstallation[]): Promise<string> {
     Logger.info('Multiple Unreal Engine installations found:');
 
@@ -176,6 +188,12 @@ export class ProjectInitializer {
     return selectedEngine;
   }
 
+  /**
+   * Creates the directory structure for a C++ project.
+   * @param name - Project name
+   * @param directory - Target directory for the project
+   * @param _enginePath - Engine path (unused but kept for API consistency)
+   */
   private static async createCppProject(
     name: string,
     directory: string,
@@ -191,6 +209,12 @@ export class ProjectInitializer {
     await fs.ensureDir(path.join(moduleDir, 'Private'));
   }
 
+  /**
+   * Creates the directory structure for a Blueprint project.
+   * @param _name - Project name (unused but kept for API consistency)
+   * @param directory - Target directory for the project
+   * @param _enginePath - Engine path (unused but kept for API consistency)
+   */
   private static async createBlueprintProject(
     _name: string,
     directory: string,
@@ -200,6 +224,12 @@ export class ProjectInitializer {
     await fs.ensureDir(contentDir);
   }
 
+  /**
+   * Creates the directory structure for a blank project.
+   * @param _name - Project name (unused but kept for API consistency)
+   @param directory - Target directory for the project
+   * @param _enginePath - Engine path (unused but kept for API consistency)
+   */
   private static async createBlankProject(
     _name: string,
     directory: string,
@@ -209,6 +239,14 @@ export class ProjectInitializer {
     await fs.ensureDir(contentDir);
   }
 
+  /**
+   * Creates the .uproject JSON file for the project.
+   * @param name - Project name
+   * @param directory - Target directory for the project
+   * @param enginePath - Path to the Unreal Engine installation
+   * @param type - Project type (cpp, blueprint, or blank)
+   * @returns Promise resolving to the path of the created .uproject file
+   */
   private static async createUProjectFile(
     name: string,
     directory: string,
@@ -242,6 +280,11 @@ export class ProjectInitializer {
     return uprojectPath;
   }
 
+  /**
+   * Retrieves version information from the engine's Build.version file.
+   * @param enginePath - Path to the Unreal Engine installation
+   * @returns Promise resolving to engine version info, or undefined if not found
+   */
   private static async getEngineVersionInfo(
     enginePath: string
   ): Promise<EngineVersionInfo | undefined> {
@@ -261,6 +304,11 @@ export class ProjectInitializer {
     }
   }
 
+  /**
+   * Determines the engine association ID for the .uproject file.
+   * @param enginePath - Path to the Unreal Engine installation
+   * @returns Promise resolving to the engine association identifier
+   */
   private static async getEngineAssociationId(enginePath: string): Promise<string> {
     const engines = await EngineResolver.findEngineInstallations();
     const matchingEngine = engines.find((engine) => engine.path === enginePath);
@@ -290,6 +338,13 @@ export class ProjectInitializer {
     return '5.1';
   }
 
+  /**
+   * Creates all source files for a C++ project including targets, modules, and game code.
+   * @param name - Project name
+   * @param directory - Target directory for the project
+   * @param enginePath - Path to the Unreal Engine installation
+   * @returns Promise resolving to array of created file paths
+   */
   private static async createSourceFiles(
     name: string,
     directory: string,
@@ -330,6 +385,14 @@ export class ProjectInitializer {
     return createdFiles;
   }
 
+  /**
+   * Creates a Target.cs file for the project.
+   * @param name - Project name
+   * @param sourceDir - Source directory path
+   * @param type - Target type (Game or Editor)
+   * @param versionInfo - Optional engine version info for version-specific settings
+   * @returns Promise resolving to the path of the created target file
+   */
   private static async createTargetFile(
     name: string,
     sourceDir: string,
@@ -372,6 +435,12 @@ ${bodyLines.join('\n')}
     return filePath;
   }
 
+  /**
+   * Creates the Build.cs file for the project's module.
+   * @param name - Project name
+   * @param sourceDir - Source directory path
+   * @returns Promise resolving to the path of the created Build.cs file
+   */
   private static async createBuildCsFile(name: string, sourceDir: string): Promise<string> {
     const filePath = path.join(sourceDir, name, `${name}.Build.cs`);
 
@@ -399,6 +468,12 @@ public class ${name} : ModuleRules
     return filePath;
   }
 
+  /**
+   * Creates the module header file.
+   * @param name - Project name
+   * @param publicDir - Public directory path
+   * @returns Promise resolving to the path of the created header file
+   */
   private static async createModuleHeader(name: string, publicDir: string): Promise<string> {
     const filePath = path.join(publicDir, `${name}.h`);
 
@@ -418,6 +493,12 @@ public:
     return filePath;
   }
 
+  /**
+   * Creates the module source file.
+   * @param name - Project name
+   * @param privateDir - Private directory path
+   * @returns Promise resolving to the path of the created source file
+   */
   private static async createModuleSource(name: string, privateDir: string): Promise<string> {
     const filePath = path.join(privateDir, `${name}.cpp`);
 
@@ -438,6 +519,12 @@ void F${name}Module::ShutdownModule()
     return filePath;
   }
 
+  /**
+   * Creates the game mode header file.
+   * @param name - Project name
+   * @param publicDir - Public directory path
+   * @returns Promise resolving to the path of the created game mode header file
+   */
   private static async createGameModeHeader(name: string, publicDir: string): Promise<string> {
     const filePath = path.join(publicDir, `${name}GameModeBase.h`);
 
@@ -460,6 +547,12 @@ public:
     return filePath;
   }
 
+  /**
+   * Creates the game mode source file.
+   * @param name - Project name
+   * @param privateDir - Private directory path
+   * @returns Promise resolving to the path of the created game mode source file
+   */
   private static async createGameModeSource(name: string, privateDir: string): Promise<string> {
     const filePath = path.join(privateDir, `${name}GameModeBase.cpp`);
 
@@ -478,6 +571,11 @@ A${name}GameModeBase::A${name}GameModeBase()
     return filePath;
   }
 
+  /**
+   * Creates default configuration files for the project.
+   * @param directory - Project directory path
+   * @returns Promise resolving when config files are created
+   */
   private static async createConfigFiles(directory: string): Promise<void> {
     const configDir = path.join(directory, 'Config');
 

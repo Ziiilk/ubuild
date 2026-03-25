@@ -111,6 +111,11 @@ export class EngineResolver {
     }
   }
 
+  /**
+   * Extracts the engine association from a project's .uproject file.
+   * @param projectPath - Path to the project directory or .uproject file
+   * @returns Promise resolving to the engine association and any warnings
+   */
   private static async getEngineAssociationFromProject(projectPath: string): Promise<{
     association?: EngineAssociation;
     warnings: string[];
@@ -186,6 +191,10 @@ export class EngineResolver {
     return uniqueInstallations;
   }
 
+  /**
+   * Searches Windows registry for Unreal Engine installations.
+   * @returns Promise resolving to array of engine installations found in registry
+   */
   private static async getEnginesFromRegistry(): Promise<EngineInstallation[]> {
     const installations: EngineInstallation[] = [];
 
@@ -224,6 +233,11 @@ export class EngineResolver {
     return installations;
   }
 
+  /**
+   * Queries a specific registry key for Unreal Engine entries.
+   * @param registryKey - The registry key path to query
+   * @returns Promise resolving to array of engine installations found
+   */
   private static async queryRegistryKey(registryKey: string): Promise<EngineInstallation[]> {
     const installations: EngineInstallation[] = [];
 
@@ -292,6 +306,10 @@ export class EngineResolver {
     return installations;
   }
 
+  /**
+   * Searches Epic Games Launcher manifest files for Unreal Engine installations.
+   * @returns Promise resolving to array of engine installations found in launcher manifests
+   */
   private static async getEnginesFromLauncher(): Promise<EngineInstallation[]> {
     const installations: EngineInstallation[] = [];
 
@@ -426,6 +444,10 @@ export class EngineResolver {
     return installations;
   }
 
+  /**
+   * Checks environment variables for Unreal Engine path.
+   * @returns Promise resolving to engine installation from environment, or undefined if not found
+   */
   private static async getEngineFromEnvironment(): Promise<EngineInstallation | undefined> {
     const envVars = ['UE_ENGINE_PATH', 'UE_ROOT', 'UNREAL_ENGINE_PATH'];
 
@@ -445,6 +467,11 @@ export class EngineResolver {
     return undefined;
   }
 
+  /**
+   * Loads version information for an engine installation from version files.
+   * @param installation - The engine installation to load version info for
+   * @returns Promise resolving when version info is loaded (mutates installation object)
+   */
   private static async loadEngineVersionInfo(installation: EngineInstallation): Promise<void> {
     try {
       const versionFilePaths = [
@@ -495,6 +522,11 @@ export class EngineResolver {
     }
   }
 
+  /**
+   * Removes duplicate engine installations, preferring launcher sources.
+   * @param installations - Array of engine installations that may contain duplicates
+   * @returns Array of unique engine installations sorted by version
+   */
   private static removeDuplicateEngines(installations: EngineInstallation[]): EngineInstallation[] {
     const pathMap = new Map<string, EngineInstallation>();
 
@@ -523,6 +555,12 @@ export class EngineResolver {
     return unique;
   }
 
+  /**
+   * Compares two engine version info objects.
+   * @param a - First engine version info
+   * @param b - Second engine version info
+   * @returns Negative if a < b, positive if a > b, 0 if equal
+   */
   private static compareVersions(a?: EngineVersionInfo, b?: EngineVersionInfo): number {
     if (!a && !b) return 0;
     if (!a) return -1;
@@ -540,6 +578,12 @@ export class EngineResolver {
     return a.Changelist - b.Changelist;
   }
 
+  /**
+   * Compares two version strings in semver format.
+   * @param a - First version string
+   * @param b - Second version string
+   * @returns Negative if a < b, positive if a > b, 0 if equal
+   */
   private static compareVersionString(a: string, b: string): number {
     if (a === b || a.startsWith(b + '.') || a.startsWith(b + '_')) {
       return 0;
