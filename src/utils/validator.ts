@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs-extra';
+import { Logger } from './logger';
 
 export class Validator {
   static isValidProjectName(name: string): boolean {
@@ -16,7 +17,7 @@ export class Validator {
 
       const requiredDirs = [
         path.join(normalizedPath, 'Engine'),
-        path.join(normalizedPath, 'Engine', 'Binaries')
+        path.join(normalizedPath, 'Engine', 'Binaries'),
       ];
 
       for (const dir of requiredDirs) {
@@ -26,7 +27,10 @@ export class Validator {
       }
 
       return true;
-    } catch {
+    } catch (error) {
+      Logger.debug(
+        `isValidEnginePath failed: ${error instanceof Error ? error.message : String(error)}`
+      );
       return false;
     }
   }
@@ -69,13 +73,21 @@ export class Validator {
       const content = await fs.readFile(uprojectPath, 'utf-8');
       const uproject = JSON.parse(content);
 
-      return uproject.FileVersion === 3 && uproject.EngineAssociation && Array.isArray(uproject.Modules);
-    } catch {
+      return (
+        uproject.FileVersion === 3 && uproject.EngineAssociation && Array.isArray(uproject.Modules)
+      );
+    } catch (error) {
+      Logger.debug(
+        `isValidUProjectFile failed for ${uprojectPath}: ${error instanceof Error ? error.message : String(error)}`
+      );
       return false;
     }
   }
 
-  static async isSafeForInit(directory: string, force = false): Promise<{ safe: boolean; message: string }> {
+  static async isSafeForInit(
+    directory: string,
+    force = false
+  ): Promise<{ safe: boolean; message: string }> {
     try {
       if (!(await fs.pathExists(directory))) {
         return { safe: true, message: 'Directory does not exist, will be created' };
@@ -87,35 +99,35 @@ export class Validator {
       }
 
       const files = await fs.readdir(directory);
-      const filteredFiles = files.filter(f => !f.startsWith('.') && f !== '.git');
+      const filteredFiles = files.filter((f) => !f.startsWith('.') && f !== '.git');
 
       if (filteredFiles.length === 0) {
         return { safe: true, message: 'Directory is empty or contains only hidden files' };
       }
 
-      const uprojectFiles = files.filter(f => f.endsWith('.uproject'));
+      const uprojectFiles = files.filter((f) => f.endsWith('.uproject'));
       if (uprojectFiles.length > 0) {
         return {
           safe: false,
-          message: `Directory already contains Unreal Engine project: ${uprojectFiles[0]}`
+          message: `Directory already contains Unreal Engine project: ${uprojectFiles[0]}`,
         };
       }
 
       if (force) {
         return {
           safe: true,
-          message: 'Directory is not empty, but force flag is set - proceeding anyway'
+          message: 'Directory is not empty, but force flag is set - proceeding anyway',
         };
       }
 
       return {
         safe: false,
-        message: 'Directory is not empty. Use --force to override.'
+        message: 'Directory is not empty. Use --force to override.',
       };
     } catch (error) {
       return {
         safe: false,
-        message: `Failed to check directory: ${error instanceof Error ? error.message : String(error)}`
+        message: `Failed to check directory: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }

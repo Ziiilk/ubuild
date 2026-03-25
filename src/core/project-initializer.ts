@@ -244,7 +244,10 @@ export class ProjectInitializer {
       const content = await fs.readFile(versionFile, 'utf-8');
       const versionInfo: EngineVersionInfo = JSON.parse(content);
       return versionInfo;
-    } catch {
+    } catch (error) {
+      Logger.debug(
+        `getEngineVersionInfo failed: ${error instanceof Error ? error.message : String(error)}`
+      );
       return undefined;
     }
   }
@@ -269,8 +272,10 @@ export class ProjectInitializer {
         const versionInfo: EngineVersionInfo = JSON.parse(content);
         return `${versionInfo.MajorVersion}.${versionInfo.MinorVersion}`;
       }
-    } catch {
-      return '5.1';
+    } catch (error) {
+      Logger.debug(
+        `getEngineAssociationId failed, using default: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
 
     return '5.1';

@@ -121,7 +121,10 @@ export class ProjectRunner {
           `  Engine: ${chalk.yellow('Not detected - specify with --engine-path')}\n`
         );
       }
-    } catch {
+    } catch (error) {
+      this.logger.debug(
+        `Engine detection failed: ${error instanceof Error ? error.message : String(error)}`
+      );
       this.stdout.write(
         `  Engine: ${chalk.yellow('Detection failed - specify with --engine-path')}\n`
       );
@@ -138,7 +141,10 @@ export class ProjectRunner {
       } else {
         this.stdout.write(`  Executable: ${chalk.yellow('Could not determine path')}\n`);
       }
-    } catch {
+    } catch (error) {
+      this.logger.debug(
+        `Executable path detection failed: ${error instanceof Error ? error.message : String(error)}`
+      );
       this.stdout.write(`  Executable: ${chalk.yellow('Path detection failed')}\n`);
     }
 
@@ -281,7 +287,10 @@ export class ProjectRunner {
             projectPath,
             enginePath: options.enginePath,
           });
-        } catch {
+        } catch (error) {
+          this.logger.debug(
+            `Engine path resolution failed: ${error instanceof Error ? error.message : String(error)}`
+          );
           this.logger.warning('Could not resolve engine path for editor target');
           return null;
         }
@@ -338,7 +347,10 @@ export class ProjectRunner {
       }
 
       return path.join(projectDir, 'Binaries', platform, executableName);
-    } catch {
+    } catch (error) {
+      this.logger.debug(
+        `findExecutable failed: ${error instanceof Error ? error.message : String(error)}`
+      );
       return null;
     }
   }

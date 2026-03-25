@@ -215,7 +215,10 @@ export class ProjectBuilder {
           `  Engine: ${chalk.yellow('Not detected - specify with --engine-path')}\n`
         );
       }
-    } catch {
+    } catch (error) {
+      this.logger.debug(
+        `Engine resolution failed: ${error instanceof Error ? error.message : String(error)}`
+      );
       this.stdout.write(
         `  Engine: ${chalk.yellow('Detection failed - specify with --engine-path')}\n`
       );

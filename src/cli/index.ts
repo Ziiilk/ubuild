@@ -2,6 +2,7 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { Logger } from '../utils/logger';
 import { listCommand } from '../commands/list';
 import { engineCommand } from '../commands/engine';
 import { buildCommand } from '../commands/build';
@@ -44,8 +45,11 @@ if (isEvolveRequested || isDevMode) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { evolveCommand } = require('../commands/evolve');
     evolveCommand(program);
-  } catch {
-    // Ignore if module not available
+  } catch (error) {
+    // Evolve command is optional - ignore if module not available
+    Logger.debug(
+      `Evolve command not available: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 }
 

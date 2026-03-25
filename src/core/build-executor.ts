@@ -322,7 +322,10 @@ export class BuildExecutor {
 
         return { name, type };
       });
-    } catch {
+    } catch (error) {
+      Logger.debug(
+        `getAvailableTargets failed: ${error instanceof Error ? error.message : String(error)}`
+      );
       return [];
     }
   }

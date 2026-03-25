@@ -163,7 +163,10 @@ async function dryRunInit(options: InitCommandActionOptions): Promise<void> {
           writeLine(`    ${i + 1}. ${engine.displayName || engine.associationId} (${version})`);
         });
       }
-    } catch {
+    } catch (error) {
+      Logger.debug(
+        `Engine detection failed in dry-run: ${error instanceof Error ? error.message : String(error)}`
+      );
       writeLine(`  Engine: ${chalk.yellow('Detection failed - will prompt for path')}`);
     }
   }

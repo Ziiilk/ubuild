@@ -24,7 +24,10 @@ async function isGlobalInstall(): Promise<boolean> {
       '--depth=0',
     ]);
     return listOutput.includes('@zitool/ubuild');
-  } catch {
+  } catch (error) {
+    Logger.debug(
+      `isGlobalInstall check failed: ${error instanceof Error ? error.message : String(error)}`
+    );
     return false;
   }
 }
