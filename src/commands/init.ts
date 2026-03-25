@@ -1,17 +1,133 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import path from 'path';
+import { Writable } from 'stream';
 import { ProjectInitializer } from '../core/project-initializer';
-import { InitOptions } from '../types/init';
+import { InitOptions, InitResult } from '../types/init';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
-import { writeLine } from '../utils/output';
 
 /** Command line options specific to the init command. */
 type InitCommandActionOptions = InitOptions & {
   /** Show what would be created without actually creating */
   dryRun?: boolean;
 };
+
+/** Options for executing the init command. */
+export interface InitCommandOptions extends InitOptions {
+  /** Show what would be created without actually creating */
+  dryRun?: boolean;
+  /** Writable stream for stdout output */
+  stdout?: Writable;
+  /** Writable stream for stderr output */
+  stderr?: Writable;
+}
+
+/**
+ * Executes the init command to initialize a new Unreal Engine project.
+ * @param options - Command execution options
+ * @returns Promise that resolves to the init result
+ */
+export async function executeInit(options: InitCommandOptions): Promise<InitResult> {
+  const stdout = options.stdout || process.stdout;
+  const stderr = options.stderr || process.stderr;
+
+  const logger = new Logger({ stdout, stderr });
+  const projectType = options.type || 'cpp';
+
+  logger.title('Initialize Unreal Engine Project');
+
+  if (options.dryRun) {
+    await dryRunInit(options, logger);
+    return {
+      success: true,
+      projectPath: options.directory || path.join(process.cwd(), options.name),
+      uprojectPath: '',
+      engineAssociation: '',
+      createdFiles: [],
+    };
+  }
+
+  if (!Validator.isValidProjectName(options.name)) {
+    logger.error(`Invalid project name: ${options.name}`);
+    logger.info('Project name can only contain: a-z, A-Z, 0-9, _, -');
+    throw new Error('Invalid project name');
+  }
+
+  if (!Validator.isValidProjectType(projectType)) {
+    logger.error(`Invalid project type: ${projectType}`);
+    logger.info('Valid types: cpp, blueprint, blank');
+    throw new Error('Invalid project type');
+  }
+
+  logger.info(`Initializing ${chalk.bold(options.name)} as ${projectType.toUpperCase()} project`);
+  logger.divider();
+
+  const result = await ProjectInitializer.initialize({
+    name: options.name,
+    type: projectType,
+    template: options.template,
+    enginePath: options.enginePath,
+    directory: options.directory,
+    force: options.force,
+  });
+
+  logger.divider();
+
+  if (result.success) {
+    logger.success(`Project ${chalk.bold(options.name)} initialized successfully!`);
+
+    logger.subTitle('Project Structure');
+    logger.write(`  ${result.projectPath}/\n`);
+    logger.write(`  ├── ${options.name}.uproject\n`);
+    logger.write('  ├── Config/\n');
+    logger.write('  │   ├── DefaultEngine.ini\n');
+    logger.write('  │   ├── DefaultGame.ini\n');
+    logger.write('  │   └── DefaultEditor.ini\n');
+
+    if (projectType === 'cpp') {
+      logger.write('  ├── Source/\n');
+      logger.write(`  │   ├── ${options.name}.Target.cs\n`);
+      logger.write(`  │   ├── ${options.name}Editor.Target.cs\n`);
+      logger.write(`  │   └── ${options.name}/\n`);
+      logger.write(`  │       ├── ${options.name}.Build.cs\n`);
+      logger.write('  │       ├── Public/\n');
+      logger.write(`  │       │   ├── ${options.name}.h\n`);
+      logger.write(`  │       │   └── ${options.name}GameModeBase.h\n`);
+      logger.write('  │       └── Private/\n');
+      logger.write(`  │           ├── ${options.name}.cpp\n`);
+      logger.write(`  │           └── ${options.name}GameModeBase.cpp\n`);
+      logger.write('  └── Content/\n');
+    } else {
+      logger.write('  └── Content/\n');
+    }
+
+    logger.write('\n');
+    logger.subTitle('Next Steps');
+
+    if (projectType === 'cpp') {
+      logger.write(
+        `  1. Generate project files: ${chalk.bold(`ubuild generate --project "${result.projectPath}"`)}\n`
+      );
+      logger.write(
+        `  2. Build the project: ${chalk.bold(`ubuild build --project "${result.projectPath}"`)}\n`
+      );
+      logger.write(`  3. Open in editor: ${chalk.bold(`Double-click ${options.name}.uproject`)}\n`);
+    } else {
+      logger.write(`  1. Open in editor: ${chalk.bold(`Double-click ${options.name}.uproject`)}\n`);
+      logger.write('  2. Start creating Blueprints in the Content directory\n');
+    }
+
+    logger.write('\n');
+    logger.info(`Project location: ${result.projectPath}`);
+    logger.write(`Engine association: ${result.engineAssociation}\n`);
+  } else {
+    logger.error(`Failed to initialize project: ${result.error}`);
+    throw new Error(result.error || 'Project initialization failed');
+  }
+
+  return result;
+}
 
 /**
  * Registers the init command with the Commander program.
@@ -34,102 +150,8 @@ export function initCommand(program: Command): void {
     .option('--dry-run', 'Show what would be created without actually creating')
     .action(async (options: InitCommandActionOptions) => {
       try {
-        const projectType = options.type || 'cpp';
-
-        Logger.title('Initialize Unreal Engine Project');
-
-        if (options.dryRun) {
-          await dryRunInit(options);
-          return;
-        }
-
-        if (!Validator.isValidProjectName(options.name)) {
-          Logger.error(`Invalid project name: ${options.name}`);
-          Logger.info('Project name can only contain: a-z, A-Z, 0-9, _, -');
-          process.exit(1);
-        }
-
-        if (!Validator.isValidProjectType(projectType)) {
-          Logger.error(`Invalid project type: ${projectType}`);
-          Logger.info('Valid types: cpp, blueprint, blank');
-          process.exit(1);
-        }
-
-        Logger.info(
-          `Initializing ${chalk.bold(options.name)} as ${projectType.toUpperCase()} project`
-        );
-        Logger.divider();
-
-        const result = await ProjectInitializer.initialize({
-          name: options.name,
-          type: projectType,
-          template: options.template,
-          enginePath: options.enginePath,
-          directory: options.directory,
-          force: options.force,
-        });
-
-        Logger.divider();
-
-        if (result.success) {
-          Logger.success(`Project ${chalk.bold(options.name)} initialized successfully!`);
-
-          Logger.subTitle('Project Structure');
-          writeLine(`  ${result.projectPath}/`);
-          writeLine(`  ├── ${options.name}.uproject`);
-          writeLine('  ├── Config/');
-          writeLine('  │   ├── DefaultEngine.ini');
-          writeLine('  │   ├── DefaultGame.ini');
-          writeLine('  │   └── DefaultEditor.ini');
-
-          if (projectType === 'cpp') {
-            writeLine('  ├── Source/');
-            writeLine(`  │   ├── ${options.name}.Target.cs`);
-            writeLine(`  │   ├── ${options.name}Editor.Target.cs`);
-            writeLine(`  │   └── ${options.name}/`);
-            writeLine(`  │       ├── ${options.name}.Build.cs`);
-            writeLine('  │       ├── Public/');
-            writeLine(`  │       │   ├── ${options.name}.h`);
-            writeLine(`  │       │   └── ${options.name}GameModeBase.h`);
-            writeLine('  │       └── Private/');
-            writeLine(`  │           ├── ${options.name}.cpp`);
-            writeLine(`  │           └── ${options.name}GameModeBase.cpp`);
-            writeLine('  └── Content/');
-          } else {
-            writeLine('  └── Content/');
-          }
-
-          writeLine();
-          Logger.subTitle('Next Steps');
-
-          if (projectType === 'cpp') {
-            writeLine(
-              `  1. Generate project files: ${chalk.bold(`ubuild generate --project "${result.projectPath}"`)}`
-            );
-            writeLine(
-              `  2. Build the project: ${chalk.bold(`ubuild build --project "${result.projectPath}"`)}`
-            );
-            writeLine(
-              `  3. Open in editor: ${chalk.bold(`Double-click ${options.name}.uproject`)}`
-            );
-          } else {
-            writeLine(
-              `  1. Open in editor: ${chalk.bold(`Double-click ${options.name}.uproject`)}`
-            );
-            writeLine('  2. Start creating Blueprints in the Content directory');
-          }
-
-          writeLine();
-          Logger.info(`Project location: ${result.projectPath}`);
-          writeLine(`Engine association: ${result.engineAssociation}`);
-        } else {
-          Logger.error(`Failed to initialize project: ${result.error}`);
-          process.exit(1);
-        }
-      } catch (error) {
-        Logger.error(
-          `Initialization failed: ${error instanceof Error ? error.message : String(error)}`
-        );
+        await executeInit(options);
+      } catch {
         process.exit(1);
       }
     });
@@ -138,70 +160,73 @@ export function initCommand(program: Command): void {
 /**
  * Displays a dry run preview of what would be created during project initialization.
  * @param options - Initialization options
+ * @param logger - Logger instance for output
  * @returns Promise that resolves when preview is complete
  */
-async function dryRunInit(options: InitCommandActionOptions): Promise<void> {
-  Logger.subTitle('Dry Run - Project Initialization');
+async function dryRunInit(options: InitCommandOptions, logger: Logger): Promise<void> {
+  logger.subTitle('Dry Run - Project Initialization');
 
-  writeLine(`  Project Name: ${options.name}`);
-  writeLine(`  Project Type: ${options.type}`);
-  writeLine(`  Template: ${options.template}`);
-  writeLine(`  Directory: ${options.directory || `./${options.name}`}`);
-  writeLine(`  Force: ${options.force ? 'Yes' : 'No'}`);
+  logger.write(`  Project Name: ${options.name}\n`);
+  logger.write(`  Project Type: ${options.type}\n`);
+  logger.write(`  Template: ${options.template}\n`);
+  logger.write(`  Directory: ${options.directory || `./${options.name}`}\n`);
+  logger.write(`  Force: ${options.force ? 'Yes' : 'No'}\n`);
 
   if (options.enginePath) {
-    writeLine(`  Engine Path: ${options.enginePath}`);
+    logger.write(`  Engine Path: ${options.enginePath}\n`);
   } else {
     try {
       const { EngineResolver } = await import('../core/engine-resolver');
       const engines = await EngineResolver.findEngineInstallations();
 
       if (engines.length === 0) {
-        writeLine(`  Engine: ${chalk.yellow('No engines found - will prompt for path')}`);
+        logger.write(`  Engine: ${chalk.yellow('No engines found - will prompt for path')}\n`);
       } else if (engines.length === 1) {
-        writeLine(`  Engine: ${engines[0].displayName || engines[0].associationId}`);
+        logger.write(`  Engine: ${engines[0].displayName || engines[0].associationId}\n`);
       } else {
-        writeLine(
-          `  Engine: ${chalk.yellow('Multiple engines available - will prompt for selection')}`
+        logger.write(
+          `  Engine: ${chalk.yellow('Multiple engines available - will prompt for selection')}\n`
         );
         engines.forEach((engine, i) => {
           const version = engine.version
             ? `UE ${engine.version.MajorVersion}.${engine.version.MinorVersion}.${engine.version.PatchVersion}`
             : 'Unknown version';
-          writeLine(`    ${i + 1}. ${engine.displayName || engine.associationId} (${version})`);
+          logger.write(
+            `    ${i + 1}. ${engine.displayName || engine.associationId} (${version})\n`
+          );
         });
       }
     } catch (error) {
-      Logger.debug(
+      logger.debug(
         `Engine detection failed in dry-run: ${error instanceof Error ? error.message : String(error)}`
       );
-      writeLine(`  Engine: ${chalk.yellow('Detection failed - will prompt for path')}`);
+      logger.write(`  Engine: ${chalk.yellow('Detection failed - will prompt for path')}\n`);
     }
   }
 
-  writeLine();
-  Logger.subTitle('What would be created:');
+  logger.write('\n');
+  logger.subTitle('What would be created:');
 
   const directory = options.directory || path.join(process.cwd(), options.name);
-  writeLine(`  ${directory}/`);
-  writeLine(`  ├── ${options.name}.uproject`);
-  writeLine('  ├── Config/');
-  writeLine('  │   └── *.ini files');
+  logger.write(`  ${directory}/\n`);
+  logger.write(`  ├── ${options.name}.uproject\n`);
+  logger.write('  ├── Config/\n');
+  logger.write('  │   └── *.ini files\n');
 
   if (options.type === 'cpp') {
-    writeLine('  ├── Source/');
-    writeLine(`  │   ├── ${options.name}.Target.cs`);
-    writeLine(`  │   ├── ${options.name}Editor.Target.cs`);
-    writeLine(`  │   └── ${options.name}/`);
-    writeLine(`  │       ├── ${options.name}.Build.cs`);
-    writeLine('  │       ├── Public/');
-    writeLine('  │       └── Private/');
-    writeLine('  └── Content/');
+    logger.write('  ├── Source/\n');
+    logger.write(`  │   ├── ${options.name}.Target.cs\n`);
+    logger.write(`  │   ├── ${options.name}Editor.Target.cs\n`);
+    logger.write(`  │   └── ${options.name}/\n`);
+    logger.write(`  │       ├── ${options.name}.Build.cs\n`);
+    logger.write('  │       ├── Public/\n');
+    logger.write('  │       └── Private/\n');
+    logger.write('  └── Content/\n');
   } else {
-    writeLine('  └── Content/');
+    logger.write('  └── Content/\n');
   }
 
-  writeLine();
-  Logger.info('This is a dry run - no files will be created');
-  writeLine('To actually create the project, remove the --dry-run flag');
+  logger.write('\n');
+  logger.info('This is a dry run - no files will be created');
+  logger.write('To actually create the project, remove the --dry-run flag\n');
 }
