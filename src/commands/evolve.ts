@@ -34,6 +34,7 @@ export function evolveCommand(program: Command): void {
       'OpenAI/Anthropic API key (optional, uses OpenCode default model if not provided)'
     )
     .option('--model <model>', 'Model to use (default: OpenCode default)', '')
+    .option('--interval <ms>', 'Interval between evolution iterations in milliseconds', '5000')
     .action(async (options: EvolveCommandOptions) => {
       Logger.title('ubuild Self-Evolution');
       Logger.info('Using OpenCode (default model)');
@@ -41,7 +42,7 @@ export function evolveCommand(program: Command): void {
 
       try {
         const result = await runSelfEvolution({
-          interval: parseInt(options.interval || '5000', 10),
+          interval: parseInt(options.interval ?? '5000', 10),
           apiKey: options.apiKey,
           model: options.model || '',
           logger: (msg: string) => Logger.info(msg),
