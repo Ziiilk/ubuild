@@ -22,6 +22,7 @@ import { initCommand } from './commands/init';
 import { runCommand } from './commands/run';
 import { updateCommand } from './commands/update';
 import { gencodebaseCommand } from './commands/gencodebase';
+import { evolveCommand } from './commands/evolve';
 
 // Command registration functions
 export {
@@ -41,6 +42,8 @@ export {
   updateCommand,
   /** Register the 'gencodebase' command for compile commands generation */
   gencodebaseCommand,
+  /** Register the 'evolve' command for self-evolution (development only) */
+  evolveCommand,
 };
 
 // Development-only exports

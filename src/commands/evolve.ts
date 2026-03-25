@@ -2,12 +2,29 @@ import { Command } from 'commander';
 import { Logger } from '../utils/logger';
 import { runSelfEvolution } from '../core/self-driver';
 
+/** Options for the evolve command. */
 interface EvolveCommandOptions {
+  /** Interval between evolution iterations in milliseconds */
   interval?: string;
+  /** OpenAI/Anthropic API key for evolution */
   apiKey?: string;
+  /** Model to use for evolution */
   model?: string;
 }
 
+/**
+ * Register the 'evolve' command for self-evolution using OpenCode.
+ *
+ * This command runs a self-improvement loop that continuously analyzes
+ * the codebase, identifies improvements, and applies changes.
+ *
+ * @param program - The Commander program instance
+ *
+ * @example
+ * ```typescript
+ * evolveCommand(program);
+ * ```
+ */
 export function evolveCommand(program: Command): void {
   program
     .command('evolve')
