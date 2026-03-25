@@ -3,10 +3,7 @@ import chalk from 'chalk';
 import { ProjectGenerator } from '../core/project-generator';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
-
-function writeLine(message = ''): void {
-  Logger.write(`${message}\n`);
-}
+import { writeLine } from '../utils/output';
 
 export function generateCommand(program: Command): void {
   program

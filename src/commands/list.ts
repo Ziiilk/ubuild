@@ -2,10 +2,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { ProjectDetector } from '../core/project-detector';
 import { Logger } from '../utils/logger';
-
-function writeLine(message = ''): void {
-  Logger.write(`${message}\n`);
-}
+import { writeLine } from '../utils/output';
 
 export function listCommand(program: Command): void {
   program

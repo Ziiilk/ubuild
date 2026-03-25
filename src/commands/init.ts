@@ -5,14 +5,11 @@ import { ProjectInitializer } from '../core/project-initializer';
 import { InitOptions } from '../types/init';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
+import { writeLine } from '../utils/output';
 
 type InitCommandActionOptions = InitOptions & {
   dryRun?: boolean;
 };
-
-function writeLine(message = ''): void {
-  Logger.write(`${message}\n`);
-}
 
 export function initCommand(program: Command): void {
   program

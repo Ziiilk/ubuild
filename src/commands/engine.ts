@@ -3,10 +3,7 @@ import chalk from 'chalk';
 import { EngineResolver } from '../core/engine-resolver';
 import { Logger } from '../utils/logger';
 import { ProjectDetector } from '../core/project-detector';
-
-function writeLine(message = ''): void {
-  Logger.write(`${message}\n`);
-}
+import { writeLine } from '../utils/output';
 
 export function engineCommand(program: Command): void {
   program

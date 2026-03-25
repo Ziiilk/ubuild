@@ -1,6 +1,13 @@
 import path from 'path';
 import fs from 'fs-extra';
 import { Logger } from './logger';
+import {
+  BUILD_TARGETS,
+  BUILD_CONFIGS,
+  BUILD_PLATFORMS,
+  IDE_TYPES,
+  PROJECT_TYPES,
+} from './constants';
 
 export class Validator {
   static isValidProjectName(name: string): boolean {
@@ -36,28 +43,25 @@ export class Validator {
   }
 
   static isValidBuildTarget(target: string): boolean {
-    const validTargets = ['Editor', 'Game', 'Client', 'Server'];
-    return validTargets.includes(target) || target.trim().length > 0;
+    return (
+      BUILD_TARGETS.includes(target as (typeof BUILD_TARGETS)[number]) || target.trim().length > 0
+    );
   }
 
   static isValidBuildConfig(config: string): boolean {
-    const validConfigs = ['Debug', 'DebugGame', 'Development', 'Shipping', 'Test'];
-    return validConfigs.includes(config);
+    return BUILD_CONFIGS.includes(config as (typeof BUILD_CONFIGS)[number]);
   }
 
   static isValidBuildPlatform(platform: string): boolean {
-    const validPlatforms = ['Win64', 'Win32', 'Linux', 'Mac', 'Android', 'IOS'];
-    return validPlatforms.includes(platform);
+    return BUILD_PLATFORMS.includes(platform as (typeof BUILD_PLATFORMS)[number]);
   }
 
   static isValidIDE(ide: string): boolean {
-    const validIDEs = ['sln', 'vscode', 'clion', 'xcode', 'vs2022'];
-    return validIDEs.includes(ide);
+    return IDE_TYPES.includes(ide as (typeof IDE_TYPES)[number]);
   }
 
   static isValidProjectType(type: string): boolean {
-    const validTypes = ['cpp', 'blueprint', 'blank'];
-    return validTypes.includes(type);
+    return PROJECT_TYPES.includes(type as (typeof PROJECT_TYPES)[number]);
   }
 
   static async isValidUProjectFile(uprojectPath: string): Promise<boolean> {

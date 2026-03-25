@@ -95,7 +95,7 @@ export class BuildExecutor {
   private async validateOptions(options: BuildOptions): Promise<Required<BuildOptions>> {
     const target: BuildTarget = options.target || 'Editor';
     const config: BuildConfiguration = options.config || 'Development';
-    const platform: BuildPlatform = options.platform || 'Win64';
+    const platform: BuildPlatform = (options.platform || 'Win64') as BuildPlatform;
     const clean = options.clean || false;
     const verbose = options.verbose || false;
     const additionalArgs = options.additionalArgs || [];
