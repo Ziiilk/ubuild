@@ -8,19 +8,39 @@ import { Platform } from '../utils/platform';
 import { Logger } from '../utils/logger';
 import { TargetResolver } from './target-resolver';
 
+/** Options for generating compile commands database. */
 export interface CompileCommandsGenerateOptions {
+  /** Build target (Editor, Game, Client, Server) */
   target?: string;
+  /** Build configuration (Debug, DebugGame, Development, Shipping, Test) */
   config?: string;
+  /** Target platform (Win64, Win32, Linux, Mac) */
   platform?: string;
+  /** Path to project directory or .uproject file */
   project?: string;
+  /** Path to Unreal Engine installation */
   enginePath?: string;
+  /** Whether to include plugin sources in compile commands */
   includePluginSources?: boolean;
+  /** Whether to include engine sources in compile commands */
   includeEngineSources?: boolean;
+  /** Whether to use engine includes in compile commands */
   useEngineIncludes?: boolean;
+  /** Suppress all output */
   silent?: boolean;
 }
 
+/**
+ * Generates compile_commands.json for IDE integration (VSCode, CLion, etc.).
+ * Uses UnrealBuildTool to generate the clang database for code completion and IntelliSense.
+ */
 export class CompileCommandsGenerator {
+  /**
+   * Generates compile_commands.json for the specified project and options.
+   * @param options - Generation options including target, config, platform, and paths
+   * @returns Promise resolving to the path of the generated compile_commands.json file
+   * @throws Error if project file not found, UBT not found, or generation fails
+   */
   static async generate(options: CompileCommandsGenerateOptions): Promise<string> {
     const projectPath = await ProjectPathResolver.resolveOrThrow(options.project || process.cwd());
     const silent = options.silent || false;

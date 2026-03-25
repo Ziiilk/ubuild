@@ -6,27 +6,50 @@ import { Validator } from '../utils/validator';
 import { BuildExecutor } from './build-executor';
 import { EngineResolver } from './engine-resolver';
 
+/** Options for the build command. */
 export interface BuildCommandOptions {
+  /** Build target (Editor, Game, Client, Server) */
   target?: string;
+  /** Build configuration (Debug, DebugGame, Development, Shipping, Test) */
   config?: string;
+  /** Target platform (Win64, Win32, Linux, Mac, Android, IOS) */
   platform?: string;
+  /** Path to project directory or .uproject file */
   project?: string;
+  /** Path to Unreal Engine installation */
   enginePath?: string;
+  /** Whether to perform a clean build */
   clean?: boolean;
+  /** Whether to enable verbose output */
   verbose?: boolean;
+  /** Show what would be built without actually building */
   dryRun?: boolean;
+  /** List available build targets for project */
   listTargets?: boolean;
+  /** Logger instance for output */
   logger?: Logger;
+  /** Writable stream for stdout */
   stdout?: Writable;
+  /** Writable stream for stderr */
   stderr?: Writable;
+  /** Suppress all output */
   silent?: boolean;
 }
 
+/**
+ * High-level builder for Unreal Engine projects.
+ * Provides a convenient interface for building projects with validation,
+ * dry-run support, and detailed output formatting.
+ */
 export class ProjectBuilder {
   private logger: Logger;
   private stdout: Writable;
   private stderr: Writable;
 
+  /**
+   * Creates a new ProjectBuilder instance.
+   * @param options - Configuration options for logging and output streams
+   */
   constructor(
     options: { logger?: Logger; stdout?: Writable; stderr?: Writable; silent?: boolean } = {}
   ) {
@@ -41,10 +64,21 @@ export class ProjectBuilder {
       });
   }
 
+  /**
+   * Gets the logger instance used by this builder.
+   * @returns The Logger instance
+   */
   getLogger(): Logger {
     return this.logger;
   }
 
+  /**
+   * Executes a build with the specified options.
+   * Validates options, performs dry-run if requested, and executes the build.
+   * @param options - Build configuration options
+   * @returns Promise that resolves when build completes or rejects on failure
+   * @throws Error if validation fails or build fails
+   */
   async build(options: BuildCommandOptions): Promise<void> {
     this.logger.title('Unreal Engine Build');
 
@@ -230,6 +264,11 @@ export class ProjectBuilder {
   }
 }
 
+/**
+ * Convenience function to execute a build without creating a ProjectBuilder instance.
+ * @param options - Build configuration options
+ * @returns Promise that resolves when build completes
+ */
 export async function executeBuild(options: BuildCommandOptions): Promise<void> {
   const builder = new ProjectBuilder({
     logger: options.logger,

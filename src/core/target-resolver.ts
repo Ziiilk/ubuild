@@ -1,12 +1,19 @@
 import { BuildExecutor } from './build-executor';
 
+/** Represents a resolved build target with its name and type. */
 export interface ResolvedTarget {
+  /** Target name (e.g., 'MyProjectEditor') */
   name: string;
+  /** Target type (Editor, Game, Client, or Server) */
   type: string;
 }
 
 const GENERIC_TARGETS = ['Editor', 'Game', 'Client', 'Server'] as const;
 
+/**
+ * Resolves generic build target names (like 'Editor') to actual project target names.
+ * Maps user-friendly target types to specific .Target.cs files found in the project.
+ */
 export class TargetResolver {
   /**
    * Resolve a target string (which may be a generic type like 'Editor') to an actual target name.
@@ -49,7 +56,10 @@ export class TargetResolver {
   }
 
   /**
-   * Resolve a single target request to an actual target name.
+   * Resolves a single target request to an actual target name from available targets.
+   * @param requestedTarget - The target name or generic type to resolve
+   * @param availableTargets - Array of available targets in the project
+   * @returns The resolved target name, or undefined if no match found
    */
   private static resolveSingleTarget(
     requestedTarget: string,
@@ -87,14 +97,18 @@ export class TargetResolver {
   }
 
   /**
-   * Check if a target name is a generic type (Editor, Game, Client, Server).
+   * Checks if a target name is a generic type (Editor, Game, Client, Server).
+   * Generic targets are resolved to specific project targets based on naming conventions.
+   * @param target - The target name to check
+   * @returns True if the target is a generic type
    */
   static isGenericTarget(target: string): boolean {
     return GENERIC_TARGETS.includes(target as (typeof GENERIC_TARGETS)[number]);
   }
 
   /**
-   * Get all generic target types.
+   * Gets all available generic target types.
+   * @returns Readonly array of generic target type names
    */
   static getGenericTargets(): readonly string[] {
     return GENERIC_TARGETS;
