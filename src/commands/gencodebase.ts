@@ -4,10 +4,26 @@ import { CompileCommandsGenerator } from '../core/compile-commands-generator';
 import type { CompileCommandsGenerateOptions } from '../core/compile-commands-generator';
 import { Logger } from '../utils/logger';
 
+/** Options for the gencodebase command. */
 export type GencodebaseCommandOptions = CompileCommandsGenerateOptions & {
+  /** Output result as JSON */
   json?: boolean;
 };
 
+/**
+ * Registers the 'gencodebase' command for generating compile_commands.json.
+ *
+ * This command generates a compile_commands.json file for IDE integration,
+ * enabling features like code completion and navigation in VSCode with clangd,
+ * CLion, and other language servers.
+ *
+ * @param program - The Commander program instance
+ *
+ * @example
+ * ```typescript
+ * gencodebaseCommand(program);
+ * ```
+ */
 export function gencodebaseCommand(program: Command): void {
   program
     .command('gencodebase')

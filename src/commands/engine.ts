@@ -5,14 +5,34 @@ import { EngineResolver } from '../core/engine-resolver';
 import { Logger } from '../utils/logger';
 import { ProjectDetector } from '../core/project-detector';
 
+/** Options for the engine command. */
 export interface EngineCommandOptions {
+  /** Path to project directory or .uproject file */
   project?: string;
+  /** Output result as JSON */
   json?: boolean;
+  /** Show verbose engine detection details */
   verbose?: boolean;
+  /** Writable stream for standard output (defaults to process.stdout) */
   stdout?: Writable;
+  /** Writable stream for error output (defaults to process.stderr) */
   stderr?: Writable;
 }
 
+/**
+ * Executes the engine command to display engine information.
+ *
+ * Resolves the Unreal Engine installation for the current project and displays
+ * detailed information about the engine including version, path, and association.
+ *
+ * @param options - Configuration options for the engine command
+ * @returns Promise that resolves when the command completes
+ *
+ * @example
+ * ```typescript
+ * await executeEngine({ project: './MyProject', verbose: true });
+ * ```
+ */
 export async function executeEngine(options: EngineCommandOptions): Promise<void> {
   const stdout = options.stdout || process.stdout;
   const stderr = options.stderr || process.stderr;
@@ -134,6 +154,20 @@ export async function executeEngine(options: EngineCommandOptions): Promise<void
   }
 }
 
+/**
+ * Registers the 'engine' command for displaying engine information.
+ *
+ * This command detects and displays information about the Unreal Engine
+ * installation associated with the current project, including version,
+ * installation path, and engine association details.
+ *
+ * @param program - The Commander program instance
+ *
+ * @example
+ * ```typescript
+ * engineCommand(program);
+ * ```
+ */
 export function engineCommand(program: Command): void {
   program
     .command('engine')

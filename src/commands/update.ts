@@ -13,16 +13,27 @@ export interface UpdateCommandOptions {
   stderr?: Writable;
 }
 
+/** Minimal interface for reading version from package.json. */
 interface PackageJsonVersion {
+  /** Package version string (semver format) */
   version: string;
 }
 
+/**
+ * Reads the current version from package.json.
+ * @returns Promise resolving to the current version string
+ */
 async function getCurrentVersion(): Promise<string> {
   const packageJsonPath = path.resolve(__dirname, '../../package.json');
   const packageJson = (await fs.readJson(packageJsonPath)) as PackageJsonVersion;
   return packageJson.version;
 }
 
+/**
+ * Checks if ubuild is installed globally via npm.
+ * @param logger - Logger instance for debug output
+ * @returns Promise resolving to true if installed globally
+ */
 async function isGlobalInstall(logger: Logger): Promise<boolean> {
   try {
     const { stdout: listOutput } = await execa('npm', [
@@ -114,6 +125,19 @@ export async function executeUpdate(options: UpdateCommandOptions = {}): Promise
   }
 }
 
+/**
+ * Registers the 'update' command for updating ubuild.
+ *
+ * This command checks for the latest version of ubuild on npm and updates
+ * the installation (global or local) to the latest version.
+ *
+ * @param program - The Commander program instance
+ *
+ * @example
+ * ```typescript
+ * updateCommand(program);
+ * ```
+ */
 export function updateCommand(program: Command): void {
   program
     .command('update')
@@ -123,6 +147,12 @@ export function updateCommand(program: Command): void {
     });
 }
 
+/**
+ * Compares two semantic version strings.
+ * @param a - First version string (e.g., "1.2.3")
+ * @param b - Second version string (e.g., "1.2.4")
+ * @returns Negative if a < b, positive if a > b, zero if equal
+ */
 function compareVersions(a: string, b: string): number {
   const partsA = a.split('.').map(Number);
   const partsB = b.split('.').map(Number);
