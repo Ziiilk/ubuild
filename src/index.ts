@@ -50,4 +50,20 @@ export {
 };
 
 // Development-only exports
+/**
+ * Runs the self-evolution process for ubuild.
+ * Continuously analyzes the codebase, identifies improvements, and applies changes.
+ * This is a development-only feature.
+ *
+ * @example
+ * ```typescript
+ * import { runSelfEvolution } from '@zitool/ubuild';
+ *
+ * await runSelfEvolution({
+ *   interval: 5000,
+ *   apiKey: process.env.OPENAI_API_KEY,
+ *   model: 'gpt-4'
+ * });
+ * ```
+ */
 export { runSelfEvolution } from './core/self-driver';
