@@ -1,9 +1,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import {
-  CompileCommandsGenerator,
-  type CompileCommandsGenerateOptions,
-} from '../core/compile-commands-generator';
+import { CompileCommandsGenerator } from '../core/compile-commands-generator';
+import type { CompileCommandsGenerateOptions } from '../core/compile-commands-generator';
 import { Logger } from '../utils/logger';
 
 export type GencodebaseCommandOptions = CompileCommandsGenerateOptions & {

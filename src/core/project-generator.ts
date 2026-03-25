@@ -1,7 +1,7 @@
 import { execa } from 'execa';
 import path from 'path';
 import fs from 'fs-extra';
-import { GenerateOptions, GenerateResult, IDE } from '../types/generate';
+import type { GenerateOptions, GenerateResult, IDE } from '../types/generate';
 import { EngineResolver } from './engine-resolver';
 import { Logger } from '../utils/logger';
 import { Platform } from '../utils/platform';

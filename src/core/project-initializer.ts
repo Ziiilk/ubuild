@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs-extra';
 import inquirer from 'inquirer';
-import { InitOptions, InitResult, ProjectType } from '../types/init';
+import type { InitOptions, InitResult, ProjectType } from '../types/init';
 import type { EngineInstallation, EngineVersionInfo } from '../types/engine';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';

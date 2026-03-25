@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { Writable } from 'stream';
-import { BuildConfiguration, BuildPlatform } from '../types/build';
+import type { BuildConfiguration, BuildPlatform } from '../types/build';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
 import { BuildExecutor } from './build-executor';

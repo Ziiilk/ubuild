@@ -6,9 +6,9 @@ export type BuildConfiguration = 'Debug' | 'DebugGame' | 'Development' | 'Shippi
 export type BuildPlatform = 'Win64' | 'Win32' | 'Linux' | 'Mac' | 'Android' | 'IOS';
 
 export interface BuildOptions {
-  target?: string;
+  target?: BuildTarget;
   config?: BuildConfiguration;
-  platform?: string;
+  platform?: BuildPlatform;
   projectPath?: string;
   enginePath?: string;
   clean?: boolean;
