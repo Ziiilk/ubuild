@@ -67,6 +67,19 @@ export interface EvolutionResult {
   errors: string[];
 }
 
+/**
+ * Self-driving evolution engine for ubuild.
+ *
+ * Continuously analyzes the codebase health, identifies improvements,
+ * and applies changes through an automated loop. Runs indefinitely
+ * until interrupted by the user (Ctrl+C).
+ *
+ * The evolution process follows a conservative strategy:
+ * 1. Diagnose - Check tests, lint, and build status
+ * 2. Analyze - Generate improvement suggestions based on diagnosis
+ * 3. Verify - Validate the codebase state
+ * 4. Evolve - Apply improvements using OpenCode
+ */
 export class SelfDriver {
   private interval: number;
   private apiKey?: string;
