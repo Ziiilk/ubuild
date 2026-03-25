@@ -1,9 +1,83 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { Writable } from 'stream';
 import { ProjectGenerator } from '../core/project-generator';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
-import { writeLine } from '../utils/output';
+import { IDE } from '../types/generate';
+
+export interface GenerateCommandOptions {
+  ide?: string;
+  projectPath?: string;
+  enginePath?: string;
+  force?: boolean;
+  listIdes?: boolean;
+  stdout?: Writable;
+  stderr?: Writable;
+}
+
+export async function executeGenerate(options: GenerateCommandOptions): Promise<void> {
+  const stdout = options.stdout || process.stdout;
+  const stderr = options.stderr || process.stderr;
+
+  const logger = new Logger({ stdout, stderr });
+
+  try {
+    logger.title('Generate Project Files');
+
+    if (options.listIdes) {
+      listAvailableIDEs(logger);
+      return;
+    }
+
+    const ide = options.ide || 'sln';
+
+    if (!Validator.isValidIDE(ide)) {
+      logger.error(`Invalid IDE type: ${ide}`);
+      listAvailableIDEs(logger);
+      process.exit(1);
+    }
+
+    logger.info(`Generating ${ide.toUpperCase()} project files...`);
+    logger.divider();
+
+    const result = await ProjectGenerator.generate({
+      ide: ide as IDE,
+      projectPath: options.projectPath,
+      enginePath: options.enginePath,
+      force: options.force,
+    });
+
+    logger.divider();
+
+    if (result.success) {
+      logger.success('Project files generated successfully');
+
+      if (result.generatedFiles.length > 0) {
+        logger.subTitle('Generated Files');
+        result.generatedFiles.forEach((file) => {
+          logger.write(`  • ${file}\n`);
+        });
+      }
+
+      if (ide === 'sln' || ide === 'vs2022') {
+        logger.write('\n');
+        logger.write(`Open ${chalk.bold('.sln')} file in Visual Studio to build and debug.\n`);
+      } else if (ide === 'vscode') {
+        logger.write('\n');
+        logger.write(
+          `Open the ${chalk.bold('.code-workspace')} file in Visual Studio Code (UBT 生成的方案).\n`
+        );
+      }
+    } else {
+      logger.error(`Failed to generate project files: ${result.error}`);
+      process.exit(1);
+    }
+  } catch (error) {
+    logger.error(`Generation failed: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
+}
 
 export function generateCommand(program: Command): void {
   program
@@ -16,66 +90,18 @@ export function generateCommand(program: Command): void {
     .option('--force', 'Force regeneration of project files')
     .option('--list-ides', 'List available IDE types')
     .action(async (options) => {
-      try {
-        Logger.title('Generate Project Files');
-
-        if (options.listIdes) {
-          listAvailableIDEs();
-          return;
-        }
-
-        if (!Validator.isValidIDE(options.ide)) {
-          Logger.error(`Invalid IDE type: ${options.ide}`);
-          listAvailableIDEs();
-          process.exit(1);
-        }
-
-        Logger.info(`Generating ${options.ide.toUpperCase()} project files...`);
-        Logger.divider();
-
-        const result = await ProjectGenerator.generate({
-          ide: options.ide,
-          projectPath: options.project,
-          enginePath: options.enginePath,
-          force: options.force,
-        });
-
-        Logger.divider();
-
-        if (result.success) {
-          Logger.success('Project files generated successfully');
-
-          if (result.generatedFiles.length > 0) {
-            Logger.subTitle('Generated Files');
-            result.generatedFiles.forEach((file) => {
-              writeLine(`  • ${file}`);
-            });
-          }
-
-          if (options.ide === 'sln' || options.ide === 'vs2022') {
-            writeLine();
-            writeLine(`Open ${chalk.bold('.sln')} file in Visual Studio to build and debug.`);
-          } else if (options.ide === 'vscode') {
-            writeLine();
-            writeLine(
-              `Open the ${chalk.bold('.code-workspace')} file in Visual Studio Code (UBT 生成的方案).`
-            );
-          }
-        } else {
-          Logger.error(`Failed to generate project files: ${result.error}`);
-          process.exit(1);
-        }
-      } catch (error) {
-        Logger.error(
-          `Generation failed: ${error instanceof Error ? error.message : String(error)}`
-        );
-        process.exit(1);
-      }
+      await executeGenerate({
+        ide: options.ide,
+        projectPath: options.project,
+        enginePath: options.enginePath,
+        force: options.force,
+        listIdes: options.listIdes,
+      });
     });
 }
 
-function listAvailableIDEs(): void {
-  Logger.subTitle('Available IDE Types');
+function listAvailableIDEs(logger: Logger): void {
+  logger.subTitle('Available IDE Types');
 
   const ides = [
     {
@@ -94,10 +120,10 @@ function listAvailableIDEs(): void {
   ];
 
   ides.forEach((ide) => {
-    writeLine(`  ${chalk.bold(ide.id.padEnd(8))} ${ide.name}`);
-    writeLine(`            ${chalk.gray(ide.description)}`);
-    writeLine();
+    logger.write(`  ${chalk.bold(ide.id.padEnd(8))} ${ide.name}\n`);
+    logger.write(`            ${chalk.gray(ide.description)}\n`);
+    logger.write('\n');
   });
 
-  writeLine('Use: ubuild generate --ide <type>');
+  logger.write('Use: ubuild generate --ide <type>\n');
 }
