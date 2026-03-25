@@ -373,7 +373,7 @@ export class SelfDriver {
     } catch {
       // Windows fallback
       try {
-        const result = await execa('cmd', ['/c', 'dir', '/s', '/b', 'src\*.test.ts'], {
+        const result = await execa('cmd', ['/c', 'dir', '/s', '/b', 'src\\*.test.ts'], {
           cwd: this.projectRoot,
           reject: false,
         });
