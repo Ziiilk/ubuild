@@ -10,60 +10,107 @@ export interface EngineVersionInfo {
   Changelist: number;
   /** Compatible changelist for binary compatibility */
   CompatibleChangelist: number;
-  /** Whether this is a licensee build */
+  /** Whether this is a licensee build (0 = no, 1 = yes) */
   IsLicenseeVersion: number;
-  /** Whether this is a promoted build */
+  /** Whether this is a promoted build (0 = no, 1 = yes) */
   IsPromotedBuild: number;
-  /** Source control branch name */
+  /** Source control branch name (e.g., "++UE5+Release-5.3") */
   BranchName: string;
   /** Build identifier string */
   BuildId: string;
 }
 
-/** Represents a detected Unreal Engine installation. */
+/** Represents a detected Unreal Engine installation.
+ *
+ * @example
+ * ```typescript
+ * const engine: EngineInstallation = {
+ *   path: 'C:/Program Files/Epic Games/UE_5.3',
+ *   associationId: '{12345678-1234-1234-1234-123456789012}',
+ *   displayName: 'Unreal Engine 5.3',
+ *   source: 'launcher'
+ * };
+ * ```
+ */
 export interface EngineInstallation {
-  /** Absolute path to engine installation */
+  /** Absolute path to engine installation directory */
   path: string;
-  /** Version information (if available) */
+  /** Version information (if available from engine) */
   version?: EngineVersionInfo;
-  /** Association ID (GUID or version string) */
+  /** Association ID (GUID or version string like "UE_5.3") */
   associationId: string;
-  /** Human-readable display name */
+  /** Human-readable display name for the engine */
   displayName?: string;
-  /** Installation date (ISO string) */
+  /** Installation date as ISO string (if available) */
   installedDate?: string;
-  /** Source of detection (registry, launcher, environment) */
+  /** Source of engine detection */
   source?: 'registry' | 'launcher' | 'environment';
 }
 
-/** Engine association from a .uproject file. */
+/** Engine association from a .uproject file.
+ *
+ * @example
+ * ```typescript
+ * const association: EngineAssociation = {
+ *   guid: '5.3',
+ *   name: 'UE 5.3',
+ *   path: 'C:/Program Files/Epic Games/UE_5.3'
+ * };
+ * ```
+ */
 export interface EngineAssociation {
-  /** Association GUID or version string */
+  /** Association GUID or version string from .uproject */
   guid: string;
   /** Display name for the association */
   name?: string;
-  /** Path to engine (if known) */
+  /** Path to engine (if known/resolved) */
   path?: string;
-  /** Version string (for non-GUID associations) */
+  /** Version string (for non-GUID associations like "UE_5.3") */
   version?: string;
 }
 
-/** Result of an engine detection operation. */
+/** Result of an engine detection operation.
+ *
+ * @example
+ * ```typescript
+ * const result: EngineDetectionResult = {
+ *   engine: {
+ *     path: 'C:/Program Files/Epic Games/UE_5.3',
+ *     associationId: 'UE_5.3',
+ *     displayName: 'Unreal Engine 5.3'
+ *   },
+ *   uprojectEngine: {
+ *     guid: 'UE_5.3',
+ *     version: '5.3'
+ *   },
+ *   warnings: []
+ * };
+ * ```
+ */
 export interface EngineDetectionResult {
-  /** Detected engine installation */
+  /** Detected engine installation (if found) */
   engine?: EngineInstallation;
   /** Engine association from project file */
   uprojectEngine?: EngineAssociation;
   /** Error message if detection failed */
   error?: string;
-  /** Array of warning messages */
+  /** Array of warning messages during detection */
   warnings: string[];
 }
 
-/** Options for resolving engine paths. */
+/** Options for resolving engine paths.
+ *
+ * @example
+ * ```typescript
+ * const options: EnginePathResolutionOptions = {
+ *   projectPath: './MyProject',
+ *   enginePath: '/custom/engine/path'
+ * };
+ * ```
+ */
 export interface EnginePathResolutionOptions {
-  /** Path to project for context */
+  /** Path to project for context (to read .uproject association) */
   projectPath?: string;
-  /** Override engine path */
+  /** Override engine path (bypasses auto-detection) */
   enginePath?: string;
 }

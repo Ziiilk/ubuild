@@ -1,34 +1,62 @@
 import { Writable } from 'stream';
 import { Logger } from '../utils/logger';
 
-/** Options for executing a clean operation. */
+/** Options for executing a clean operation.
+ *
+ * Controls which files are removed and how the operation behaves.
+ *
+ * @example
+ * ```typescript
+ * const options: CleanOptions = {
+ *   projectPath: './MyProject',
+ *   dryRun: true,
+ *   binariesOnly: false,
+ *   verbose: true
+ * };
+ * ```
+ */
 export interface CleanOptions {
   /** Path to project directory or .uproject file */
   projectPath?: string;
   /** Path to Unreal Engine installation */
   enginePath?: string;
-  /** Whether to perform a dry run without actually deleting files */
+  /** If true, show what would be deleted without actually deleting */
   dryRun?: boolean;
-  /** Whether to clean only Binaries and Intermediate folders */
+  /** If true, only clean Binaries and Intermediate folders (keep Saved) */
   binariesOnly?: boolean;
-  /** Logger instance for output */
+  /** Logger instance for output (if not provided, uses console) */
   logger?: Logger;
-  /** Writable stream for stdout */
+  /** Writable stream for stdout output */
   stdout?: Writable;
-  /** Writable stream for stderr */
+  /** Writable stream for stderr output */
   stderr?: Writable;
-  /** Suppress all output */
+  /** If true, suppress all output */
   silent?: boolean;
 }
 
-/** Result of a clean operation. */
+/** Result of a clean operation.
+ *
+ * Contains details about what was deleted and any failures.
+ *
+ * @example
+ * ```typescript
+ * const result: CleanResult = {
+ *   success: true,
+ *   deletedPaths: [
+ *     'C:/Projects/MyGame/Binaries',
+ *     'C:/Projects/MyGame/Intermediate'
+ *   ],
+ *   failedPaths: []
+ * };
+ * ```
+ */
 export interface CleanResult {
   /** Whether the clean operation succeeded */
   success: boolean;
-  /** Array of paths that were deleted */
+  /** Array of absolute paths that were successfully deleted */
   deletedPaths: string[];
-  /** Array of paths that failed to delete */
+  /** Array of paths that failed to delete with error details */
   failedPaths: Array<{ path: string; error: string }>;
-  /** Error message if operation failed */
+  /** Error message if the overall operation failed */
   error?: string;
 }
