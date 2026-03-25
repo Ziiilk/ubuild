@@ -211,11 +211,11 @@ export class EngineResolver {
         installations.push(...locationEngines);
         Logger.debug(`Found ${locationEngines.length} engines at ${registryLocation}`);
       } catch (error) {
-        const err = error as Error;
-        if (err.message && err.message.includes('unable to find the specified registry key')) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('unable to find the specified registry key')) {
           Logger.debug(`Registry key not found: ${registryLocation}`);
         } else {
-          Logger.debug(`Failed to query registry location ${registryLocation}: ${err.message}`);
+          Logger.debug(`Failed to query registry location ${registryLocation}: ${errorMessage}`);
         }
       }
     }
