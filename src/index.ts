@@ -17,3 +17,6 @@ export {
   updateCommand,
   gencodebaseCommand,
 };
+
+// Development-only exports
+export { runSelfEvolution } from './core/self-driver';
