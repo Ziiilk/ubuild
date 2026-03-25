@@ -85,16 +85,33 @@ export class ProjectDetector {
     }
   }
 
+  /**
+   * Finds .uproject files in the specified directory.
+   * @param cwd - The directory to search in
+   * @param recursive - Whether to search recursively in subdirectories
+   * @returns Promise resolving to array of absolute paths to .uproject files
+   */
   private static async findUProjectFiles(cwd: string, recursive?: boolean): Promise<string[]> {
     const pattern = recursive ? '**/*.uproject' : '*.uproject';
     return await glob(pattern, { cwd, absolute: true });
   }
 
+  /**
+   * Parses a .uproject file and returns its contents as a UProject object.
+   * @param uprojectPath - Absolute path to the .uproject file
+   * @returns Promise resolving to the parsed UProject object
+   * @throws Error if the file cannot be read or contains invalid JSON
+   */
   private static async parseUProject(uprojectPath: string): Promise<UProject> {
     const content = await fs.readFile(uprojectPath, 'utf-8');
     return JSON.parse(content);
   }
 
+  /**
+   * Validates that a parsed UProject object has all required fields.
+   * @param uproject - The UProject object to validate
+   * @returns Validation result with isValid flag, optional error message, and warnings array
+   */
   private static validateUProject(uproject: UProject): {
     isValid: boolean;
     error?: string;
@@ -121,6 +138,11 @@ export class ProjectDetector {
     return { isValid: true, warnings };
   }
 
+  /**
+   * Finds .Target.cs files in the Source directory and extracts target information.
+   * @param sourceDir - Absolute path to the Source directory
+   * @returns Promise resolving to array of target objects with name, type, and path
+   */
   private static async findTargetFiles(sourceDir: string): Promise<ProjectInfo['targets']> {
     const files = await glob('*.Target.cs', { cwd: sourceDir, absolute: false });
 
@@ -146,6 +168,11 @@ export class ProjectDetector {
     return targets;
   }
 
+  /**
+   * Finds .Build.cs files in the Source directory and extracts module information.
+   * @param sourceDir - Absolute path to the Source directory
+   * @returns Promise resolving to array of module objects with name and path
+   */
   private static async findModuleFiles(sourceDir: string): Promise<ProjectInfo['modules']> {
     const files = await glob('**/*.Build.cs', { cwd: sourceDir, absolute: false });
 
