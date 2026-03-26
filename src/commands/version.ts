@@ -103,8 +103,13 @@ export function versionCommand(program: Command): void {
     .description('Display ubuild version information')
     .option('-j, --json', 'Output result as JSON')
     .action(async (options) => {
-      await executeVersion({
-        json: options.json,
-      });
+      try {
+        await executeVersion({
+          json: options.json,
+        });
+      } catch (error) {
+        Logger.error(`Error: ${formatError(error)}`);
+        process.exit(1);
+      }
     });
 }
