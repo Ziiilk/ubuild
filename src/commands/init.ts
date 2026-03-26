@@ -161,7 +161,8 @@ export function initCommand(program: Command): void {
     .action(async (options: InitCommandActionOptions) => {
       try {
         await executeInit(options);
-      } catch {
+      } catch (error) {
+        Logger.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
         process.exit(1);
       }
     });

@@ -82,7 +82,7 @@ async function main(): Promise<void> {
   try {
     await program.parseAsync(process.argv);
   } catch (error) {
-    console.error(chalk.red('Error:'), error instanceof Error ? error.message : String(error));
+    Logger.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
   }
 }

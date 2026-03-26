@@ -342,7 +342,10 @@ export class SelfDriver {
           estimatedEffort: 'medium',
         });
       }
-    } catch {
+    } catch (error) {
+      this.log(
+        `Debug: Build check failed - ${error instanceof Error ? error.message : String(error)}`
+      );
       suggestions.push({
         priority: 'critical',
         category: 'fix',
@@ -369,7 +372,10 @@ export class SelfDriver {
           estimatedEffort: 'medium',
         });
       }
-    } catch {
+    } catch (error) {
+      this.log(
+        `Debug: Evolve check failed - ${error instanceof Error ? error.message : String(error)}`
+      );
       suggestions.push({
         priority: 'critical',
         category: 'fix',
@@ -398,7 +404,10 @@ export class SelfDriver {
             estimatedEffort: 'medium',
           });
         }
-      } catch {
+      } catch (error) {
+        this.log(
+          `Debug: Core command '${cmd}' check failed - ${error instanceof Error ? error.message : String(error)}`
+        );
         suggestions.push({
           priority: 'high',
           category: 'fix',
@@ -716,7 +725,10 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one intell
         reject: false,
       });
       return status.stdout.trim().length > 0;
-    } catch {
+    } catch (error) {
+      this.log(
+        `Debug: Git status check failed - ${error instanceof Error ? error.message : String(error)}`
+      );
       return false;
     }
   }

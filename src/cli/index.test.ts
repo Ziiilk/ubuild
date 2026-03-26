@@ -7,12 +7,14 @@
 
 import { Command } from 'commander';
 
-// Mock Logger.debug
+// Mock Logger
 const mockLoggerDebug = jest.fn();
+const mockLoggerError = jest.fn();
 
 jest.mock('../utils/logger', () => ({
   Logger: {
     debug: (...args: unknown[]) => mockLoggerDebug(...args),
+    error: (...args: unknown[]) => mockLoggerError(...args),
   },
 }));
 
@@ -181,9 +183,6 @@ describe('CLI Entry Point', () => {
 
   describe('error handling', () => {
     it('exits with code 1 when program.parseAsync throws an error', async () => {
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
-        // Suppress console.error output during test
-      });
       process.argv = ['node', 'ubuild', 'list'];
 
       // Mock list command to throw an error during execution
@@ -200,13 +199,10 @@ describe('CLI Entry Point', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(process.exit).toHaveBeenCalledWith(1);
-      consoleErrorSpy.mockRestore();
+      expect(mockLoggerError).toHaveBeenCalledWith(expect.stringContaining('Test error'));
     });
 
     it('handles non-Error exceptions in main', async () => {
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
-        // Suppress console.error output during test
-      });
       process.argv = ['node', 'ubuild', 'list'];
 
       // Mock list command to throw a non-Error value
@@ -223,7 +219,7 @@ describe('CLI Entry Point', () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(process.exit).toHaveBeenCalledWith(1);
-      consoleErrorSpy.mockRestore();
+      expect(mockLoggerError).toHaveBeenCalledWith(expect.stringContaining('String error'));
     });
   });
 });
