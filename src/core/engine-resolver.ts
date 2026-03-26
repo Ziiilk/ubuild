@@ -588,7 +588,7 @@ export class EngineResolver {
    * @returns Negative if a < b, positive if a > b, 0 if equal
    */
   private static compareVersionString(a: string, b: string): number {
-    if (a === b || a.startsWith(b + '.') || a.startsWith(b + '_')) {
+    if (a === b) {
       return 0;
     }
 
