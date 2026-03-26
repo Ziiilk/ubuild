@@ -18,6 +18,7 @@ import { Logger } from '../utils/logger';
 import { formatError } from '../utils/error';
 import { Platform } from '../utils/platform';
 import { ProjectPathResolver } from './project-path-resolver';
+import { inferTargetType } from '../utils/target-helpers';
 import { TargetResolver } from './target-resolver';
 
 /**
@@ -316,14 +317,7 @@ export class BuildExecutor {
 
       return targetFiles.map((file) => {
         const name = path.basename(file, '.Target.cs');
-        let type = 'Game';
-        if (name.toLowerCase().includes('editor')) {
-          type = 'Editor';
-        } else if (name.toLowerCase().includes('client')) {
-          type = 'Client';
-        } else if (name.toLowerCase().includes('server')) {
-          type = 'Server';
-        }
+        const type = inferTargetType(name);
 
         return { name, type };
       });

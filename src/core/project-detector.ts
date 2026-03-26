@@ -18,6 +18,7 @@ import {
   ProjectDetectionResult,
 } from '../types/project';
 import { formatError } from '../utils/error';
+import { inferTargetType } from '../utils/target-helpers';
 
 /**
  * Detects and validates Unreal Engine projects from .uproject files.
@@ -163,15 +164,7 @@ export class ProjectDetector {
 
     const targets = files.map((file) => {
       const fileName = path.basename(file, '.Target.cs');
-      let type: 'Editor' | 'Game' | 'Client' | 'Server' = 'Game';
-
-      if (fileName.toLowerCase().includes('editor')) {
-        type = 'Editor';
-      } else if (fileName.toLowerCase().includes('client')) {
-        type = 'Client';
-      } else if (fileName.toLowerCase().includes('server')) {
-        type = 'Server';
-      }
+      const type = inferTargetType(fileName);
 
       return {
         name: fileName,
