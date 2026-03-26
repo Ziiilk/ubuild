@@ -356,9 +356,9 @@ describe('ProjectRunner', () => {
           dryRun: true,
         });
 
-        expect(capture.getStdout()).toContain('Target: undefined');
-        expect(capture.getStdout()).toContain('Configuration: undefined');
-        expect(capture.getStdout()).toContain('Platform: undefined');
+        expect(capture.getStdout()).toContain('Target: Editor');
+        expect(capture.getStdout()).toContain('Configuration: Development');
+        expect(capture.getStdout()).toContain('Platform: Win64');
       });
     });
   });
