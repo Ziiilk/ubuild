@@ -5,26 +5,27 @@ jest.mock('execa', () => ({
   execa: (...args: unknown[]) => mockExeca(...args),
 }));
 
+// Mock BuildExecutor module
+const mockGetAvailableTargets = jest.fn();
+const mockBuildExecutorExecute = jest.fn();
+
+jest.mock('./build-executor', () => ({
+  BuildExecutor: class MockBuildExecutor {
+    execute = mockBuildExecutorExecute;
+    static getAvailableTargets = mockGetAvailableTargets;
+  },
+}));
+
 import { ProjectBuilder } from './project-builder';
-import * as BuildExecutorModule from './build-executor';
+import * as EngineResolverModule from './engine-resolver';
 import { createFakeProject, createOutputCapture, withTempDir } from '../test-utils';
 
 describe('ProjectBuilder', () => {
-  const mockGetAvailableTargets = jest.fn();
-
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
     mockExeca.mockReset();
     mockGetAvailableTargets.mockReset();
-
-    // Mock the static method
-    jest
-      .spyOn(BuildExecutorModule.BuildExecutor, 'getAvailableTargets')
-      .mockImplementation(mockGetAvailableTargets);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
+    mockBuildExecutorExecute.mockReset();
   });
 
   describe('constructor', () => {
@@ -254,6 +255,319 @@ describe('ProjectBuilder', () => {
         const output = capture.getStderr();
         expect(output).toContain('Failed to list targets');
         expect(output).toContain('Target scan failed');
+      });
+    });
+  });
+
+  describe('successful build output', () => {
+    it('displays output path when build succeeds', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+        mockBuildExecutorExecute.mockResolvedValueOnce({
+          success: true,
+          exitCode: 0,
+          stdout: 'Build succeeded\nOutput path: C:\\Build\\Output',
+          stderr: '',
+        });
+
+        const capture = createOutputCapture();
+        const builder = new ProjectBuilder({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await builder.build({
+          project: project.projectDir,
+          target: 'Editor',
+          config: 'Development',
+          platform: 'Win64',
+        });
+
+        const output = capture.getStdout();
+        expect(output).toContain('Build completed successfully');
+        expect(output).toContain('Output directory: C:\\Build\\Output');
+      });
+    });
+
+    it('completes successfully without output path in stdout', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+        mockBuildExecutorExecute.mockResolvedValueOnce({
+          success: true,
+          exitCode: 0,
+          stdout: 'Build succeeded without output path',
+          stderr: '',
+        });
+
+        const capture = createOutputCapture();
+        const builder = new ProjectBuilder({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await builder.build({
+          project: project.projectDir,
+          target: 'Editor',
+          config: 'Development',
+          platform: 'Win64',
+        });
+
+        const output = capture.getStdout();
+        expect(output).toContain('Build completed successfully');
+        expect(output).not.toContain('Output directory:');
+      });
+    });
+  });
+
+  describe('failed build error summary', () => {
+    it('displays error summary when build fails with errors in stderr', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+        mockBuildExecutorExecute.mockResolvedValueOnce({
+          success: false,
+          exitCode: 1,
+          stdout: '',
+          stderr: 'ERROR: Compilation failed\nERROR: Missing header file\nBuild failed',
+          error: 'Build process exited with code 1',
+        });
+
+        const capture = createOutputCapture();
+        const builder = new ProjectBuilder({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await expect(
+          builder.build({
+            project: project.projectDir,
+            target: 'Editor',
+            config: 'Development',
+            platform: 'Win64',
+          })
+        ).rejects.toThrow('Build failed with exit code 1');
+
+        const stdout = capture.getStdout();
+        expect(stdout).toContain('Error Summary');
+        expect(stdout).toContain('ERROR: Compilation failed');
+        expect(stdout).toContain('ERROR: Missing header file');
+      });
+    });
+
+    it('truncates error summary to 10 errors when more are present', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+        const errorLines = Array.from({ length: 15 }, (_, i) => `ERROR: Error ${i + 1}`);
+        mockBuildExecutorExecute.mockResolvedValueOnce({
+          success: false,
+          exitCode: 1,
+          stdout: '',
+          stderr: errorLines.join('\n'),
+          error: 'Build process exited with code 1',
+        });
+
+        const capture = createOutputCapture();
+        const builder = new ProjectBuilder({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await expect(
+          builder.build({
+            project: project.projectDir,
+            target: 'Editor',
+            config: 'Development',
+            platform: 'Win64',
+          })
+        ).rejects.toThrow();
+
+        const stdout = capture.getStdout();
+        expect(stdout).toContain('Error Summary');
+        expect(stdout).toContain('ERROR: Error 1');
+        expect(stdout).toContain('ERROR: Error 10');
+        expect(stdout).not.toContain('ERROR: Error 11');
+        expect(stdout).toContain('... and 5 more errors');
+      });
+    });
+
+    it('handles build failure without stderr', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+        mockBuildExecutorExecute.mockResolvedValueOnce({
+          success: false,
+          exitCode: 1,
+          stdout: '',
+          stderr: '',
+          error: 'Build process was killed',
+        });
+
+        const capture = createOutputCapture();
+        const builder = new ProjectBuilder({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await expect(
+          builder.build({
+            project: project.projectDir,
+            target: 'Editor',
+            config: 'Development',
+            platform: 'Win64',
+          })
+        ).rejects.toThrow();
+
+        // Build failed message and error go to stderr via logger.error
+        const stderr = capture.getStderr();
+        expect(stderr).toContain('Build failed');
+        expect(stderr).toContain('Build process was killed');
+
+        // Error Summary should not appear in stdout (no stderr content to filter)
+        const stdout = capture.getStdout();
+        expect(stdout).not.toContain('Error Summary');
+      });
+    });
+
+    it('filters stderr lines containing error, failed, or fatal keywords', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+        mockBuildExecutorExecute.mockResolvedValueOnce({
+          success: false,
+          exitCode: 1,
+          stdout: '',
+          stderr:
+            'Info: Starting build\nERROR: Compilation failed\nWarning: Deprecated API\nFATAL: Linker error\nBuild FAILED\nInfo: Cleanup done',
+          error: 'Build failed',
+        });
+
+        const capture = createOutputCapture();
+        const builder = new ProjectBuilder({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await expect(
+          builder.build({
+            project: project.projectDir,
+            target: 'Editor',
+            config: 'Development',
+            platform: 'Win64',
+          })
+        ).rejects.toThrow();
+
+        const stdout = capture.getStdout();
+        expect(stdout).toContain('Error Summary');
+        expect(stdout).toContain('ERROR: Compilation failed');
+        expect(stdout).toContain('FATAL: Linker error');
+        expect(stdout).toContain('Build FAILED');
+        expect(stdout).not.toContain('Info: Starting build');
+        expect(stdout).not.toContain('Warning: Deprecated API');
+        expect(stdout).not.toContain('Info: Cleanup done');
+      });
+    });
+  });
+
+  describe('dry run engine resolution', () => {
+    it('shows engine path when engine is resolved successfully in dry run', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+        const mockResolveEngine = jest
+          .spyOn(EngineResolverModule.EngineResolver, 'resolveEngine')
+          .mockResolvedValueOnce({
+            engine: {
+              path: 'C:\\UE_5.3',
+              displayName: 'Unreal Engine 5.3',
+              associationId: 'UE_5.3',
+            },
+            warnings: [],
+          });
+
+        const capture = createOutputCapture();
+        const builder = new ProjectBuilder({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+          silent: true,
+        });
+
+        await builder.build({
+          project: project.projectDir,
+          target: 'Editor',
+          dryRun: true,
+        });
+
+        const output = capture.getStdout();
+        expect(output).toContain('Engine:');
+        expect(output).toContain('Unreal Engine 5.3');
+
+        mockResolveEngine.mockRestore();
+      });
+    });
+
+    it('shows warning when engine detection fails in dry run', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+        const mockResolveEngine = jest
+          .spyOn(EngineResolverModule.EngineResolver, 'resolveEngine')
+          .mockRejectedValueOnce(new Error('Registry access denied'));
+
+        const capture = createOutputCapture();
+        const builder = new ProjectBuilder({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+          silent: true,
+        });
+
+        await builder.build({
+          project: project.projectDir,
+          target: 'Editor',
+          dryRun: true,
+        });
+
+        const output = capture.getStdout();
+        expect(output).toContain('Engine:');
+        expect(output).toContain('Detection failed');
+        expect(output).toContain('specify with --engine-path');
+
+        mockResolveEngine.mockRestore();
+      });
+    });
+
+    it('suggests --engine-path when engine is not detected in dry run', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+        const mockResolveEngine = jest
+          .spyOn(EngineResolverModule.EngineResolver, 'resolveEngine')
+          .mockResolvedValueOnce({
+            engine: undefined,
+            warnings: ['No engine found in registry'],
+          });
+
+        const capture = createOutputCapture();
+        const builder = new ProjectBuilder({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+          silent: true,
+        });
+
+        await builder.build({
+          project: project.projectDir,
+          target: 'Editor',
+          dryRun: true,
+        });
+
+        const output = capture.getStdout();
+        expect(output).toContain('Engine:');
+        expect(output).toContain('Not detected');
+        expect(output).toContain('specify with --engine-path');
+
+        mockResolveEngine.mockRestore();
       });
     });
   });
