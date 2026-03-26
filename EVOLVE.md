@@ -22,4 +22,4 @@ The evolve command must be able to run. This is your proof of existence.
 - FEATURE - Add functionality
 - SKIP - Codebase is healthy, skip this round
 
-Verification Checklist: build, test, lint, evolve --help, list --help
+Verification Checklist: build, test, lint, and all command --help checks (list, engine, build, generate, init, run, clean, update, version, gencodebase, evolve)
