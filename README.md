@@ -64,6 +64,10 @@ ubuild update
 # Clean build artifacts
 ubuild clean
 ubuild clean --binaries-only
+
+# Display version information
+ubuild version
+ubuild version --json
 ```
 
 ### Programmatic API
@@ -216,6 +220,14 @@ Options:
 - `--binaries-only`: Only clean Binaries and Intermediate folders (keep Saved)
 - `--dry-run`: Show what would be deleted without actually deleting
 - `--silent`: Suppress all output
+
+### `ubuild version`
+
+Display ubuild version information.
+
+Options:
+
+- `-j, --json`: Output result as JSON
 
 ## Engine Detection
 
