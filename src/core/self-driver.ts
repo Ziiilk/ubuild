@@ -31,6 +31,15 @@ export interface SelfEvolverOptions {
  * through an automated loop. Runs indefinitely until
  * interrupted by the user (Ctrl+C).
  */
+/** Default sleep duration between iterations in milliseconds */
+const DEFAULT_SLEEP_MS = 5000;
+/** Default timeout for verification checks in milliseconds */
+const VERIFY_TIMEOUT_MS = 60000;
+/** Default timeout for OpenCode execution in milliseconds */
+const OPENCODE_TIMEOUT_MS = 600000;
+/** Minimum max listeners for process events */
+const MIN_MAX_LISTENERS = 20;
+
 export class SelfDriver {
   private log: (msg: string) => void;
   private projectRoot: string;
@@ -39,6 +48,8 @@ export class SelfDriver {
   private dryRun: boolean;
   private sigintHandler: (() => void) | null = null;
   private sigtermHandler: (() => void) | null = null;
+  private originalMaxListeners: number | null = null;
+  private sleepTimer: NodeJS.Timeout | null = null;
 
   /**
    * Creates a new SelfDriver instance.
@@ -68,8 +79,9 @@ export class SelfDriver {
     // Increase max listeners once to prevent memory leak warnings with multiple handlers
     // This is safe because we're properly cleaning up handlers in cleanup()
     const currentMax = process.getMaxListeners();
-    if (currentMax < 20) {
-      process.setMaxListeners(20);
+    if (currentMax < MIN_MAX_LISTENERS) {
+      this.originalMaxListeners = currentMax;
+      process.setMaxListeners(MIN_MAX_LISTENERS);
     }
 
     process.on('SIGINT', this.sigintHandler);
@@ -88,6 +100,16 @@ export class SelfDriver {
     if (this.sigtermHandler) {
       process.removeListener('SIGTERM', this.sigtermHandler);
       this.sigtermHandler = null;
+    }
+    // Restore original max listeners if we changed it
+    if (this.originalMaxListeners !== null) {
+      process.setMaxListeners(this.originalMaxListeners);
+      this.originalMaxListeners = null;
+    }
+    // Clear any pending sleep timer
+    if (this.sleepTimer) {
+      clearTimeout(this.sleepTimer);
+      this.sleepTimer = null;
     }
   }
 
@@ -129,7 +151,7 @@ export class SelfDriver {
 
       if (!executed) {
         this.log('⚠️  Evolution execution issue, retrying next iteration...');
-        await this.sleep(5000);
+        await this.sleep(DEFAULT_SLEEP_MS);
         continue;
       }
 
@@ -159,8 +181,8 @@ export class SelfDriver {
         return;
       }
 
-      this.log('\n💤 Waiting 5s before next iteration...');
-      await this.sleep(5000);
+      this.log(`\n💤 Waiting ${DEFAULT_SLEEP_MS / 1000}s before next iteration...`);
+      await this.sleep(DEFAULT_SLEEP_MS);
     }
 
     this.log('\n✨ Evolution stopped');
@@ -268,7 +290,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
         cwd: this.projectRoot,
         stdio: 'inherit',
         reject: false,
-        timeout: 600000, // 10 minutes timeout to prevent indefinite hangs
+        timeout: OPENCODE_TIMEOUT_MS, // 10 minutes timeout to prevent indefinite hangs
       });
 
       if (!result || result.exitCode !== 0) {
@@ -309,7 +331,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
         const result = await execa(check.file, check.args, {
           cwd: this.projectRoot,
           reject: false,
-          timeout: 60000,
+          timeout: VERIFY_TIMEOUT_MS,
         });
 
         if (!result || result.exitCode !== 0) {
@@ -356,9 +378,15 @@ If verification fails, do NOT commit - the system will revert automatically.`;
 
   /**
    * Sleeps for the specified duration.
+   * Clears the timer if interrupted to prevent memory leaks.
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise((resolve) => {
+      this.sleepTimer = setTimeout(() => {
+        this.sleepTimer = null;
+        resolve();
+      }, ms);
+    });
   }
 }
 
