@@ -12,6 +12,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { Writable } from 'stream';
 import { CleanOptions, CleanResult } from '../types/clean';
+import { formatError } from '../utils/error';
 import { Logger } from '../utils/logger';
 import { EngineResolver } from './engine-resolver';
 import { ProjectPathResolver } from './project-path-resolver';
@@ -67,9 +68,9 @@ export class CleanExecutor {
           projectPath,
           enginePath: options.enginePath,
         });
-      } catch {
+      } catch (error) {
         // Engine resolution is optional for clean operation
-        this.logger.debug('Could not resolve engine path, continuing without it');
+        this.logger.debug(`Could not resolve engine path: ${formatError(error)}`);
       }
 
       // Define paths to clean
