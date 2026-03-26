@@ -336,10 +336,11 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       { name: 'Tests', file: 'npm', args: ['test'] },
       { name: 'Lint', file: 'npm', args: ['run', 'lint'] },
       // Dynamically generate command checks from EVOLUTION_VERIFY_COMMANDS
+      // Use ts-node with source file to match the AI prompt expectations
       ...EVOLUTION_VERIFY_COMMANDS.map((cmd) => ({
         name: `${cmd.charAt(0).toUpperCase() + cmd.slice(1)} command`,
-        file: 'node',
-        args: ['dist/cli/index.js', cmd, '--help'],
+        file: 'npx',
+        args: ['ts-node', 'src/cli/index.ts', cmd, '--help'],
       })),
     ];
 
