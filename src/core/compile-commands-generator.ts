@@ -16,6 +16,7 @@ import { ProjectPathResolver } from './project-path-resolver';
 import { Platform } from '../utils/platform';
 import { Logger } from '../utils/logger';
 import { TargetResolver } from './target-resolver';
+import { formatError } from '../utils/error';
 
 /** Options for generating compile commands database. */
 export interface CompileCommandsGenerateOptions {
@@ -211,7 +212,7 @@ export class CompileCommandsGenerator {
         settings = JSON.parse(content);
       } catch (error) {
         Logger.debug(
-          `Failed to parse existing settings.json, starting fresh: ${error instanceof Error ? error.message : String(error)}`
+          `Failed to parse existing settings.json, starting fresh: ${formatError(error)}`
         );
         settings = {};
       }

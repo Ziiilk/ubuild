@@ -12,6 +12,7 @@ import { Writable } from 'stream';
 import type { BuildConfiguration, BuildPlatform } from '../types/build';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
+import { formatError } from '../utils/error';
 import { BuildExecutor } from './build-executor';
 import { EngineResolver } from './engine-resolver';
 
@@ -231,9 +232,7 @@ export class ProjectBuilder {
       this.stdout.write('\n');
       this.stdout.write('Use: ubuild build --target <target>\n');
     } catch (error) {
-      this.logger.error(
-        `Failed to list targets: ${error instanceof Error ? error.message : String(error)}`
-      );
+      this.logger.error(`Failed to list targets: ${formatError(error)}`);
     }
   }
 
@@ -259,9 +258,7 @@ export class ProjectBuilder {
         );
       }
     } catch (error) {
-      this.logger.debug(
-        `Engine resolution failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+      this.logger.debug(`Engine resolution failed: ${formatError(error)}`);
       this.stdout.write(
         `  Engine: ${chalk.yellow('Detection failed - specify with --engine-path')}\n`
       );

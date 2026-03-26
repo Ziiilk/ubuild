@@ -17,6 +17,7 @@ import {
   ProjectDetectionOptions,
   ProjectDetectionResult,
 } from '../types/project';
+import { formatError } from '../utils/error';
 
 /**
  * Detects and validates Unreal Engine projects from .uproject files.
@@ -89,7 +90,7 @@ export class ProjectDetector {
     } catch (error) {
       return {
         isValid: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: formatError(error),
         warnings,
       };
     }

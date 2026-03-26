@@ -15,6 +15,7 @@ import type { InitOptions, InitResult, ProjectType } from '../types/init';
 import type { EngineInstallation, EngineVersionInfo } from '../types/engine';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
+import { formatError } from '../utils/error';
 import { EngineResolver } from './engine-resolver';
 
 /**
@@ -105,7 +106,7 @@ export class ProjectInitializer {
         uprojectPath: '',
         engineAssociation: '',
         createdFiles,
-        error: error instanceof Error ? error.message : String(error),
+        error: formatError(error),
       };
     }
   }
@@ -312,9 +313,7 @@ export class ProjectInitializer {
       const versionInfo: EngineVersionInfo = JSON.parse(content);
       return versionInfo;
     } catch (error) {
-      Logger.debug(
-        `getEngineVersionInfo failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+      Logger.debug(`getEngineVersionInfo failed: ${formatError(error)}`);
       return undefined;
     }
   }
@@ -345,9 +344,7 @@ export class ProjectInitializer {
         return `${versionInfo.MajorVersion}.${versionInfo.MinorVersion}`;
       }
     } catch (error) {
-      Logger.debug(
-        `getEngineAssociationId failed, using default: ${error instanceof Error ? error.message : String(error)}`
-      );
+      Logger.debug(`getEngineAssociationId failed, using default: ${formatError(error)}`);
     }
 
     return '5.1';

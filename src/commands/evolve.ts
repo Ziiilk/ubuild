@@ -9,6 +9,7 @@
 
 import { Command } from 'commander';
 import { Logger } from '../utils/logger';
+import { formatError } from '../utils/error';
 import { runSelfEvolution } from '../core/self-driver';
 
 /**
@@ -33,7 +34,7 @@ export function evolveCommand(program: Command): void {
           logger: (msg: string) => Logger.info(msg),
         });
       } catch (error) {
-        Logger.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+        Logger.error(`Error: ${formatError(error)}`);
         process.exit(1);
       }
     });

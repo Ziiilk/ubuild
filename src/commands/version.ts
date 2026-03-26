@@ -10,6 +10,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { Writable } from 'stream';
 import { Logger } from '../utils/logger';
+import { formatError } from '../utils/error';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 
@@ -86,9 +87,7 @@ export async function executeVersion(options: VersionCommandOptions = {}): Promi
     logger.write(`\n`);
     logger.success('Version information retrieved successfully');
   } catch (error) {
-    logger.error(
-      `Failed to retrieve version: ${error instanceof Error ? error.message : String(error)}`
-    );
+    logger.error(`Failed to retrieve version: ${formatError(error)}`);
     process.exit(1);
   }
 }

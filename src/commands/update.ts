@@ -15,6 +15,7 @@ import path from 'path';
 import { Writable } from 'stream';
 import { Logger } from '../utils/logger';
 import { compareVersions } from '../utils/version';
+import { formatError } from '../utils/error';
 
 export interface UpdateCommandOptions {
   /** Writable stream for standard output (defaults to process.stdout) */
@@ -58,9 +59,7 @@ async function isGlobalInstall(logger: Logger): Promise<boolean> {
     ]);
     return listOutput.includes('@zitool/ubuild');
   } catch (error) {
-    logger.debug(
-      `isGlobalInstall check failed: ${error instanceof Error ? error.message : String(error)}`
-    );
+    logger.debug(`isGlobalInstall check failed: ${formatError(error)}`);
     return false;
   }
 }
@@ -127,14 +126,12 @@ export async function executeUpdate(options: UpdateCommandOptions = {}): Promise
       logger.success(`Successfully updated to version ${chalk.bold(newVersion)}!`);
       logger.info('You may need to restart your terminal for changes to take effect.');
     } catch (error) {
-      logger.error(
-        `Failed to check npm: ${error instanceof Error ? error.message : String(error)}`
-      );
+      logger.error(`Failed to check npm: ${formatError(error)}`);
       logger.info('You can manually update using: npm install -g @zitool/ubuild');
       process.exit(1);
     }
   } catch (error) {
-    logger.error(`Update failed: ${error instanceof Error ? error.message : String(error)}`);
+    logger.error(`Update failed: ${formatError(error)}`);
     process.exit(1);
   }
 }

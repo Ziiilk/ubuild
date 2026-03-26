@@ -21,6 +21,7 @@ import {
 import { Platform } from '../utils/platform';
 import { Logger } from '../utils/logger';
 import { ProjectPathResolver } from './project-path-resolver';
+import { formatError } from '../utils/error';
 
 /**
  * Resolves Unreal Engine installations from various sources including
@@ -115,7 +116,7 @@ export class EngineResolver {
       };
     } catch (error) {
       return {
-        error: error instanceof Error ? error.message : String(error),
+        error: formatError(error),
         warnings,
       };
     }
@@ -165,9 +166,7 @@ export class EngineResolver {
 
       return { association, warnings };
     } catch (error) {
-      warnings.push(
-        `Failed to read project file: ${error instanceof Error ? error.message : String(error)}`
-      );
+      warnings.push(`Failed to read project file: ${formatError(error)}`);
       return { warnings };
     }
   }
@@ -230,7 +229,7 @@ export class EngineResolver {
         installations.push(...locationEngines);
         Logger.debug(`Found ${locationEngines.length} engines at ${registryLocation}`);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = formatError(error);
         if (errorMessage.includes('unable to find the specified registry key')) {
           Logger.debug(`Registry key not found: ${registryLocation}`);
         } else {
@@ -444,10 +443,7 @@ export class EngineResolver {
         }
       }
     } catch (error) {
-      Logger.debug(
-        'Failed to read launcher manifest: ' +
-          (error instanceof Error ? error.message : String(error))
-      );
+      Logger.debug('Failed to read launcher manifest: ' + formatError(error));
     }
 
     Logger.debug(`Total launcher engines found: ${installations.length}`);
@@ -525,10 +521,7 @@ export class EngineResolver {
         installation.displayName = `UE ${versionStr}`;
       }
     } catch (error) {
-      Logger.debug(
-        'Failed to load engine version info: ' +
-          (error instanceof Error ? error.message : String(error))
-      );
+      Logger.debug('Failed to load engine version info: ' + formatError(error));
     }
   }
 

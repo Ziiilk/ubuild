@@ -15,6 +15,7 @@ import { Writable } from 'stream';
 import type { BuildConfiguration, BuildPlatform } from '../types/build';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
+import { formatError } from '../utils/error';
 import { BuildExecutor } from './build-executor';
 import { EngineResolver } from './engine-resolver';
 import { ProjectPathResolver } from './project-path-resolver';
@@ -165,9 +166,7 @@ export class ProjectRunner {
         );
       }
     } catch (error) {
-      this.logger.debug(
-        `Engine detection failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+      this.logger.debug(`Engine detection failed: ${formatError(error)}`);
       this.stdout.write(
         `  Engine: ${chalk.yellow('Detection failed - specify with --engine-path')}\n`
       );
@@ -185,9 +184,7 @@ export class ProjectRunner {
         this.stdout.write(`  Executable: ${chalk.yellow('Could not determine path')}\n`);
       }
     } catch (error) {
-      this.logger.debug(
-        `Executable path detection failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+      this.logger.debug(`Executable path detection failed: ${formatError(error)}`);
       this.stdout.write(`  Executable: ${chalk.yellow('Path detection failed')}\n`);
     }
 
@@ -286,9 +283,7 @@ export class ProjectRunner {
 
       await childProcess;
     } catch (error) {
-      throw new Error(
-        `Failed to run executable: ${error instanceof Error ? error.message : String(error)}`
-      );
+      throw new Error(`Failed to run executable: ${formatError(error)}`);
     }
   }
 
@@ -322,9 +317,7 @@ export class ProjectRunner {
             enginePath: options.enginePath,
           });
         } catch (error) {
-          this.logger.debug(
-            `Engine path resolution failed: ${error instanceof Error ? error.message : String(error)}`
-          );
+          this.logger.debug(`Engine path resolution failed: ${formatError(error)}`);
           this.logger.warning('Could not resolve engine path for editor target');
           return null;
         }
@@ -382,9 +375,7 @@ export class ProjectRunner {
 
       return path.join(projectDir, 'Binaries', platform, executableName);
     } catch (error) {
-      this.logger.debug(
-        `findExecutable failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+      this.logger.debug(`findExecutable failed: ${formatError(error)}`);
       return null;
     }
   }

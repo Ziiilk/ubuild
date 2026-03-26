@@ -13,6 +13,7 @@ import fs from 'fs-extra';
 import type { GenerateOptions, GenerateResult, IDE } from '../types/generate';
 import { EngineResolver } from './engine-resolver';
 import { Logger } from '../utils/logger';
+import { formatError } from '../utils/error';
 import { Platform } from '../utils/platform';
 import { ProjectPathResolver } from './project-path-resolver';
 
@@ -122,7 +123,7 @@ export class ProjectGenerator {
       return {
         success: false,
         generatedFiles,
-        error: error instanceof Error ? error.message : String(error),
+        error: formatError(error),
       };
     }
   }

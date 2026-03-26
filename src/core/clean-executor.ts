@@ -135,7 +135,7 @@ export class CleanExecutor {
         success: false,
         deletedPaths,
         failedPaths,
-        error: error instanceof Error ? error.message : String(error),
+        error: formatError(error),
       };
     }
   }
@@ -194,7 +194,7 @@ export class CleanExecutor {
     } catch (error) {
       return {
         deleted: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: formatError(error),
       };
     }
   }
@@ -246,9 +246,7 @@ export class CleanExecutor {
         }
       }
     } catch (error) {
-      this.logger.debug(
-        `Failed to clean plugins: ${error instanceof Error ? error.message : String(error)}`
-      );
+      this.logger.debug(`Failed to clean plugins: ${formatError(error)}`);
     }
 
     return { deletedPaths, failedPaths };

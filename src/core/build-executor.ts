@@ -15,6 +15,7 @@ import { Writable } from 'stream';
 import { BuildOptions, BuildResult } from '../types/build';
 import { EngineResolver } from './engine-resolver';
 import { Logger } from '../utils/logger';
+import { formatError } from '../utils/error';
 import { Platform } from '../utils/platform';
 import { ProjectPathResolver } from './project-path-resolver';
 import { TargetResolver } from './target-resolver';
@@ -103,7 +104,7 @@ export class BuildExecutor {
         success: false,
         exitCode: -1,
         stdout: '',
-        stderr: error instanceof Error ? error.message : String(error),
+        stderr: formatError(error),
         duration,
         error: 'Build execution failed',
       };
@@ -357,9 +358,7 @@ export class BuildExecutor {
         return { name, type };
       });
     } catch (error) {
-      Logger.debug(
-        `getAvailableTargets failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+      Logger.debug(`getAvailableTargets failed: ${formatError(error)}`);
       return [];
     }
   }

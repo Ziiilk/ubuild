@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs-extra';
 import { Logger } from './logger';
+import { formatError } from './error';
 import {
   BUILD_TARGETS,
   BUILD_CONFIGS,
@@ -54,9 +55,7 @@ export class Validator {
 
       return true;
     } catch (error) {
-      Logger.debug(
-        `isValidEnginePath failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+      Logger.debug(`isValidEnginePath failed: ${formatError(error)}`);
       return false;
     }
   }
@@ -131,9 +130,7 @@ export class Validator {
         uproject.FileVersion === 3 && uproject.EngineAssociation && Array.isArray(uproject.Modules)
       );
     } catch (error) {
-      Logger.debug(
-        `isValidUProjectFile failed for ${uprojectPath}: ${error instanceof Error ? error.message : String(error)}`
-      );
+      Logger.debug(`isValidUProjectFile failed for ${uprojectPath}: ${formatError(error)}`);
       return false;
     }
   }
@@ -187,7 +184,7 @@ export class Validator {
     } catch (error) {
       return {
         safe: false,
-        message: `Failed to check directory: ${error instanceof Error ? error.message : String(error)}`,
+        message: `Failed to check directory: ${formatError(error)}`,
       };
     }
   }
