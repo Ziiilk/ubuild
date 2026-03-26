@@ -146,9 +146,13 @@ export class Validator {
       const content = await fs.readFile(uprojectPath, 'utf-8');
       const uproject = JSON.parse(content);
 
-      return Boolean(
-        uproject.FileVersion === 3 && uproject.EngineAssociation && Array.isArray(uproject.Modules)
-      );
+      // Blueprint projects may not have Modules array, so make it optional
+      const hasValidFileVersion = uproject.FileVersion === 3;
+      const hasEngineAssociation =
+        typeof uproject.EngineAssociation === 'string' && uproject.EngineAssociation.length > 0;
+      const hasValidModules = !uproject.Modules || Array.isArray(uproject.Modules);
+
+      return Boolean(hasValidFileVersion && hasEngineAssociation && hasValidModules);
     } catch (error) {
       Logger.debug(`isValidUProjectFile failed for ${uprojectPath}: ${formatError(error)}`);
       return false;
