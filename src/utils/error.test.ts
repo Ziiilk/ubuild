@@ -142,4 +142,78 @@ describe('isError', () => {
       expect(value.message).toBe('test');
     }
   });
+
+  it('should handle ReferenceError', () => {
+    const error = new ReferenceError('Variable not defined');
+    expect(isError(error)).toBe(true);
+    expect(formatError(error)).toBe('Variable not defined');
+  });
+
+  it('should handle URIError', () => {
+    const error = new URIError('Invalid URI');
+    expect(isError(error)).toBe(true);
+    expect(formatError(error)).toBe('Invalid URI');
+  });
+
+  it('should handle Error subclass with custom properties', () => {
+    class ValidationError extends Error {
+      constructor(
+        message: string,
+        public field: string,
+        public code: number
+      ) {
+        super(message);
+        this.name = 'ValidationError';
+      }
+    }
+    const error = new ValidationError('Invalid input', 'username', 400);
+    expect(isError(error)).toBe(true);
+    expect(formatError(error)).toBe('Invalid input');
+  });
+
+  it('should handle circular reference in object', () => {
+    const obj: Record<string, unknown> = { a: 1 };
+    obj.self = obj;
+    // String() should handle circular references gracefully
+    expect(() => formatError(obj)).not.toThrow();
+  });
+
+  it('should handle symbols', () => {
+    const sym = Symbol('test');
+    expect(formatError(sym)).toBe('Symbol(test)');
+  });
+
+  it('should handle BigInt', () => {
+    const bigInt = BigInt(9007199254740991);
+    expect(formatError(bigInt)).toBe('9007199254740991');
+  });
+
+  it('should handle functions', () => {
+    const fn = () => 'test';
+    // String() on arrow function returns the function source
+    const result = formatError(fn);
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('should handle getErrorStack with custom Error subclass', () => {
+    class CustomError extends Error {
+      constructor(message: string) {
+        super(message);
+        this.name = 'CustomError';
+      }
+    }
+    const error = new CustomError('Test');
+    const stack = getErrorStack(error);
+    expect(stack).toBeDefined();
+    expect(stack).toContain('CustomError: Test');
+  });
+
+  it('should handle formatErrorWithPrefix with undefined error', () => {
+    expect(formatErrorWithPrefix('Prefix', undefined)).toBe('Prefix: undefined');
+  });
+
+  it('should handle formatErrorWithPrefix with empty string error', () => {
+    expect(formatErrorWithPrefix('Error', '')).toBe('Error: ');
+  });
 });
