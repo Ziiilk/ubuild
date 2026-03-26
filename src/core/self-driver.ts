@@ -14,6 +14,7 @@ import { formatError } from '../utils/error';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 
+import { EVOLUTION_VERIFY_COMMANDS } from '../types/evolve';
 import type { SelfEvolverOptions } from '../types/evolve';
 
 export type { SelfEvolverOptions };
@@ -326,67 +327,20 @@ If verification fails, do NOT commit - the system will revert automatically.`;
 
   /**
    * Comprehensive verification - includes self-verification.
+   * Uses EVOLUTION_VERIFY_COMMANDS to dynamically check all CLI commands.
+   * When adding new commands, add them to EVOLUTION_VERIFY_COMMANDS in types/evolve.ts.
    */
   private async verify(): Promise<boolean> {
     const checks: Array<{ name: string; file: string; args: string[] }> = [
       { name: 'Build', file: 'npm', args: ['run', 'build'] },
       { name: 'Tests', file: 'npm', args: ['test'] },
       { name: 'Lint', file: 'npm', args: ['run', 'lint'] },
-      {
-        name: 'Evolve command',
+      // Dynamically generate command checks from EVOLUTION_VERIFY_COMMANDS
+      ...EVOLUTION_VERIFY_COMMANDS.map((cmd) => ({
+        name: `${cmd.charAt(0).toUpperCase() + cmd.slice(1)} command`,
         file: 'node',
-        args: ['dist/cli/index.js', 'evolve', '--help'],
-      },
-      {
-        name: 'List command',
-        file: 'node',
-        args: ['dist/cli/index.js', 'list', '--help'],
-      },
-      {
-        name: 'Engine command',
-        file: 'node',
-        args: ['dist/cli/index.js', 'engine', '--help'],
-      },
-      {
-        name: 'Build command',
-        file: 'node',
-        args: ['dist/cli/index.js', 'build', '--help'],
-      },
-      {
-        name: 'Generate command',
-        file: 'node',
-        args: ['dist/cli/index.js', 'generate', '--help'],
-      },
-      {
-        name: 'Init command',
-        file: 'node',
-        args: ['dist/cli/index.js', 'init', '--help'],
-      },
-      {
-        name: 'Run command',
-        file: 'node',
-        args: ['dist/cli/index.js', 'run', '--help'],
-      },
-      {
-        name: 'Clean command',
-        file: 'node',
-        args: ['dist/cli/index.js', 'clean', '--help'],
-      },
-      {
-        name: 'Update command',
-        file: 'node',
-        args: ['dist/cli/index.js', 'update', '--help'],
-      },
-      {
-        name: 'Version command',
-        file: 'node',
-        args: ['dist/cli/index.js', 'version', '--help'],
-      },
-      {
-        name: 'Gencodebase command',
-        file: 'node',
-        args: ['dist/cli/index.js', 'gencodebase', '--help'],
-      },
+        args: ['dist/cli/index.js', cmd, '--help'],
+      })),
     ];
 
     for (const check of checks) {

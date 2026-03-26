@@ -9,6 +9,25 @@
  */
 
 /**
+ * Commands to verify during self-evolution.
+ * These commands are checked with `--help` to ensure they work correctly.
+ * When adding new commands, add them here to include them in verification.
+ */
+export const EVOLUTION_VERIFY_COMMANDS: string[] = [
+  'list',
+  'engine',
+  'build',
+  'generate',
+  'init',
+  'run',
+  'clean',
+  'update',
+  'version',
+  'gencodebase',
+  'evolve',
+];
+
+/**
  * Options for configuring the self-evolution driver.
  *
  * @example
