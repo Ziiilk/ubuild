@@ -86,6 +86,10 @@ describe('SelfDriver', () => {
   afterEach(() => {
     jest.restoreAllMocks();
     process.cwd = originalCwd;
+    // Cleanup signal handlers to prevent memory leaks
+    if (driver) {
+      driver.cleanup();
+    }
   });
 
   describe('constructor', () => {
@@ -430,6 +434,12 @@ describe('SelfDriver', () => {
   });
 
   describe('signal handling', () => {
+    afterEach(() => {
+      if (driver) {
+        driver.cleanup();
+      }
+    });
+
     it('handles SIGINT signal', () => {
       driver = new SelfDriver();
 
@@ -442,6 +452,27 @@ describe('SelfDriver', () => {
 
       // Emit SIGTERM - should not throw
       expect(() => process.emit('SIGTERM' as NodeJS.Signals)).not.toThrow();
+    });
+
+    it('cleans up signal handlers when cleanup is called', () => {
+      driver = new SelfDriver();
+
+      // Cleanup should not throw
+      expect(() => driver.cleanup()).not.toThrow();
+
+      // Emitting signals after cleanup should not affect the driver
+      expect(() => process.emit('SIGINT' as NodeJS.Signals)).not.toThrow();
+      expect(() => process.emit('SIGTERM' as NodeJS.Signals)).not.toThrow();
+    });
+
+    it('handles multiple cleanup calls gracefully', () => {
+      driver = new SelfDriver();
+
+      // Multiple cleanups should not throw
+      expect(() => {
+        driver.cleanup();
+        driver.cleanup();
+      }).not.toThrow();
     });
   });
 });

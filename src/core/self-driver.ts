@@ -31,6 +31,8 @@ export class SelfDriver {
   private log: (msg: string) => void;
   private projectRoot: string;
   private interrupted = false;
+  private sigintHandler: (() => void) | null = null;
+  private sigtermHandler: (() => void) | null = null;
 
   /**
    * Creates a new SelfDriver instance.
@@ -46,14 +48,33 @@ export class SelfDriver {
    * Sets up signal handlers for graceful interruption (Ctrl+C, SIGTERM).
    */
   private setupSignalHandlers(): void {
-    const sigintHandler = (): void => {
+    this.sigintHandler = (): void => {
       this.interrupted = true;
       this.log('\n\n⚠️  Interrupted by user (Ctrl+C)');
     };
+    this.sigtermHandler = (): void => {
+      this.interrupted = true;
+      this.log('\n\n⚠️  Interrupted by SIGTERM');
+    };
 
     process.setMaxListeners(20);
-    process.on('SIGINT', sigintHandler);
-    process.on('SIGTERM', sigintHandler);
+    process.on('SIGINT', this.sigintHandler);
+    process.on('SIGTERM', this.sigtermHandler);
+  }
+
+  /**
+   * Cleans up signal handlers to prevent memory leaks.
+   * Should be called when the driver is no longer needed.
+   */
+  cleanup(): void {
+    if (this.sigintHandler) {
+      process.removeListener('SIGINT', this.sigintHandler);
+      this.sigintHandler = null;
+    }
+    if (this.sigtermHandler) {
+      process.removeListener('SIGTERM', this.sigtermHandler);
+      this.sigtermHandler = null;
+    }
   }
 
   /**
@@ -97,6 +118,7 @@ export class SelfDriver {
     }
 
     this.log('\n✨ Evolution stopped');
+    this.cleanup();
   }
 
   /**
