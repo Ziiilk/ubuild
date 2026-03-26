@@ -137,6 +137,16 @@ export class SelfDriver {
       return;
     }
 
+    // Pre-flight check: working tree must be clean to prevent data loss
+    const isClean = await this.isWorkingTreeClean();
+    if (!isClean) {
+      this.log('❌ Error: Working tree has uncommitted changes');
+      this.log('   Self-evolution may revert changes using `git checkout .`');
+      this.log('   Commit or stash your changes before running evolve.');
+      this.cleanup();
+      return;
+    }
+
     if (this.dryRun) {
       this.log('🔍 Dry run mode - showing what would be done');
       this.log(`📁 Project: ${this.projectRoot}`);

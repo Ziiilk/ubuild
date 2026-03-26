@@ -640,6 +640,34 @@ describe('SelfDriver', () => {
       expect(mockLogger).toHaveBeenCalledWith(`   Current directory: ${mockProjectRoot}`);
     });
 
+    it('exits early when working tree has uncommitted changes', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ once: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        // Git rev-parse succeeds - is a git repo
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(0, '.git', '');
+        }
+        // Git status shows uncommitted changes
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+          return mockExecaResult(0, 'M src/some-file.ts', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const run = (driver as unknown as { run: () => Promise<void> }).run;
+      await run.call(driver);
+
+      expect(mockLogger).toHaveBeenCalledWith('❌ Error: Working tree has uncommitted changes');
+      expect(mockLogger).toHaveBeenCalledWith(
+        '   Self-evolution may revert changes using `git checkout .`'
+      );
+      expect(mockLogger).toHaveBeenCalledWith(
+        '   Commit or stash your changes before running evolve.'
+      );
+    });
+
     it('proceeds with evolution when in a git repository', async () => {
       const mockLogger = jest.fn();
       driver = new SelfDriver({ once: true, logger: mockLogger });
@@ -759,49 +787,19 @@ describe('pre-existing dirty state handling', () => {
     }
   });
 
-  it('reverts when working tree has pre-existing uncommitted changes', async () => {
+  it('exits early when working tree has pre-existing uncommitted changes', async () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ once: true, logger: mockLogger });
 
     mockExeca.mockImplementation(async (command: string, args?: string[]) => {
-      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+      // Git rev-parse succeeds - is a git repo
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
 
       // Git status always returns dirty (pre-existing changes)
       if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
         return mockExecaResult(0, 'M src/some-file.ts', '');
-      }
-
-      // Track git checkout calls
-      if (command === 'git' && args?.includes('checkout')) {
-        return mockExecaResult(0, '', '');
-      }
-
-      // All verification checks pass
-      if (fullCommand.includes('npm run build')) {
-        return mockExecaResult(0, '', '');
-      }
-      if (fullCommand.includes('npm test')) {
-        return mockExecaResult(0, 'Test Suites: 10 passed', '');
-      }
-      if (fullCommand.includes('npm run lint')) {
-        return mockExecaResult(0, '', '');
-      }
-      if (fullCommand.includes('evolve --help') || fullCommand.includes('list --help')) {
-        return mockExecaResult(0, 'Usage: [command] [options]', '');
-      }
-
-      // OpenCode executes successfully
-      if (command === 'opencode') {
-        if (args?.includes('--version')) {
-          return mockExecaResult(0, '1.0.0', '');
-        }
-        if (args?.includes('run')) {
-          return mockExecaResult(0, '', '');
-        }
-      }
-
-      if (command === 'git' && args?.includes('ls-files')) {
-        return mockExecaResult(0, 'src/core/self-driver.ts', '');
       }
 
       return mockExecaResult(0, '', '');
@@ -810,24 +808,17 @@ describe('pre-existing dirty state handling', () => {
     const run = (driver as unknown as { run: () => Promise<void> }).run;
     await run.call(driver);
 
-    // Should log that verification passed
-    expect(mockLogger).toHaveBeenCalledWith('  ✅ Build passed');
-    expect(mockLogger).toHaveBeenCalledWith('  ✅ Tests passed');
-    expect(mockLogger).toHaveBeenCalledWith('  ✅ Lint passed');
-
-    // Should detect working tree not clean
+    // Should exit early with dirty state error
+    expect(mockLogger).toHaveBeenCalledWith('❌ Error: Working tree has uncommitted changes');
     expect(mockLogger).toHaveBeenCalledWith(
-      '⚠️  Working tree not clean after verification - AI should have committed'
+      '   Self-evolution may revert changes using `git checkout .`'
+    );
+    expect(mockLogger).toHaveBeenCalledWith(
+      '   Commit or stash your changes before running evolve.'
     );
 
-    // Should revert due to dirty state
-    expect(mockLogger).toHaveBeenCalledWith('🔄 Reverting...');
-
-    // Verify git checkout was called
-    const checkoutCalls = mockExeca.mock.calls.filter(
-      (call) => call[0] === 'git' && (call[1] as string[]).includes('checkout')
-    );
-    expect(checkoutCalls.length).toBeGreaterThan(0);
+    // Should NOT proceed with evolution
+    expect(mockLogger).not.toHaveBeenCalledWith('🔄 Starting self-evolution...');
   });
 
   it('commits successfully when working tree is clean after evolution', async () => {
