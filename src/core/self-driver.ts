@@ -196,7 +196,12 @@ Do NOT commit - just implement and verify.`;
         reject: false,
       });
 
-      return result.exitCode === 0;
+      if (result.exitCode !== 0) {
+        this.log(`⚠️  OpenCode exited with code ${result.exitCode}`);
+        return false;
+      }
+
+      return true;
     } catch (error) {
       this.log(`⚠️  OpenCode execution failed: ${formatError(error)}`);
       return false;
