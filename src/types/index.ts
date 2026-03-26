@@ -198,3 +198,17 @@ export type { CleanOptions, CleanResult } from './clean';
  * ```
  */
 export type { SelfEvolverOptions } from './evolve';
+
+/**
+ * Commands verified during self-evolution process.
+ *
+ * These commands are checked with `--help` to ensure CLI functionality.
+ *
+ * @example
+ * ```typescript
+ * import { EVOLUTION_VERIFY_COMMANDS } from '@zitool/ubuild/types';
+ *
+ * console.log('Verified commands:', EVOLUTION_VERIFY_COMMANDS);
+ * ```
+ */
+export { EVOLUTION_VERIFY_COMMANDS } from './evolve';
