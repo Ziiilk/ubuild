@@ -1,3 +1,28 @@
+/**
+ * Logger utility for structured console output.
+ *
+ * Provides a flexible logging system with multiple log levels, colorized output,
+ * and support for both instance-based and static method usage. The Logger class
+ * offers formatted output with visual indicators for different message types.
+ *
+ * @module utils/logger
+ *
+ * @example
+ * ```typescript
+ * import { Logger } from './utils/logger';
+ *
+ * // Create a logger instance
+ * const logger = new Logger({ prefix: 'Build' });
+ * logger.info('Starting build process');
+ * logger.success('Build completed successfully');
+ * logger.error('Build failed');
+ *
+ * // Use static methods for global logging
+ * Logger.info('System ready');
+ * Logger.warning('Low disk space');
+ * ```
+ */
+
 import chalk from 'chalk';
 import { Writable } from 'stream';
 

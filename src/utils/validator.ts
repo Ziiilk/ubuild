@@ -18,6 +18,8 @@ import {
 /**
  * Validates various inputs for Unreal Engine project operations.
  * Includes validation for project names, engine paths, build targets, and more.
+ *
+ * @module utils/validator
  */
 export class Validator {
   /**

@@ -2,6 +2,8 @@
  * Centralized constants for valid option values.
  * Used across types, validators, and commands for consistency.
  *
+ * @module utils/constants
+ *
  * @example
  * ```typescript
  * import { BUILD_TARGETS, DEFAULTS } from './utils/constants';
