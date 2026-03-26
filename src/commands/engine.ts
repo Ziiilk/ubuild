@@ -186,10 +186,15 @@ export function engineCommand(program: Command): void {
     .option('-j, --json', 'Output result as JSON')
     .option('-v, --verbose', 'Show verbose engine detection details')
     .action(async (options) => {
-      await executeEngine({
-        project: options.project,
-        json: options.json,
-        verbose: options.verbose,
-      });
+      try {
+        await executeEngine({
+          project: options.project,
+          json: options.json,
+          verbose: options.verbose,
+        });
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exit(1);
+      }
     });
 }
