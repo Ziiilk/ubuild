@@ -9,7 +9,7 @@
  */
 
 import { execa } from 'execa';
-import { Logger } from '../utils/logger';
+import { Logger, formatTimestamp } from '../utils/logger';
 import { formatError } from '../utils/error';
 import * as fs from 'fs-extra';
 import * as path from 'path';
@@ -48,7 +48,7 @@ export class SelfDriver {
    * @param options - Configuration options for the evolution process
    */
   constructor(options: SelfEvolverOptions = {}) {
-    this.log = options.logger || ((msg: string) => Logger.info(msg));
+    this.log = options.logger || ((msg: string) => Logger.info(`[${formatTimestamp()}] ${msg}`));
     this.projectRoot = process.cwd();
     this.once = options.once || false;
     this.dryRun = options.dryRun || false;
