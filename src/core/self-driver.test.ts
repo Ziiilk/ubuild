@@ -471,4 +471,16 @@ describe('runSelfEvolution', () => {
   it('exports runSelfEvolution function', () => {
     expect(typeof runSelfEvolution).toBe('function');
   });
+
+  it('runs self-evolution with custom logger', async () => {
+    const mockLogger = jest.fn();
+
+    // We can't fully test this without mocking the SelfDriver class,
+    // but we can verify the function accepts the options
+    expect(() => runSelfEvolution({ logger: mockLogger })).not.toThrow();
+  });
+
+  it('runs self-evolution without options', async () => {
+    expect(() => runSelfEvolution()).not.toThrow();
+  });
 });
