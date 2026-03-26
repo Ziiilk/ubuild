@@ -82,16 +82,18 @@ export class ProjectGenerator {
    */
   static async generate(options: GenerateOptions): Promise<GenerateResult> {
     const generatedFiles: string[] = [];
+    const silent = options.silent || false;
+    const logger = new Logger({ silent });
 
     try {
       const validatedOptions = await this.validateOptions(options);
       const { ide, projectPath, enginePath, force } = validatedOptions;
 
-      Logger.info(`Generating ${ide.toUpperCase()} project files`);
-      Logger.info(`Project: ${projectPath}`);
-      Logger.info(`Engine: ${enginePath}`);
+      logger.info(`Generating ${ide.toUpperCase()} project files`);
+      logger.info(`Project: ${projectPath}`);
+      logger.info(`Engine: ${enginePath}`);
 
-      await this.generateWithUBT(enginePath, projectPath, force, ide);
+      await this.generateWithUBT(enginePath, projectPath, force, ide, logger);
 
       // Collect IDE-specific generated files
       generatedFiles.push(...(await this.findGeneratedSolutionFiles(projectPath)));
@@ -145,11 +147,14 @@ export class ProjectGenerator {
       enginePath: options.enginePath,
     });
 
+    const silent = options.silent || false;
+
     return {
       ide,
       projectPath,
       enginePath,
       force,
+      silent,
     };
   }
 
@@ -167,7 +172,8 @@ export class ProjectGenerator {
     enginePath: string,
     projectPath: string,
     force: boolean,
-    ide: IDE
+    ide: IDE,
+    logger: Logger
   ): Promise<void> {
     const ubtPath = path.join(
       enginePath,
@@ -207,14 +213,14 @@ export class ProjectGenerator {
       childProcess.stdout.on('data', (data: Buffer) => {
         const output = data.toString();
         if (!output.includes('Log file created')) {
-          process.stdout.write(output);
+          logger.write(output);
         }
       });
     }
 
     if (childProcess.stderr) {
       childProcess.stderr.on('data', (data: Buffer) => {
-        process.stderr.write(data.toString());
+        logger.writeError(data.toString());
       });
     }
 

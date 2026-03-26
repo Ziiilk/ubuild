@@ -69,6 +69,13 @@ export interface GenerateOptions {
    * @default false
    */
   force?: boolean;
+
+  /**
+   * Suppress all output during generation.
+   * When true, no messages will be logged to stdout/stderr.
+   * @default false
+   */
+  silent?: boolean;
 }
 
 /**

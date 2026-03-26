@@ -54,6 +54,7 @@ export class CompileCommandsGenerator {
   static async generate(options: CompileCommandsGenerateOptions): Promise<string> {
     const projectPath = await ProjectPathResolver.resolveOrThrow(options.project || process.cwd());
     const silent = options.silent || false;
+    const logger = new Logger({ silent });
 
     if (!(await fs.pathExists(projectPath))) {
       throw new Error(`Project file not found: ${projectPath}`);
@@ -123,13 +124,13 @@ export class CompileCommandsGenerator {
 
     if (childProcess.stdout) {
       childProcess.stdout.on('data', (data: Buffer) => {
-        Logger.info(data.toString().trim());
+        logger.info(data.toString().trim());
       });
     }
 
     if (childProcess.stderr) {
       childProcess.stderr.on('data', (data: Buffer) => {
-        Logger.error(data.toString().trim());
+        logger.error(data.toString().trim());
       });
     }
 
