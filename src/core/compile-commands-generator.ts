@@ -112,15 +112,13 @@ export class CompileCommandsGenerator {
       Logger.divider();
     }
 
-    const command = `"${ubtPath}" ${args.join(' ')}`;
     if (!silent) {
-      Logger.debug(`Executing: ${command}`);
+      Logger.debug(`Executing: ${ubtPath} ${args.join(' ')}`);
     }
 
-    const childProcess = execa(command, {
+    const childProcess = execa(ubtPath, args, {
       stdio: 'pipe',
       cwd: path.dirname(ubtPath),
-      shell: true,
     });
 
     if (childProcess.stdout) {

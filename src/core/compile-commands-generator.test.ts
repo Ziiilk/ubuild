@@ -10,7 +10,6 @@ import { createFakeEngine, createFakeProject, withTempDir } from '../test-utils'
 interface ExecaOptions {
   stdio: 'pipe';
   cwd: string;
-  shell: true;
 }
 
 interface ExecaResult {
@@ -30,10 +29,10 @@ interface MockExecaProcessOptions {
   streamedStderr?: string[];
 }
 
-const mockExeca = jest.fn<MockChildProcess, [string, ExecaOptions]>();
+const mockExeca = jest.fn<MockChildProcess, [string, string[], ExecaOptions]>();
 
 jest.mock('execa', () => ({
-  execa: (...args: [string, ExecaOptions]) => mockExeca(...args),
+  execa: (...args: [string, string[], ExecaOptions]) => mockExeca(...args),
 }));
 
 const mockLoggerInfo = jest.fn();
@@ -109,8 +108,8 @@ describe('CompileCommandsGenerator', () => {
       expect(result).toBe(path.join(project.projectDir, '.vscode', 'compile_commands.json'));
       expect(mockExeca).toHaveBeenCalledTimes(1);
       expect(mockExeca.mock.calls[0][0]).toContain('UnrealBuildTool');
-      expect(mockExeca.mock.calls[0][0]).toContain('-mode=GenerateClangDatabase');
-      expect(mockExeca.mock.calls[0][0]).toContain(`-Project="${project.uprojectPath}"`);
+      expect(mockExeca.mock.calls[0][1]).toContain('-mode=GenerateClangDatabase');
+      expect(mockExeca.mock.calls[0][1]).toContain(`-Project="${project.uprojectPath}"`);
     });
   });
 
@@ -133,7 +132,7 @@ describe('CompileCommandsGenerator', () => {
         silent: true,
       });
 
-      expect(mockExeca.mock.calls[0][0]).toContain('-Target="CustomGame Linux Shipping"');
+      expect(mockExeca.mock.calls[0][1]).toContain('-Target="CustomGame Linux Shipping"');
     });
   });
 
@@ -155,9 +154,9 @@ describe('CompileCommandsGenerator', () => {
         silent: true,
       });
 
-      const command = mockExeca.mock.calls[0][0];
-      expect(command).toContain('-Target="MultiTargetGameEditor Win64 Development"');
-      expect(command).toContain('-Target="MultiTargetGame Win64 Development"');
+      const args = mockExeca.mock.calls[0][1];
+      expect(args).toContain('-Target="MultiTargetGameEditor Win64 Development"');
+      expect(args).toContain('-Target="MultiTargetGame Win64 Development"');
     });
   });
 
@@ -178,10 +177,10 @@ describe('CompileCommandsGenerator', () => {
         silent: true,
       });
 
-      const command = mockExeca.mock.calls[0][0];
-      expect(command).toContain('-IncludePluginSources');
-      expect(command).toContain('-IncludeEngineSources');
-      expect(command).toContain('-UseEngineIncludes');
+      const args = mockExeca.mock.calls[0][1];
+      expect(args).toContain('-IncludePluginSources');
+      expect(args).toContain('-IncludeEngineSources');
+      expect(args).toContain('-UseEngineIncludes');
     });
   });
 
@@ -202,10 +201,10 @@ describe('CompileCommandsGenerator', () => {
         silent: true,
       });
 
-      const command = mockExeca.mock.calls[0][0];
-      expect(command).not.toContain('-IncludePluginSources');
-      expect(command).not.toContain('-IncludeEngineSources');
-      expect(command).not.toContain('-UseEngineIncludes');
+      const args = mockExeca.mock.calls[0][1];
+      expect(args).not.toContain('-IncludePluginSources');
+      expect(args).not.toContain('-IncludeEngineSources');
+      expect(args).not.toContain('-UseEngineIncludes');
     });
   });
 
@@ -303,9 +302,9 @@ describe('CompileCommandsGenerator', () => {
         silent: true,
       });
 
-      const command = mockExeca.mock.calls[0][0];
-      expect(command).toContain('-Target="Editor Win64 Development"');
-      expect(command).toContain('-Target="Game Win64 Development"');
+      const args = mockExeca.mock.calls[0][1];
+      expect(args).toContain('-Target="Editor Win64 Development"');
+      expect(args).toContain('-Target="Game Win64 Development"');
     });
   });
 

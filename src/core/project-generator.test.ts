@@ -7,7 +7,6 @@ import { createFakeEngine, createFakeProject, withTempDir } from '../test-utils'
 interface ExecaOptions {
   stdio: 'pipe';
   cwd: string;
-  shell: true;
 }
 
 interface ExecaResult {
@@ -27,10 +26,10 @@ interface MockExecaProcessOptions {
   streamedStderr?: string[];
 }
 
-const mockExeca = jest.fn<MockChildProcess, [string, ExecaOptions]>();
+const mockExeca = jest.fn<MockChildProcess, [string, string[], ExecaOptions]>();
 
 jest.mock('execa', () => ({
-  execa: (...args: [string, ExecaOptions]) => mockExeca(...args),
+  execa: (...args: [string, string[], ExecaOptions]) => mockExeca(...args),
 }));
 
 function createMockChildProcess(options: MockExecaProcessOptions = {}): MockChildProcess {
@@ -92,9 +91,9 @@ describe('ProjectGenerator', () => {
         expect(mockExeca).toHaveBeenCalledTimes(1);
         expect(mockExeca).toHaveBeenCalledWith(
           expect.stringContaining('UnrealBuildTool'),
+          expect.arrayContaining(['-projectfiles']),
           expect.objectContaining({
             stdio: 'pipe',
-            shell: true,
           })
         );
       });
@@ -229,7 +228,8 @@ describe('ProjectGenerator', () => {
 
         expect(result.success).toBe(true);
         expect(mockExeca).toHaveBeenCalledWith(
-          expect.not.stringContaining('-VSCode'),
+          expect.stringContaining('UnrealBuildTool'),
+          expect.not.arrayContaining(['-VSCode']),
           expect.anything()
         );
       });
@@ -255,7 +255,8 @@ describe('ProjectGenerator', () => {
 
         expect(result.success).toBe(true);
         expect(mockExeca).toHaveBeenCalledWith(
-          expect.stringContaining('-force'),
+          expect.stringContaining('UnrealBuildTool'),
+          expect.arrayContaining(['-force']),
           expect.anything()
         );
       });
@@ -449,7 +450,8 @@ describe('ProjectGenerator', () => {
 
         expect(result.success).toBe(true);
         expect(mockExeca).toHaveBeenCalledWith(
-          expect.stringContaining(`-project="${project.uprojectPath}"`),
+          expect.stringContaining('UnrealBuildTool'),
+          expect.arrayContaining([`-project="${project.uprojectPath}"`]),
           expect.anything()
         );
       });
@@ -569,7 +571,8 @@ describe('ProjectGenerator', () => {
           });
 
           expect(mockExeca).toHaveBeenLastCalledWith(
-            expect.stringContaining(flag),
+            expect.stringContaining('UnrealBuildTool'),
+            expect.arrayContaining([flag]),
             expect.anything()
           );
         }

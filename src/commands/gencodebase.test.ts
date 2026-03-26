@@ -21,10 +21,10 @@ interface MockEngineResult {
 
 type GencodebaseExecaInvocation = [
   string,
+  string[],
   {
     stdio: string;
     cwd: string;
-    shell: boolean;
   },
 ];
 
@@ -96,11 +96,11 @@ describe('gencodebaseCommand', () => {
       await runRegisteredCommand(['gencodebase', '--project', project.projectDir, '--json']);
 
       expect(mockExeca).toHaveBeenCalledWith(
-        expect.stringContaining(`-Target="${project.projectName}Editor Win64 Development"`),
+        expect.stringContaining('UnrealBuildTool'),
+        expect.arrayContaining([`-Target="${project.projectName}Editor Win64 Development"`]),
         expect.objectContaining({
           stdio: 'pipe',
           cwd: path.dirname(engine.unrealBuildToolPath),
-          shell: true,
         })
       );
       expect(Logger.json).toHaveBeenCalledWith({ success: true, path: generatedPath });
@@ -206,7 +206,8 @@ describe('gencodebaseCommand', () => {
       ]);
 
       expect(mockExeca).toHaveBeenCalledWith(
-        expect.stringContaining('-Target="NebulaGameGame Linux Shipping"'),
+        expect.stringContaining('UnrealBuildTool'),
+        expect.arrayContaining(['-Target="NebulaGameGame Linux Shipping"']),
         expect.any(Object)
       );
     });
@@ -239,10 +240,10 @@ describe('gencodebaseCommand', () => {
         '--no-include-plugin-sources',
       ]);
 
-      const command = mockExeca.mock.calls[0][0] as string;
-      expect(command).not.toContain('-IncludePluginSources');
-      expect(command).toContain('-IncludeEngineSources');
-      expect(command).toContain('-UseEngineIncludes');
+      const args = mockExeca.mock.calls[0][1] as string[];
+      expect(args).not.toContain('-IncludePluginSources');
+      expect(args).toContain('-IncludeEngineSources');
+      expect(args).toContain('-UseEngineIncludes');
     });
   });
 
@@ -273,10 +274,10 @@ describe('gencodebaseCommand', () => {
         '--no-include-engine-sources',
       ]);
 
-      const command = mockExeca.mock.calls[0][0] as string;
-      expect(command).toContain('-IncludePluginSources');
-      expect(command).not.toContain('-IncludeEngineSources');
-      expect(command).toContain('-UseEngineIncludes');
+      const args = mockExeca.mock.calls[0][1] as string[];
+      expect(args).toContain('-IncludePluginSources');
+      expect(args).not.toContain('-IncludeEngineSources');
+      expect(args).toContain('-UseEngineIncludes');
     });
   });
 
@@ -307,10 +308,10 @@ describe('gencodebaseCommand', () => {
         '--no-use-engine-includes',
       ]);
 
-      const command = mockExeca.mock.calls[0][0] as string;
-      expect(command).toContain('-IncludePluginSources');
-      expect(command).toContain('-IncludeEngineSources');
-      expect(command).not.toContain('-UseEngineIncludes');
+      const args = mockExeca.mock.calls[0][1] as string[];
+      expect(args).toContain('-IncludePluginSources');
+      expect(args).toContain('-IncludeEngineSources');
+      expect(args).not.toContain('-UseEngineIncludes');
     });
   });
 

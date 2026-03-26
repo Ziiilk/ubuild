@@ -198,11 +198,9 @@ export class ProjectGenerator {
 
     Logger.debug(`Executing: ${ubtPath} ${args.join(' ')}`);
 
-    const command = `"${ubtPath}" ${args.join(' ')}`;
-    const childProcess = execa(command, {
+    const childProcess = execa(ubtPath, args, {
       stdio: 'pipe',
       cwd: path.dirname(ubtPath),
-      shell: true,
     });
 
     if (childProcess.stdout) {
