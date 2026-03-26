@@ -327,8 +327,8 @@ Execute your decision. Make minimal, focused changes.
    - npm run build
    - npm test
    - npm run lint
-   - node dist/cli/index.js evolve --help
-   - node dist/cli/index.js list --help
+   - npx ts-node src/cli/index.ts evolve --help
+   - npx ts-node src/cli/index.ts list --help
 
 2. **Commit** if verification passes:
    \`\`\`bash
