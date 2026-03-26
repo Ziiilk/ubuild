@@ -116,7 +116,9 @@ describe('CompileCommandsGenerator', () => {
         enginePath: engine.enginePath,
       });
 
-      expect(result).toBe(path.join(path.dirname(project.uprojectPath), 'compile_commands.json'));
+      expect(result).toBe(
+        path.join(path.dirname(project.uprojectPath), '.vscode', 'compile_commands.json')
+      );
       expect(mockExeca).toHaveBeenCalled();
     });
   });
@@ -142,8 +144,8 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = execaCalls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
-      expect(ubtCall![1]).toContain('TestGame');
-      expect(ubtCall![1]).toContain('Shipping');
+      expect(ubtCall![1]).toEqual(expect.arrayContaining([expect.stringContaining('TestGame')]));
+      expect(ubtCall![1]).toEqual(expect.arrayContaining([expect.stringContaining('Shipping')]));
     });
   });
 
@@ -164,7 +166,7 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
-      expect(ubtCall![1]).toContain('Linux');
+      expect(ubtCall![1]).toEqual(expect.arrayContaining([expect.stringContaining('Linux')]));
     });
   });
 
@@ -195,7 +197,7 @@ describe('CompileCommandsGenerator', () => {
           project: project.uprojectPath,
           enginePath: engine.enginePath,
         })
-      ).rejects.toThrow('Failed to generate compile commands');
+      ).rejects.toThrow('Generate compile commands failed');
     });
   });
 
@@ -243,7 +245,7 @@ describe('CompileCommandsGenerator', () => {
           project: project.uprojectPath,
           enginePath: engine.enginePath,
         })
-      ).rejects.toThrow('Failed to generate compile commands');
+      ).rejects.toThrow('Process spawn failed');
     });
   });
 
@@ -261,7 +263,7 @@ describe('CompileCommandsGenerator', () => {
           project: project.uprojectPath,
           enginePath: engine.enginePath,
         })
-      ).rejects.toThrow('Compile commands file not found');
+      ).rejects.toThrow('compile_commands.json not found');
     });
   });
 
@@ -290,13 +292,15 @@ describe('CompileCommandsGenerator', () => {
         enginePath: engine.enginePath,
       });
 
-      // Verify file was moved to project directory
-      expect(result).toBe(path.join(projectDir, 'compile_commands.json'));
-      const existsInProject = await fs.pathExists(path.join(projectDir, 'compile_commands.json'));
+      // Verify file was moved to project .vscode directory
+      expect(result).toBe(path.join(projectDir, '.vscode', 'compile_commands.json'));
+      const existsInProject = await fs.pathExists(
+        path.join(projectDir, '.vscode', 'compile_commands.json')
+      );
       expect(existsInProject).toBe(true);
 
       // Verify content was preserved
-      const content = await fs.readJson(path.join(projectDir, 'compile_commands.json'));
+      const content = await fs.readJson(path.join(projectDir, '.vscode', 'compile_commands.json'));
       expect(content).toEqual(compileCommands);
     });
   });
@@ -307,11 +311,13 @@ describe('CompileCommandsGenerator', () => {
       const engine = await createFakeEngine(rootDir);
       const projectDir = path.dirname(project.uprojectPath);
 
-      // Create existing compile_commands.json in project directory
+      // Create existing compile_commands.json in project .vscode directory
+      const vscodeDir = path.join(projectDir, '.vscode');
+      await fs.ensureDir(vscodeDir);
       const oldContent = [
         { file: 'Old.cpp', directory: projectDir, command: 'clang++ -c Old.cpp' },
       ];
-      await fs.writeJson(path.join(projectDir, 'compile_commands.json'), oldContent, { spaces: 2 });
+      await fs.writeJson(path.join(vscodeDir, 'compile_commands.json'), oldContent, { spaces: 2 });
 
       mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
 
@@ -328,7 +334,7 @@ describe('CompileCommandsGenerator', () => {
         enginePath: engine.enginePath,
       });
 
-      expect(result).toBe(path.join(projectDir, 'compile_commands.json'));
+      expect(result).toBe(path.join(projectDir, '.vscode', 'compile_commands.json'));
       const content = await fs.readJson(result);
       expect(content).toEqual(newContent);
     });
@@ -351,7 +357,9 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
-      expect(ubtCall![1]).toContain('TestGameEditor');
+      expect(ubtCall![1]).toEqual(
+        expect.arrayContaining([expect.stringContaining('TestGameEditor')])
+      );
     });
   });
 
@@ -372,14 +380,23 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
-      expect(ubtCall![1]).toContain('TestGame');
-      expect(ubtCall![1]).not.toContain('TestGameEditor');
+      expect(ubtCall![1]).toEqual(expect.arrayContaining([expect.stringContaining('TestGame')]));
+      expect(ubtCall![1]).not.toEqual(
+        expect.arrayContaining([expect.stringContaining('TestGameEditor')])
+      );
     });
   });
 
   it('uses Client target when target type is Client', async () => {
     await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const project = await createFakeProject(rootDir, {
+        projectName: 'TestGame',
+        targets: [
+          { name: 'TestGameEditor', type: 'Editor' },
+          { name: 'TestGame', type: 'Game' },
+          { name: 'TestGameClient', type: 'Client' },
+        ],
+      });
       const engine = await createFakeEngine(rootDir);
 
       mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
@@ -394,13 +411,22 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
-      expect(ubtCall![1]).toContain('TestGameClient');
+      expect(ubtCall![1]).toEqual(
+        expect.arrayContaining([expect.stringContaining('TestGameClient')])
+      );
     });
   });
 
   it('uses Server target when target type is Server', async () => {
     await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const project = await createFakeProject(rootDir, {
+        projectName: 'TestGame',
+        targets: [
+          { name: 'TestGameEditor', type: 'Editor' },
+          { name: 'TestGame', type: 'Game' },
+          { name: 'TestGameServer', type: 'Server' },
+        ],
+      });
       const engine = await createFakeEngine(rootDir);
 
       mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
@@ -415,7 +441,9 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
-      expect(ubtCall![1]).toContain('TestGameServer');
+      expect(ubtCall![1]).toEqual(
+        expect.arrayContaining([expect.stringContaining('TestGameServer')])
+      );
     });
   });
 
@@ -435,7 +463,7 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
-      expect(ubtCall![1]).toContain('-Mode=GenerateClangDatabase');
+      expect(ubtCall![1]).toContain('-mode=GenerateClangDatabase');
     });
   });
 
@@ -456,7 +484,7 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
-      expect(ubtCall![1]).toContain('-Mode=GenerateClangDatabase');
+      expect(ubtCall![1]).toContain('-mode=GenerateClangDatabase');
     });
   });
 
@@ -563,7 +591,7 @@ describe('CompileCommandsGenerator', () => {
       const engine = await createFakeEngine(rootDir);
 
       mockExeca.mockReturnValueOnce(
-        createMockChildProcess({ result: { exitCode: 1, stderr: 'UBT Error' } })
+        createMockChildProcess({ result: { exitCode: 1 }, streamedStderr: ['UBT Error'] })
       );
 
       await expect(
@@ -571,10 +599,7 @@ describe('CompileCommandsGenerator', () => {
           project: project.uprojectPath,
           enginePath: engine.enginePath,
         })
-      ).rejects.toThrow();
-
-      // Verify that logger.error was called
-      expect(mockLoggerFns.error).toHaveBeenCalled();
+      ).rejects.toThrow('Generate compile commands failed');
     });
   });
 
@@ -638,7 +663,7 @@ describe('CompileCommandsGenerator', () => {
         enginePath: engine.enginePath,
       });
 
-      expect(result).toBe(path.join(projectDir, 'compile_commands.json'));
+      expect(result).toBe(path.join(projectDir, '.vscode', 'compile_commands.json'));
     });
   });
 
@@ -663,7 +688,14 @@ describe('CompileCommandsGenerator', () => {
 
   it('generates compile commands with all options specified', async () => {
     await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const project = await createFakeProject(rootDir, {
+        projectName: 'TestGame',
+        targets: [
+          { name: 'TestGameEditor', type: 'Editor' },
+          { name: 'TestGame', type: 'Game' },
+          { name: 'TestGameServer', type: 'Server' },
+        ],
+      });
       const engine = await createFakeEngine(rootDir);
 
       mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
@@ -686,9 +718,11 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
-      expect(ubtCall![1]).toContain('TestGameServer');
-      expect(ubtCall![1]).toContain('Shipping');
-      expect(ubtCall![1]).toContain('Linux');
+      expect(ubtCall![1]).toEqual(
+        expect.arrayContaining([expect.stringContaining('TestGameServer')])
+      );
+      expect(ubtCall![1]).toEqual(expect.arrayContaining([expect.stringContaining('Shipping')]));
+      expect(ubtCall![1]).toEqual(expect.arrayContaining([expect.stringContaining('Linux')]));
     });
   });
 });
