@@ -73,6 +73,44 @@ describe('evolveCommand', () => {
 
       expect(mockRunSelfEvolution).toHaveBeenCalledWith({
         logger: expect.any(Function),
+        once: undefined,
+      });
+    });
+
+    describe('--once option', () => {
+      it('registers the --once option', () => {
+        evolveCommand(program);
+
+        const commands = program.commands;
+        const evolveCmd = commands.find((cmd) => cmd.name() === 'evolve');
+
+        expect(evolveCmd).toBeDefined();
+        const onceOption = evolveCmd?.options.find((opt) => opt.long === '--once');
+        expect(onceOption).toBeDefined();
+      });
+
+      it('displays single iteration mode when --once is used', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync(['node', 'test', 'evolve', '--once']);
+
+        expect(mockLoggerTitle).toHaveBeenCalledWith('ubuild Self-Evolution');
+        expect(mockLoggerInfo).toHaveBeenCalledWith('Mode: Single iteration (--once)\n');
+      });
+
+      it('passes once: true to runSelfEvolution when --once is used', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync(['node', 'test', 'evolve', '--once']);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: true,
+        });
       });
     });
   });

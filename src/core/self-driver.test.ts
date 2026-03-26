@@ -106,6 +106,22 @@ describe('SelfDriver', () => {
       driver = new SelfDriver(options);
       expect(driver).toBeDefined();
     });
+
+    it('creates driver with once option set to true', () => {
+      const options: SelfEvolverOptions = {
+        once: true,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with once option set to false', () => {
+      const options: SelfEvolverOptions = {
+        once: false,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
   });
 
   describe('verify', () => {
@@ -518,5 +534,15 @@ describe('runSelfEvolution', () => {
 
   it('runs self-evolution without options', async () => {
     expect(() => runSelfEvolution()).not.toThrow();
+  });
+
+  it('runs self-evolution with once option set to true', async () => {
+    const mockLogger = jest.fn();
+    expect(() => runSelfEvolution({ logger: mockLogger, once: true })).not.toThrow();
+  });
+
+  it('runs self-evolution with once option set to false', async () => {
+    const mockLogger = jest.fn();
+    expect(() => runSelfEvolution({ logger: mockLogger, once: false })).not.toThrow();
   });
 });

@@ -24,14 +24,21 @@ export function evolveCommand(program: Command): void {
   program
     .command('evolve')
     .description('Self-evolve ubuild using OpenCode (runs forever until Ctrl+C)')
-    .action(async () => {
+    .option('--once', 'Run only one iteration and exit (default: run forever)')
+    .action(async (options) => {
       Logger.title('ubuild Self-Evolution');
       Logger.info('Using OpenCode (default model)');
-      Logger.info('Runs forever until Ctrl+C\n');
+
+      if (options.once) {
+        Logger.info('Mode: Single iteration (--once)\n');
+      } else {
+        Logger.info('Runs forever until Ctrl+C\n');
+      }
 
       try {
         await runSelfEvolution({
           logger: (msg: string) => Logger.info(msg),
+          once: options.once,
         });
       } catch (error) {
         Logger.error(`Error: ${formatError(error)}`);

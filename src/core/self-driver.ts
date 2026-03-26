@@ -18,6 +18,8 @@ import * as path from 'path';
 export interface SelfEvolverOptions {
   /** Custom logger function for evolution output */
   logger?: (msg: string) => void;
+  /** Run only one iteration and exit (default: false - run forever) */
+  once?: boolean;
 }
 
 /**
@@ -31,6 +33,7 @@ export class SelfDriver {
   private log: (msg: string) => void;
   private projectRoot: string;
   private interrupted = false;
+  private once: boolean;
   private sigintHandler: (() => void) | null = null;
   private sigtermHandler: (() => void) | null = null;
 
@@ -41,6 +44,7 @@ export class SelfDriver {
   constructor(options: SelfEvolverOptions = {}) {
     this.log = options.logger || ((msg: string) => Logger.info(msg));
     this.projectRoot = process.cwd();
+    this.once = options.once || false;
     this.setupSignalHandlers();
   }
 
@@ -122,6 +126,13 @@ export class SelfDriver {
           this.log('🔄 Reverting...');
           await this.revert();
         }
+      }
+
+      // Exit after one iteration if --once flag is set
+      if (this.once) {
+        this.log('\n✨ Single iteration complete (--once flag set)');
+        this.cleanup();
+        return;
       }
 
       this.log('\n💤 Waiting 5s before next iteration...');
