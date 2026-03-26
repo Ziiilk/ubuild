@@ -135,6 +135,21 @@ export class SelfDriver {
   }
 
   /**
+   * Checks if OpenCode CLI is installed and available in PATH.
+   */
+  private async isOpenCodeInstalled(): Promise<boolean> {
+    try {
+      const result = await execa('opencode', ['--version'], {
+        cwd: this.projectRoot,
+        reject: false,
+      });
+      return result.exitCode === 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Runs the self-evolution loop - continues indefinitely until interrupted by user.
    */
   async run(): Promise<void> {
@@ -154,6 +169,16 @@ export class SelfDriver {
       this.log('❌ Error: Working tree has uncommitted changes');
       this.log('   Self-evolution may revert changes using `git checkout .`');
       this.log('   Commit or stash your changes before running evolve.');
+      this.cleanup();
+      return;
+    }
+
+    // Pre-flight check: opencode must be installed
+    const isOpenCodeInstalled = await this.isOpenCodeInstalled();
+    if (!isOpenCodeInstalled) {
+      this.log('❌ Error: OpenCode is not installed or not in PATH');
+      this.log('   Self-evolution requires OpenCode CLI to run.');
+      this.log('   Install it with: npm install -g opencode');
       this.cleanup();
       return;
     }

@@ -744,6 +744,60 @@ describe('SelfDriver', () => {
     });
   });
 
+  describe('isOpenCodeInstalled', () => {
+    beforeEach(() => {
+      driver = new SelfDriver();
+    });
+
+    it('returns true when opencode --version succeeds', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const isOpenCodeInstalled = (
+        driver as unknown as { isOpenCodeInstalled: () => Promise<boolean> }
+      ).isOpenCodeInstalled;
+      const result = await isOpenCodeInstalled.call(driver);
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false when opencode --version fails', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(127, '', 'command not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const isOpenCodeInstalled = (
+        driver as unknown as { isOpenCodeInstalled: () => Promise<boolean> }
+      ).isOpenCodeInstalled;
+      const result = await isOpenCodeInstalled.call(driver);
+
+      expect(result).toBe(false);
+    });
+
+    it('returns false when opencode command throws', async () => {
+      mockExeca.mockImplementation(async (command: string) => {
+        if (command === 'opencode') {
+          throw new Error('Command not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const isOpenCodeInstalled = (
+        driver as unknown as { isOpenCodeInstalled: () => Promise<boolean> }
+      ).isOpenCodeInstalled;
+      const result = await isOpenCodeInstalled.call(driver);
+
+      expect(result).toBe(false);
+    });
+  });
+
   describe('git repository validation in run', () => {
     it('exits early when not in a git repository', async () => {
       const mockLogger = jest.fn();
@@ -793,6 +847,34 @@ describe('SelfDriver', () => {
       expect(mockLogger).toHaveBeenCalledWith(
         '   Commit or stash your changes before running evolve.'
       );
+    });
+
+    it('exits early when opencode is not installed', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ once: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        // Git rev-parse succeeds - is a git repo
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(0, '.git', '');
+        }
+        // Git status returns clean
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+          return mockExecaResult(0, '', '');
+        }
+        // OpenCode is not installed
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(127, '', 'command not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const run = (driver as unknown as { run: () => Promise<void> }).run;
+      await run.call(driver);
+
+      expect(mockLogger).toHaveBeenCalledWith('❌ Error: OpenCode is not installed or not in PATH');
+      expect(mockLogger).toHaveBeenCalledWith('   Self-evolution requires OpenCode CLI to run.');
+      expect(mockLogger).toHaveBeenCalledWith('   Install it with: npm install -g opencode');
     });
 
     it('proceeds with evolution when in a git repository', async () => {
