@@ -16,6 +16,8 @@ import { formatError } from '../utils/error';
 
 /** Options for the list command. */
 export interface ListCommandOptions {
+  /** Path to project directory or .uproject file */
+  project?: string;
   /** Whether to search recursively for .uproject files */
   recursive?: boolean;
   /** Whether to output result as JSON */
@@ -39,7 +41,7 @@ export async function executeList(options: ListCommandOptions): Promise<void> {
 
   try {
     const result = await ProjectDetector.detectProject({
-      cwd: process.cwd(),
+      cwd: options.project || process.cwd(),
       recursive: options.recursive,
     });
 
@@ -127,10 +129,12 @@ export function listCommand(program: Command): void {
     .command('list')
     .alias('ls')
     .description('Detect Unreal Engine project in current directory')
+    .option('-p, --project <path>', 'Path to project directory or .uproject file')
     .option('-r, --recursive', 'Search recursively for .uproject files')
     .option('-j, --json', 'Output result as JSON')
     .action(async (options) => {
       await executeList({
+        project: options.project,
         recursive: options.recursive,
         json: options.json,
       });

@@ -76,6 +76,27 @@ describe('executeList', () => {
       });
     });
 
+    it('uses custom project path when specified', async () => {
+      mockDetectProject.mockResolvedValue({
+        isValid: true,
+        project: createMockProjectInfo(),
+        warnings: [],
+      });
+
+      await executeList({
+        project: 'C:\\Custom\\Project',
+        recursive: false,
+        json: false,
+        stdout,
+        stderr,
+      });
+
+      expect(mockDetectProject).toHaveBeenCalledWith({
+        cwd: 'C:\\Custom\\Project',
+        recursive: false,
+      });
+    });
+
     it('passes recursive flag when specified', async () => {
       mockDetectProject.mockResolvedValue({
         isValid: true,
@@ -449,6 +470,7 @@ describe('listCommand', () => {
     const options = listCmd?.options || [];
     const optionFlags = options.map((opt) => opt.flags);
 
+    expect(optionFlags).toContain('-p, --project <path>');
     expect(optionFlags).toContain('-r, --recursive');
     expect(optionFlags).toContain('-j, --json');
   });
