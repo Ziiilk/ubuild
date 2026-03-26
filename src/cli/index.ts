@@ -35,6 +35,7 @@ import { gencodebaseCommand } from '../commands/gencodebase';
 import { cleanCommand } from '../commands/clean';
 import { versionCommand } from '../commands/version';
 import { version, description } from '../../package.json';
+import { evolveCommand } from '../commands/evolve';
 
 const program = new Command();
 
@@ -56,6 +57,7 @@ updateCommand(program);
 gencodebaseCommand(program);
 cleanCommand(program);
 versionCommand(program);
+evolveCommand(program);
 
 program.configureHelp({
   sortSubcommands: true,
@@ -63,21 +65,6 @@ program.configureHelp({
 });
 
 async function main(): Promise<void> {
-  // Conditionally register evolve command (development only or when evolve is requested)
-  const isEvolveRequested = process.argv.slice(2).includes('evolve');
-  const isDevMode =
-    process.env.NODE_ENV === 'development' || process.env.UBUILD_EVOLVE_ENABLED === 'true';
-
-  if (isEvolveRequested || isDevMode) {
-    try {
-      const { evolveCommand } = await import('../commands/evolve');
-      evolveCommand(program);
-    } catch (error) {
-      // Evolve command is optional - ignore if module not available
-      Logger.debug(`Evolve command not available: ${formatError(error)}`);
-    }
-  }
-
   try {
     await program.parseAsync(process.argv);
   } catch (error) {
