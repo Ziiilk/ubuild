@@ -211,6 +211,58 @@ describe('evolveCommand', () => {
         });
       });
     });
+
+    describe('--use-ts-node option', () => {
+      it('registers the --use-ts-node option', () => {
+        evolveCommand(program);
+
+        const commands = program.commands;
+        const evolveCmd = commands.find((cmd) => cmd.name() === 'evolve');
+
+        expect(evolveCmd).toBeDefined();
+        const useTsNodeOption = evolveCmd?.options.find((opt) => opt.long === '--use-ts-node');
+        expect(useTsNodeOption).toBeDefined();
+      });
+
+      it('passes useTsNode: true to runSelfEvolution when --use-ts-node is used', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync(['node', 'test', 'evolve', '--use-ts-node']);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: undefined,
+          dryRun: undefined,
+          sleepMs: undefined,
+          useTsNode: true,
+        });
+      });
+
+      it('can combine --use-ts-node with other options', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync([
+          'node',
+          'test',
+          'evolve',
+          '--use-ts-node',
+          '--once',
+          '--dry-run',
+        ]);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: true,
+          dryRun: true,
+          sleepMs: undefined,
+          useTsNode: true,
+        });
+      });
+    });
   });
 
   describe('error handling', () => {

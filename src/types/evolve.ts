@@ -56,4 +56,6 @@ export interface SelfEvolverOptions {
   opencodeTimeoutMs?: number;
   /** Sleep duration between iterations in milliseconds (default: 5000) */
   sleepMs?: number;
+  /** Use ts-node for verification instead of compiled dist (default: false) */
+  useTsNode?: boolean;
 }

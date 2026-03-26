@@ -33,6 +33,7 @@ export function evolveCommand(program: Command): void {
       'Sleep duration between iterations in milliseconds (default: 5000)',
       parseInt
     )
+    .option('--use-ts-node', 'Use ts-node for verification instead of compiled dist')
     .action(async (options) => {
       Logger.title('ubuild Self-Evolution');
       Logger.info('Using OpenCode (default model)');
@@ -57,6 +58,7 @@ export function evolveCommand(program: Command): void {
           once: options.once,
           dryRun: options.dryRun,
           sleepMs: options.sleep,
+          useTsNode: options.useTsNode,
         });
       } catch (error) {
         Logger.error(`Error: ${formatError(error)}`);

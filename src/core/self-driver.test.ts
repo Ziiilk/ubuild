@@ -205,6 +205,36 @@ describe('SelfDriver', () => {
       driver = new SelfDriver(options);
       expect(driver).toBeDefined();
     });
+
+    it('creates driver with useTsNode option set to true', () => {
+      const options: SelfEvolverOptions = {
+        useTsNode: true,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with useTsNode option set to false', () => {
+      const options: SelfEvolverOptions = {
+        useTsNode: false,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with all options including useTsNode', () => {
+      const options: SelfEvolverOptions = {
+        logger: jest.fn(),
+        once: true,
+        dryRun: false,
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 900000,
+        sleepMs: 10000,
+        useTsNode: true,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
   });
 
   describe('verify', () => {
@@ -295,6 +325,29 @@ describe('SelfDriver', () => {
       const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
       const result = await verify.call(driver);
       expect(result).toBe(false);
+    });
+
+    it('uses ts-node for verification when useTsNode is true', async () => {
+      driver = new SelfDriver({ useTsNode: true });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npx' && args?.includes('ts-node')) {
+          return mockExecaResult(0, 'Usage: [command] [options]', '');
+        }
+        if (command === 'npm') {
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+      expect(result).toBe(true);
+      expect(mockExeca).toHaveBeenCalledWith(
+        'npx',
+        ['ts-node', 'src/cli/index.ts', 'list', '--help'],
+        expect.any(Object)
+      );
     });
   });
 

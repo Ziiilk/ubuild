@@ -37,6 +37,7 @@ export class SelfDriver {
   private verifyTimeoutMs: number;
   private opencodeTimeoutMs: number;
   private sleepMs: number;
+  private useTsNode: boolean;
   private sigintHandler: (() => void) | null = null;
   private sigtermHandler: (() => void) | null = null;
   private originalMaxListeners: number | null = null;
@@ -56,6 +57,7 @@ export class SelfDriver {
     this.verifyTimeoutMs = options.verifyTimeoutMs ?? VERIFY_TIMEOUT_MS;
     this.opencodeTimeoutMs = options.opencodeTimeoutMs ?? OPENCODE_TIMEOUT_MS;
     this.sleepMs = options.sleepMs ?? DEFAULT_SLEEP_MS;
+    this.useTsNode = options.useTsNode || false;
     this.setupSignalHandlers();
   }
 
@@ -379,17 +381,24 @@ If verification fails, do NOT commit - the system will revert automatically.`;
    * When adding new commands, add them to EVOLUTION_VERIFY_COMMANDS in types/evolve.ts.
    */
   private async verify(): Promise<boolean> {
+    // Use ts-node for verification if enabled, otherwise use compiled dist/
+    const commandChecks = this.useTsNode
+      ? EVOLUTION_VERIFY_COMMANDS.map((cmd) => ({
+          name: `${cmd.charAt(0).toUpperCase() + cmd.slice(1)} command`,
+          file: 'npx',
+          args: ['ts-node', 'src/cli/index.ts', cmd, '--help'],
+        }))
+      : EVOLUTION_VERIFY_COMMANDS.map((cmd) => ({
+          name: `${cmd.charAt(0).toUpperCase() + cmd.slice(1)} command`,
+          file: 'node',
+          args: ['dist/cli/index.js', cmd, '--help'],
+        }));
+
     const checks: Array<{ name: string; file: string; args: string[] }> = [
       { name: 'Build', file: 'npm', args: ['run', 'build'] },
       { name: 'Tests', file: 'npm', args: ['test'] },
       { name: 'Lint', file: 'npm', args: ['run', 'lint'] },
-      // Dynamically generate command checks from EVOLUTION_VERIFY_COMMANDS
-      // Use compiled dist/ output to verify the actual build artifacts
-      ...EVOLUTION_VERIFY_COMMANDS.map((cmd) => ({
-        name: `${cmd.charAt(0).toUpperCase() + cmd.slice(1)} command`,
-        file: 'node',
-        args: ['dist/cli/index.js', cmd, '--help'],
-      })),
+      ...commandChecks,
     ];
 
     for (const check of checks) {
