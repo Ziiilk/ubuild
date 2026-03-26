@@ -39,50 +39,58 @@ const REGISTRY_LOCATIONS: string[] = [
 ];
 
 /**
- * Launcher manifest file paths to search for Unreal Engine installations.
+ * Gets launcher manifest file paths to search for Unreal Engine installations.
  * Covers various Epic Games Launcher installation locations.
+ * @returns Array of manifest file paths (computed at call time for testability)
  */
-const LAUNCHER_MANIFEST_PATHS: string[] = [
-  path.join(process.env.LOCALAPPDATA || '', 'UnrealEngine', 'Common', 'LauncherInstalled.dat'),
-  path.join(process.env.PROGRAMDATA || '', 'Epic', 'UnrealEngineLauncher', 'LauncherInstalled.dat'),
-  path.join(
-    process.env.PROGRAMDATA || '',
-    'Epic',
-    'EpicGamesLauncher',
-    'Data',
-    'LauncherInstalled.dat'
-  ),
-  path.join(process.env.APPDATA || '', 'Epic', 'UnrealEngineLauncher', 'LauncherInstalled.dat'),
-  path.join(
-    process.env.APPDATA || '',
-    'Epic',
-    'EpicGamesLauncher',
-    'Data',
-    'LauncherInstalled.dat'
-  ),
-  path.join(process.env.LOCALAPPDATA || '', 'EpicGamesLauncher', 'Data', 'LauncherInstalled.dat'),
-  path.join(
-    process.env.LOCALAPPDATA || '',
-    'Epic',
-    'UnrealEngineLauncher',
-    'LauncherInstalled.dat'
-  ),
-  path.join(process.env.APPDATA || '', 'Epic Games', 'Launcher', 'Data', 'LauncherInstalled.dat'),
-  path.join(
-    process.env.PROGRAMFILES || 'C:\\Program Files',
-    'Epic Games',
-    'Launcher',
-    'Data',
-    'LauncherInstalled.dat'
-  ),
-  path.join(
-    process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)',
-    'Epic Games',
-    'Launcher',
-    'Data',
-    'LauncherInstalled.dat'
-  ),
-];
+function getLauncherManifestPaths(): string[] {
+  return [
+    path.join(process.env.LOCALAPPDATA || '', 'UnrealEngine', 'Common', 'LauncherInstalled.dat'),
+    path.join(
+      process.env.PROGRAMDATA || '',
+      'Epic',
+      'UnrealEngineLauncher',
+      'LauncherInstalled.dat'
+    ),
+    path.join(
+      process.env.PROGRAMDATA || '',
+      'Epic',
+      'EpicGamesLauncher',
+      'Data',
+      'LauncherInstalled.dat'
+    ),
+    path.join(process.env.APPDATA || '', 'Epic', 'UnrealEngineLauncher', 'LauncherInstalled.dat'),
+    path.join(
+      process.env.APPDATA || '',
+      'Epic',
+      'EpicGamesLauncher',
+      'Data',
+      'LauncherInstalled.dat'
+    ),
+    path.join(process.env.LOCALAPPDATA || '', 'EpicGamesLauncher', 'Data', 'LauncherInstalled.dat'),
+    path.join(
+      process.env.LOCALAPPDATA || '',
+      'Epic',
+      'UnrealEngineLauncher',
+      'LauncherInstalled.dat'
+    ),
+    path.join(process.env.APPDATA || '', 'Epic Games', 'Launcher', 'Data', 'LauncherInstalled.dat'),
+    path.join(
+      process.env.PROGRAMFILES || 'C:\\Program Files',
+      'Epic Games',
+      'Launcher',
+      'Data',
+      'LauncherInstalled.dat'
+    ),
+    path.join(
+      process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)',
+      'Epic Games',
+      'Launcher',
+      'Data',
+      'LauncherInstalled.dat'
+    ),
+  ];
+}
 
 /**
  * Resolves Unreal Engine installations from various sources including
@@ -472,11 +480,10 @@ export class EngineResolver {
     const installations: EngineInstallation[] = [];
 
     try {
-      Logger.debug(
-        'Searching for launcher manifests in: ' + JSON.stringify(LAUNCHER_MANIFEST_PATHS)
-      );
+      const manifestPaths = getLauncherManifestPaths();
+      Logger.debug('Searching for launcher manifests in: ' + JSON.stringify(manifestPaths));
 
-      for (const manifestPath of LAUNCHER_MANIFEST_PATHS) {
+      for (const manifestPath of manifestPaths) {
         Logger.debug(`Checking launcher manifest path: ${manifestPath}`);
         if (await fs.pathExists(manifestPath)) {
           Logger.debug(`Found launcher manifest at: ${manifestPath}`);
