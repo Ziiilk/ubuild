@@ -16,10 +16,28 @@ import {
 } from './constants';
 
 /**
- * Validates various inputs for Unreal Engine project operations.
- * Includes validation for project names, engine paths, build targets, and more.
+ * Validation utilities for ubuild
+ *
+ * Provides standardized validation functions for project names, engine paths,
+ * build configurations, and project files. Ensures consistent validation
+ * across all commands and operations.
  *
  * @module utils/validator
+ * @example
+ * ```typescript
+ * import { Validator } from '@zitool/ubuild';
+ *
+ * // Validate project name
+ * if (Validator.isValidProjectName('MyProject')) {
+ *   console.log('Valid project name');
+ * }
+ *
+ * // Validate engine path
+ * const isValid = await Validator.isValidEnginePath('/path/to/UE5');
+ *
+ * // Validate .uproject file
+ * const isProject = await Validator.isValidUProjectFile('./MyProject.uproject');
+ * ```
  */
 export class Validator {
   /**
