@@ -86,10 +86,10 @@ export class SelfDriver {
     this.log('💡 Press Ctrl+C to stop\n');
 
     while (!this.interrupted) {
-      // 1. 读取宪法文件
+      // 1. Read constitution file
       const constitution = await this.readConstitution();
 
-      // 2. AI 自主分析、执行、提交
+      // 2. AI analyzes, executes, and commits autonomously
       this.log('\n🤖 AI analyzing and evolving...');
       const executed = await this.evolveWithOpenCode(constitution);
 
@@ -99,7 +99,7 @@ export class SelfDriver {
         continue;
       }
 
-      // 3. 验证（唯一关卡）
+      // 3. Verify (the only gate)
       this.log('\n🔍 Verifying changes...');
       const verified = await this.verify();
 

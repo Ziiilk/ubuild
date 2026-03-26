@@ -125,13 +125,13 @@ export class CompileCommandsGenerator {
 
     if (childProcess.stdout) {
       childProcess.stdout.on('data', (data: Buffer) => {
-        process.stdout.write(data.toString());
+        Logger.info(data.toString().trim());
       });
     }
 
     if (childProcess.stderr) {
       childProcess.stderr.on('data', (data: Buffer) => {
-        process.stderr.write(data.toString());
+        Logger.error(data.toString().trim());
       });
     }
 

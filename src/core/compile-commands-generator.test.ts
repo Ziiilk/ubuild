@@ -5,7 +5,6 @@ import { CompileCommandsGenerator } from './compile-commands-generator';
 import { EngineResolver } from './engine-resolver';
 import { ProjectPathResolver } from './project-path-resolver';
 import { TargetResolver } from './target-resolver';
-import { Logger } from '../utils/logger';
 import { createFakeEngine, createFakeProject, withTempDir } from '../test-utils';
 
 interface ExecaOptions {
@@ -37,12 +36,19 @@ jest.mock('execa', () => ({
   execa: (...args: [string, ExecaOptions]) => mockExeca(...args),
 }));
 
+const mockLoggerInfo = jest.fn();
+const mockLoggerError = jest.fn();
+const mockLoggerSuccess = jest.fn();
+const mockLoggerDebug = jest.fn();
+const mockLoggerDivider = jest.fn();
+
 jest.mock('../utils/logger', () => ({
   Logger: {
-    info: jest.fn(),
-    success: jest.fn(),
-    debug: jest.fn(),
-    divider: jest.fn(),
+    info: (...args: unknown[]) => mockLoggerInfo(...args),
+    error: (...args: unknown[]) => mockLoggerError(...args),
+    success: (...args: unknown[]) => mockLoggerSuccess(...args),
+    debug: (...args: unknown[]) => mockLoggerDebug(...args),
+    divider: (...args: unknown[]) => mockLoggerDivider(...args),
   },
 }));
 
@@ -75,7 +81,9 @@ function createMockChildProcess(options: MockExecaProcessOptions = {}): MockChil
 
 describe('CompileCommandsGenerator', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
+    mockLoggerInfo.mockClear();
+    mockLoggerError.mockClear();
   });
 
   afterEach(() => {
@@ -403,12 +411,12 @@ describe('CompileCommandsGenerator', () => {
         silent: false,
       });
 
-      expect(Logger.info).toHaveBeenCalledWith(
+      expect(mockLoggerInfo).toHaveBeenCalledWith(
         expect.stringContaining('Generating compile commands')
       );
-      expect(Logger.info).toHaveBeenCalledWith(expect.stringContaining(project.uprojectPath));
-      expect(Logger.info).toHaveBeenCalledWith(expect.stringContaining(engine.enginePath));
-      expect(Logger.divider).toHaveBeenCalled();
+      expect(mockLoggerInfo).toHaveBeenCalledWith(expect.stringContaining(project.uprojectPath));
+      expect(mockLoggerInfo).toHaveBeenCalledWith(expect.stringContaining(engine.enginePath));
+      expect(mockLoggerDivider).toHaveBeenCalled();
     });
   });
 
@@ -426,8 +434,8 @@ describe('CompileCommandsGenerator', () => {
         silent: false,
       });
 
-      expect(Logger.debug).toHaveBeenCalledWith(expect.stringContaining('Executing:'));
-      expect(Logger.debug).toHaveBeenCalledWith(expect.stringContaining('UnrealBuildTool'));
+      expect(mockLoggerDebug).toHaveBeenCalledWith(expect.stringContaining('Executing:'));
+      expect(mockLoggerDebug).toHaveBeenCalledWith(expect.stringContaining('UnrealBuildTool'));
     });
   });
 
@@ -445,7 +453,7 @@ describe('CompileCommandsGenerator', () => {
         silent: false,
       });
 
-      expect(Logger.success).toHaveBeenCalledWith(
+      expect(mockLoggerSuccess).toHaveBeenCalledWith(
         expect.stringContaining('Updated VSCode settings')
       );
     });
@@ -477,9 +485,6 @@ describe('CompileCommandsGenerator', () => {
       const project = await createFakeProject(rootDir, { projectName: 'StreamGame' });
       const engine = await createFakeEngine(rootDir);
 
-      const stdoutSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
-      const stderrSpy = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
-
       mockExeca.mockReturnValueOnce(
         createMockChildProcess({
           result: { exitCode: 0 },
@@ -498,12 +503,9 @@ describe('CompileCommandsGenerator', () => {
       // Wait for microtasks to complete
       await new Promise(process.nextTick);
 
-      expect(stdoutSpy).toHaveBeenCalledWith('Processing target\n');
-      expect(stdoutSpy).toHaveBeenCalledWith('Done\n');
-      expect(stderrSpy).toHaveBeenCalledWith('Warning: something\n');
-
-      stdoutSpy.mockRestore();
-      stderrSpy.mockRestore();
+      expect(mockLoggerInfo).toHaveBeenCalledWith('Processing target');
+      expect(mockLoggerInfo).toHaveBeenCalledWith('Done');
+      expect(mockLoggerError).toHaveBeenCalledWith('Warning: something');
     });
   });
 });
