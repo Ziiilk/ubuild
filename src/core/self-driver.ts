@@ -237,6 +237,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
         cwd: this.projectRoot,
         stdio: 'inherit',
         reject: false,
+        timeout: 600000, // 10 minutes timeout to prevent indefinite hangs
       });
 
       if (result.exitCode !== 0) {
