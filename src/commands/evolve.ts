@@ -26,6 +26,9 @@ function parsePositiveInt(value: string, optionName: string): number {
   if (isNaN(parsed) || parsed <= 0) {
     throw new Error(`${optionName} must be a positive integer, got: ${value}`);
   }
+  if (parsed !== parseFloat(value)) {
+    throw new Error(`${optionName} must be an integer, got: ${value}`);
+  }
   return parsed;
 }
 

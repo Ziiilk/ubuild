@@ -495,6 +495,26 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       }, ms);
     });
   }
+
+  /**
+   * Gets the current status of the driver for debugging purposes.
+   * @returns Object containing driver state information
+   */
+  getStatus(): {
+    interrupted: boolean;
+    cleanedUp: boolean;
+    projectRoot: string;
+    dryRun: boolean;
+    once: boolean;
+  } {
+    return {
+      interrupted: this.interrupted,
+      cleanedUp: this.cleanedUp,
+      projectRoot: this.projectRoot,
+      dryRun: this.dryRun,
+      once: this.once,
+    };
+  }
 }
 
 /**
