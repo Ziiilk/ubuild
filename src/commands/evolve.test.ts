@@ -3,12 +3,14 @@ import { Command } from 'commander';
 // Mock the logger module
 const mockLoggerTitle = jest.fn();
 const mockLoggerInfo = jest.fn();
+const mockLoggerWarning = jest.fn();
 const mockLoggerError = jest.fn();
 
 jest.mock('../utils/logger', () => ({
   Logger: {
     title: (...args: unknown[]) => mockLoggerTitle(...args),
     info: (...args: unknown[]) => mockLoggerInfo(...args),
+    warning: (...args: unknown[]) => mockLoggerWarning(...args),
     error: (...args: unknown[]) => mockLoggerError(...args),
   },
 }));
@@ -18,6 +20,13 @@ const mockRunSelfEvolution = jest.fn();
 
 jest.mock('../core/self-driver', () => ({
   runSelfEvolution: (...args: unknown[]) => mockRunSelfEvolution(...args),
+}));
+
+// Mock fs-extra
+const mockPathExists = jest.fn();
+
+jest.mock('fs-extra', () => ({
+  pathExists: (...args: unknown[]) => mockPathExists(...args),
 }));
 
 // Import after mocking
@@ -216,6 +225,35 @@ describe('evolveCommand', () => {
       expect(mockLoggerInfo).toHaveBeenCalledWith('Message 1');
       expect(mockLoggerInfo).toHaveBeenCalledWith('Message 2');
       expect(mockLoggerInfo).toHaveBeenCalledWith('Message 3');
+    });
+  });
+
+  describe('EVOLVE.md pre-flight check', () => {
+    it('warns when EVOLVE.md does not exist', async () => {
+      mockPathExists.mockResolvedValue(false);
+      mockRunSelfEvolution.mockResolvedValue(undefined);
+
+      evolveCommand(program);
+
+      await program.parseAsync(['node', 'test', 'evolve']);
+
+      expect(mockLoggerWarning).toHaveBeenCalledWith(
+        'Warning: EVOLVE.md not found in project root'
+      );
+      expect(mockLoggerWarning).toHaveBeenCalledWith(
+        '  Evolution will proceed without constitution guidance'
+      );
+    });
+
+    it('does not warn when EVOLVE.md exists', async () => {
+      mockPathExists.mockResolvedValue(true);
+      mockRunSelfEvolution.mockResolvedValue(undefined);
+
+      evolveCommand(program);
+
+      await program.parseAsync(['node', 'test', 'evolve']);
+
+      expect(mockLoggerWarning).not.toHaveBeenCalled();
     });
   });
 });
