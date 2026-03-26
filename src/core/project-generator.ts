@@ -91,12 +91,12 @@ export class ProjectGenerator {
       Logger.info(`Project: ${projectPath}`);
       Logger.info(`Engine: ${enginePath}`);
 
-      if (ide === 'sln' || ide === 'vs2022') {
-        await this.generateWithUBT(enginePath, projectPath, force, ide);
-        generatedFiles.push(...(await this.findGeneratedSolutionFiles(projectPath)));
-      } else if (ide === 'vscode') {
-        await this.generateWithUBT(enginePath, projectPath, force, ide);
-        generatedFiles.push(...(await this.findGeneratedSolutionFiles(projectPath)));
+      await this.generateWithUBT(enginePath, projectPath, force, ide);
+
+      // Collect IDE-specific generated files
+      generatedFiles.push(...(await this.findGeneratedSolutionFiles(projectPath)));
+
+      if (ide === 'vscode') {
         generatedFiles.push(...(await this.findVSCodeWorkspaceFiles(projectPath)));
         generatedFiles.push(...(await this.findVSCodeConfigFiles(projectPath)));
 
@@ -105,14 +105,9 @@ export class ProjectGenerator {
           generatedFiles.push(tasksFile);
         }
       } else if (ide === 'clion') {
-        await this.generateWithUBT(enginePath, projectPath, force, ide);
         generatedFiles.push(...(await this.findGeneratedCLionFiles(projectPath)));
       } else if (ide === 'xcode') {
-        await this.generateWithUBT(enginePath, projectPath, force, ide);
         generatedFiles.push(...(await this.findGeneratedXcodeFiles(projectPath)));
-      } else {
-        await this.generateWithUBT(enginePath, projectPath, force, ide);
-        generatedFiles.push(...(await this.findGeneratedSolutionFiles(projectPath)));
       }
 
       return {
