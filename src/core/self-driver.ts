@@ -89,7 +89,7 @@ export class SelfDriver {
       // 1. 读取宪法文件
       const constitution = await this.readConstitution();
 
-      // 2. AI 自主分析 & 执行
+      // 2. AI 自主分析、执行、提交
       this.log('\n🤖 AI analyzing and evolving...');
       const executed = await this.evolveWithOpenCode(constitution);
 
@@ -103,14 +103,19 @@ export class SelfDriver {
       this.log('\n🔍 Verifying changes...');
       const verified = await this.verify();
 
-      if (verified && (await this.hasChanges())) {
-        this.log('✅ Verification passed, committing...');
-        await this.commit('evolve: auto-improvement');
-      } else if (!verified) {
+      if (!verified) {
         this.log('❌ Verification failed, reverting...');
         await this.revert();
       } else {
-        this.log('ℹ️  No changes made');
+        // 验证通过，检查 AI 是否已提交
+        const isClean = await this.isWorkingTreeClean();
+        if (isClean) {
+          this.log('✅ Changes committed by AI');
+        } else {
+          this.log('⚠️  Working tree not clean after verification - AI should have committed');
+          this.log('🔄 Reverting...');
+          await this.revert();
+        }
       }
 
       this.log('\n💤 Waiting 5s before next iteration...');
@@ -178,14 +183,26 @@ Execute your decision. Make minimal, focused changes.
 
 ## After Changes
 
-Verify all pass:
-- npm run build
-- npm test
-- npm run lint
-- npx ts-node src/cli/index.ts evolve --help
-- npx ts-node src/cli/index.ts list --help
+1. **Verify** all pass:
+   - npm run build
+   - npm test
+   - npm run lint
+   - npx ts-node src/cli/index.ts evolve --help
+   - npx ts-node src/cli/index.ts list --help
 
-Do NOT commit - just implement and verify.`;
+2. **Commit** if verification passes:
+   \`\`\`bash
+   git add -A
+   git commit -m "type: description"
+   \`\`\`
+
+   Use conventional commit types:
+   - \`fix:\` - bug fixes
+   - \`test:\` - adding tests
+   - \`refactor:\` - code improvements
+   - \`feat:\` - new features
+
+If verification fails, do NOT commit - the system will revert automatically.`;
 
     try {
       this.log('🚀 Executing OpenCode...');
@@ -252,34 +269,18 @@ Do NOT commit - just implement and verify.`;
   }
 
   /**
-   * Checks if there are uncommitted changes.
+   * Checks if working tree is clean (all changes committed).
    */
-  private async hasChanges(): Promise<boolean> {
+  private async isWorkingTreeClean(): Promise<boolean> {
     try {
       const status = await execa('git', ['status', '--porcelain'], {
         cwd: this.projectRoot,
         reject: false,
       });
-      return status.stdout.trim().length > 0;
+      return status.stdout.trim().length === 0;
     } catch (error) {
       this.log(`⚠️  Git status check failed: ${formatError(error)}`);
       return false;
-    }
-  }
-
-  /**
-   * Commits changes.
-   */
-  private async commit(message: string): Promise<void> {
-    try {
-      await execa('git', ['add', '-A'], { cwd: this.projectRoot });
-      await execa('git', ['commit', '-m', message], {
-        cwd: this.projectRoot,
-        reject: false,
-      });
-      this.log(`📝 Committed: ${message}`);
-    } catch (error) {
-      this.log(`⚠️  Commit failed: ${formatError(error)}`);
     }
   }
 
