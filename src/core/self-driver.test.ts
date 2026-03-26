@@ -1078,7 +1078,7 @@ describe('SelfDriver', () => {
       ).evolveWithOpenCode;
       const result = await evolveWithOpenCode.call(driver, diagnosis, suggestions);
 
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
 
     it('logs error message when opencode throws', async () => {
@@ -1129,7 +1129,7 @@ describe('SelfDriver', () => {
       ).evolveWithOpenCode;
       const result = await evolveWithOpenCode.call(driver, diagnosis, suggestions);
 
-      expect(result).toBe(true);
+      expect(result).toBe(false);
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('String error'));
     });
   });

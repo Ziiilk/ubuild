@@ -475,7 +475,7 @@ export class SelfDriver {
       return result.exitCode === 0;
     } catch (error) {
       this.log(`⚠️  OpenCode exited: ${formatError(error)}`);
-      return true;
+      return false;
     }
   }
 
