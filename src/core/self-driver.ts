@@ -47,6 +47,8 @@ export class SelfDriver {
   private sigtermHandler: (() => void) | null = null;
   private originalMaxListeners: number | null = null;
   private sleepTimer: NodeJS.Timeout | null = null;
+  private sleepResolve: (() => void) | null = null;
+  private cleanedUp = false;
 
   /**
    * Creates a new SelfDriver instance.
@@ -92,6 +94,8 @@ export class SelfDriver {
    * Should be called when the driver is no longer needed.
    */
   cleanup(): void {
+    this.cleanedUp = true;
+
     if (this.sigintHandler) {
       process.removeListener('SIGINT', this.sigintHandler);
       this.sigintHandler = null;
@@ -105,10 +109,15 @@ export class SelfDriver {
       process.setMaxListeners(this.originalMaxListeners);
       this.originalMaxListeners = null;
     }
-    // Clear any pending sleep timer
+    // Clear any pending sleep timer and resolve the sleep promise
     if (this.sleepTimer) {
       clearTimeout(this.sleepTimer);
       this.sleepTimer = null;
+    }
+    // Resolve any pending sleep to prevent hanging
+    if (this.sleepResolve) {
+      this.sleepResolve();
+      this.sleepResolve = null;
     }
   }
 
@@ -412,11 +421,21 @@ If verification fails, do NOT commit - the system will revert automatically.`;
   /**
    * Sleeps for the specified duration.
    * Clears the timer if interrupted to prevent memory leaks.
+   * Resolves immediately if cleanup has been called.
    */
   private sleep(ms: number): Promise<void> {
+    // If already cleaned up, resolve immediately to prevent hanging
+    if (this.cleanedUp) {
+      return Promise.resolve();
+    }
+
     return new Promise((resolve) => {
+      // Store the resolve function so cleanup can call it
+      this.sleepResolve = resolve;
+
       this.sleepTimer = setTimeout(() => {
         this.sleepTimer = null;
+        this.sleepResolve = null;
         resolve();
       }, ms);
     });
