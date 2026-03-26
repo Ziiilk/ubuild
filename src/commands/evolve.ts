@@ -15,6 +15,21 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 
 /**
+ * Parses and validates a positive integer option value.
+ * @param value - The raw string value from CLI
+ * @param optionName - The name of the option for error messages
+ * @returns The parsed positive integer
+ * @throws Error if value is not a valid positive integer
+ */
+function parsePositiveInt(value: string, optionName: string): number {
+  const parsed = parseInt(value, 10);
+  if (isNaN(parsed) || parsed <= 0) {
+    throw new Error(`${optionName} must be a positive integer, got: ${value}`);
+  }
+  return parsed;
+}
+
+/**
  * Register the 'evolve' command for self-evolution using OpenCode.
  *
  * This command runs a self-improvement loop that continuously analyzes
@@ -31,18 +46,18 @@ export function evolveCommand(program: Command): void {
     .option(
       '--sleep <ms>',
       'Sleep duration between iterations in milliseconds (default: 5000)',
-      parseInt
+      (value) => parsePositiveInt(value, '--sleep')
     )
     .option('--use-ts-node', 'Use ts-node for verification instead of compiled dist')
     .option(
       '--verify-timeout <ms>',
       'Timeout for verification checks in milliseconds (default: 60000)',
-      parseInt
+      (value) => parsePositiveInt(value, '--verify-timeout')
     )
     .option(
       '--opencode-timeout <ms>',
       'Timeout for OpenCode execution in milliseconds (default: 600000)',
-      parseInt
+      (value) => parsePositiveInt(value, '--opencode-timeout')
     )
     .action(async (options) => {
       Logger.title('ubuild Self-Evolution');
