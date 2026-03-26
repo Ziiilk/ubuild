@@ -128,7 +128,8 @@ export class SelfDriver {
         reject: false,
       });
       return result.exitCode === 0;
-    } catch {
+    } catch (error) {
+      this.log(`⚠️  Git check failed: ${formatError(error)}`);
       return false;
     }
   }
@@ -366,8 +367,9 @@ If verification fails, do NOT commit - the system will revert automatically.`;
     // Check if opencode command is available
     try {
       await execa('opencode', ['--version'], { cwd: this.projectRoot });
-    } catch {
+    } catch (error) {
       this.log('❌ OpenCode is not installed or not in PATH');
+      this.log(`   Error: ${formatError(error)}`);
       this.log('   Install it with: npm install -g opencode');
       return false;
     }
