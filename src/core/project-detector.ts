@@ -118,9 +118,7 @@ export class ProjectDetector {
     try {
       return JSON.parse(content);
     } catch (parseError) {
-      throw new Error(
-        `Invalid JSON in .uproject file: ${parseError instanceof Error ? parseError.message : String(parseError)}`
-      );
+      throw new Error(`Invalid JSON in .uproject file: ${formatError(parseError)}`);
     }
   }
 

@@ -370,7 +370,7 @@ export class ProjectGenerator {
         }
       } catch (parseError) {
         Logger.debug(
-          `Failed to parse existing tasks.json, regenerating: ${parseError instanceof Error ? parseError.message : String(parseError)}`
+          `Failed to parse existing tasks.json, regenerating: ${formatError(parseError)}`
         );
       }
     }

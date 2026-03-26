@@ -432,10 +432,7 @@ export class EngineResolver {
               Logger.debug('No InstallationList found in manifest or it is not an array');
             }
           } catch (parseError) {
-            Logger.debug(
-              'Failed to parse launcher manifest: ' +
-                (parseError instanceof Error ? parseError.message : String(parseError))
-            );
+            Logger.debug('Failed to parse launcher manifest: ' + formatError(parseError));
             Logger.debug('Manifest path: ' + manifestPath);
           }
         } else {
@@ -496,10 +493,7 @@ export class EngineResolver {
 
             return;
           } catch (parseError) {
-            Logger.debug(
-              'Failed to parse version file: ' +
-                (parseError instanceof Error ? parseError.message : String(parseError))
-            );
+            Logger.debug('Failed to parse version file: ' + formatError(parseError));
           }
         }
       }
