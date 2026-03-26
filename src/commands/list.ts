@@ -140,7 +140,7 @@ export function listCommand(program: Command): void {
           json: options.json,
         });
       } catch (error) {
-        Logger.error(error instanceof Error ? error.message : String(error));
+        Logger.error(formatError(error));
         process.exit(1);
       }
     });
