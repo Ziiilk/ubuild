@@ -40,6 +40,45 @@ export type GencodebaseCommandOptions = CompileCommandsGenerateOptions & {
 };
 
 /**
+ * Executes the gencodebase command to generate compile_commands.json.
+ *
+ * @param options - Configuration options for generating compile commands
+ * @returns Promise resolving to the path of the generated compile_commands.json file
+ * @throws Error if generation fails
+ *
+ * @example
+ * ```typescript
+ * const compileCommandsPath = await executeGencodebase({
+ *   target: 'Editor',
+ *   config: 'Development',
+ *   platform: 'Win64',
+ *   json: false
+ * });
+ * console.log(`Generated: ${compileCommandsPath}`);
+ * ```
+ */
+export async function executeGencodebase(options: GencodebaseCommandOptions): Promise<string> {
+  // When JSON output is requested, suppress non-JSON logging
+  if (options.json) {
+    options.silent = true;
+  } else {
+    Logger.title('Generate Compile Commands Database');
+  }
+
+  const compileCommandsPath = await CompileCommandsGenerator.generate(options);
+
+  if (options.json) {
+    Logger.json({ success: true, path: compileCommandsPath });
+    return compileCommandsPath;
+  }
+
+  Logger.success(`Compile commands generated: ${chalk.bold(compileCommandsPath)}`);
+  Logger.success('VSCode settings updated: .vscode/settings.json');
+
+  return compileCommandsPath;
+}
+
+/**
  * Registers the 'gencodebase' command for generating compile_commands.json.
  *
  * This command generates a compile_commands.json file for IDE integration,
@@ -79,22 +118,7 @@ export function gencodebaseCommand(program: Command): void {
     .option('--json', 'Output result as JSON')
     .action(async (options: GencodebaseCommandOptions) => {
       try {
-        // When JSON output is requested, suppress non-JSON logging
-        if (options.json) {
-          options.silent = true;
-        } else {
-          Logger.title('Generate Compile Commands Database');
-        }
-
-        const compileCommandsPath = await CompileCommandsGenerator.generate(options);
-
-        if (options.json) {
-          Logger.json({ success: true, path: compileCommandsPath });
-          return;
-        }
-
-        Logger.success(`Compile commands generated: ${chalk.bold(compileCommandsPath)}`);
-        Logger.success('VSCode settings updated: .vscode/settings.json');
+        await executeGencodebase(options);
       } catch (error) {
         Logger.error(`Failed to generate compile commands: ${formatError(error)}`);
         process.exit(1);

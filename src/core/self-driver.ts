@@ -348,6 +348,51 @@ If verification fails, do NOT commit - the system will revert automatically.`;
         file: 'npx',
         args: ['ts-node', 'src/cli/index.ts', 'list', '--help'],
       },
+      {
+        name: 'Engine command',
+        file: 'npx',
+        args: ['ts-node', 'src/cli/index.ts', 'engine', '--help'],
+      },
+      {
+        name: 'Build command',
+        file: 'npx',
+        args: ['ts-node', 'src/cli/index.ts', 'build', '--help'],
+      },
+      {
+        name: 'Generate command',
+        file: 'npx',
+        args: ['ts-node', 'src/cli/index.ts', 'generate', '--help'],
+      },
+      {
+        name: 'Init command',
+        file: 'npx',
+        args: ['ts-node', 'src/cli/index.ts', 'init', '--help'],
+      },
+      {
+        name: 'Run command',
+        file: 'npx',
+        args: ['ts-node', 'src/cli/index.ts', 'run', '--help'],
+      },
+      {
+        name: 'Clean command',
+        file: 'npx',
+        args: ['ts-node', 'src/cli/index.ts', 'clean', '--help'],
+      },
+      {
+        name: 'Update command',
+        file: 'npx',
+        args: ['ts-node', 'src/cli/index.ts', 'update', '--help'],
+      },
+      {
+        name: 'Version command',
+        file: 'npx',
+        args: ['ts-node', 'src/cli/index.ts', 'version', '--help'],
+      },
+      {
+        name: 'Gencodebase command',
+        file: 'npx',
+        args: ['ts-node', 'src/cli/index.ts', 'gencodebase', '--help'],
+      },
     ];
 
     for (const check of checks) {

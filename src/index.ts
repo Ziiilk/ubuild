@@ -21,7 +21,7 @@ import { generateCommand } from './commands/generate';
 import { initCommand } from './commands/init';
 import { runCommand } from './commands/run';
 import { updateCommand } from './commands/update';
-import { gencodebaseCommand } from './commands/gencodebase';
+import { gencodebaseCommand, executeGencodebase } from './commands/gencodebase';
 import { evolveCommand } from './commands/evolve';
 import { cleanCommand } from './commands/clean';
 import { versionCommand } from './commands/version';
@@ -44,6 +44,8 @@ export {
   updateCommand,
   /** Register the 'gencodebase' command for compile commands generation */
   gencodebaseCommand,
+  /** Execute the gencodebase command programmatically */
+  executeGencodebase,
   /** Register the 'evolve' command for self-evolution (development only) */
   evolveCommand,
   /** Register the 'clean' command for cleaning build artifacts */
