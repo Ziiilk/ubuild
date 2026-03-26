@@ -180,15 +180,11 @@ export class BuildExecutor {
   }
 
   /**
-   * Executes the build using Build.bat script.
-   * @param buildBatPath - Path to the Build.bat script
+   * Builds command arguments for UnrealBuildTool execution.
    * @param options - Validated build options
-   * @returns Promise resolving to execution result with stdout, stderr, and exit code
+   * @returns Array of command arguments
    */
-  private async executeBuildBat(
-    buildBatPath: string,
-    options: Required<BuildOptions>
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  private buildArgs(options: Required<BuildOptions>): string[] {
     const args = [
       options.target,
       options.platform,
@@ -206,13 +202,25 @@ export class BuildExecutor {
     }
 
     args.push(...options.additionalArgs);
+    return args;
+  }
 
-    const command = `"${buildBatPath}" ${args.join(' ')}`;
+  /**
+   * Executes a build command with streaming output capture.
+   * @param executablePath - Path to the executable script
+   * @param args - Command arguments
+   * @returns Promise resolving to execution result with stdout, stderr, and exit code
+   */
+  private async executeWithStreaming(
+    executablePath: string,
+    args: string[]
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const command = `"${executablePath}" ${args.join(' ')}`;
     this.logger.debug(`Executing: ${command}`);
 
     const childProcess = execa(command, {
       stdio: 'pipe',
-      cwd: path.dirname(buildBatPath),
+      cwd: path.dirname(executablePath),
       shell: true,
     });
 
@@ -244,6 +252,20 @@ export class BuildExecutor {
   }
 
   /**
+   * Executes the build using Build.bat script.
+   * @param buildBatPath - Path to the Build.bat script
+   * @param options - Validated build options
+   * @returns Promise resolving to execution result with stdout, stderr, and exit code
+   */
+  private async executeBuildBat(
+    buildBatPath: string,
+    options: Required<BuildOptions>
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const args = this.buildArgs(options);
+    return this.executeWithStreaming(buildBatPath, args);
+  }
+
+  /**
    * Executes the build using UnrealBuildTool directly.
    * @param enginePath - Path to the Unreal Engine installation
    * @param options - Validated build options
@@ -267,58 +289,8 @@ export class BuildExecutor {
       throw new Error(`UnrealBuildTool not found at: ${ubtPath}`);
     }
 
-    const args = [
-      options.target,
-      options.platform,
-      options.config,
-      `-project="${options.projectPath}"`,
-      '-NoMutex',
-    ];
-
-    if (options.clean) {
-      args.push('-clean');
-    }
-
-    if (options.verbose) {
-      args.push('-verbose');
-    }
-
-    args.push(...options.additionalArgs);
-
-    const command = `"${ubtPath}" ${args.join(' ')}`;
-    this.logger.debug(`Executing: ${command}`);
-
-    const childProcess = execa(command, {
-      stdio: 'pipe',
-      cwd: path.dirname(ubtPath),
-      shell: true,
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    if (childProcess.stdout) {
-      childProcess.stdout.on('data', (data: Buffer) => {
-        const str = data.toString();
-        stdout += str;
-        this.stdout.write(str);
-      });
-    }
-
-    if (childProcess.stderr) {
-      childProcess.stderr.on('data', (data: Buffer) => {
-        const str = data.toString();
-        stderr += str;
-        this.stderr.write(str);
-      });
-    }
-
-    const result = await childProcess;
-    return {
-      stdout: result.stdout || stdout,
-      stderr: result.stderr || stderr,
-      exitCode: result.exitCode ?? 0,
-    };
+    const args = this.buildArgs(options);
+    return this.executeWithStreaming(ubtPath, args);
   }
 
   /**

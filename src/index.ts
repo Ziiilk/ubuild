@@ -63,9 +63,7 @@ export {
  * import { runSelfEvolution } from '@zitool/ubuild';
  *
  * await runSelfEvolution({
- *   interval: 5000,
- *   apiKey: process.env.OPENAI_API_KEY,
- *   model: 'gpt-4'
+ *   logger: (msg: string) => console.log(msg)
  * });
  * ```
  */

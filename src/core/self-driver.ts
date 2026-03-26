@@ -107,7 +107,7 @@ export class SelfDriver {
         this.log('❌ Verification failed, reverting...');
         await this.revert();
       } else {
-        // 验证通过，检查 AI 是否已提交
+        // Verification passed, check if AI has committed
         const isClean = await this.isWorkingTreeClean();
         if (isClean) {
           this.log('✅ Changes committed by AI');
