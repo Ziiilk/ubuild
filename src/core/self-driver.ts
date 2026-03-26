@@ -204,6 +204,15 @@ Execute your decision. Make minimal, focused changes.
 
 If verification fails, do NOT commit - the system will revert automatically.`;
 
+    // Check if opencode command is available
+    try {
+      await execa('opencode', ['--version'], { cwd: this.projectRoot });
+    } catch {
+      this.log('❌ OpenCode is not installed or not in PATH');
+      this.log('   Install it with: npm install -g opencode');
+      return false;
+    }
+
     try {
       this.log('🚀 Executing OpenCode...');
 

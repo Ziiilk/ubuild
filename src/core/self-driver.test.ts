@@ -285,7 +285,10 @@ describe('SelfDriver', () => {
         if (command === 'git' && args?.includes('ls-files')) {
           return mockExecaResult(0, 'src/core/self-driver.ts', '');
         }
-        if (command === 'opencode') {
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (command === 'opencode' && args?.includes('run')) {
           return mockExecaResult(0, '', '');
         }
         return mockExecaResult(0, '', '');
@@ -301,12 +304,36 @@ describe('SelfDriver', () => {
       expect(result).toBe(true);
     });
 
-    it('returns false when opencode fails', async () => {
+    it('returns false when opencode is not installed', async () => {
       mockExeca.mockImplementation(async (command: string, args?: string[]) => {
         if (command === 'git' && args?.includes('ls-files')) {
           return mockExecaResult(0, 'src/core/self-driver.ts', '');
         }
-        if (command === 'opencode') {
+        if (command === 'opencode' && args?.includes('--version')) {
+          throw new Error('Command not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      const result = await evolveWithOpenCode.call(driver, '');
+
+      expect(result).toBe(false);
+    });
+
+    it('returns false when opencode run fails', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (command === 'opencode' && args?.includes('run')) {
           return mockExecaResult(1, '', '');
         }
         return mockExecaResult(0, '', '');
@@ -322,12 +349,15 @@ describe('SelfDriver', () => {
       expect(result).toBe(false);
     });
 
-    it('handles opencode execution errors', async () => {
+    it('handles opencode run execution errors', async () => {
       mockExeca.mockImplementation(async (command: string, args?: string[]) => {
         if (command === 'git' && args?.includes('ls-files')) {
           return mockExecaResult(0, 'src/core/self-driver.ts', '');
         }
-        if (command === 'opencode') {
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (command === 'opencode' && args?.includes('run')) {
           throw new Error('OpenCode execution failed');
         }
         return mockExecaResult(0, '', '');
