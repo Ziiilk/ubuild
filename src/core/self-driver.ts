@@ -239,7 +239,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
         args: ['ts-node', 'src/cli/index.ts', 'evolve', '--help'],
       },
       {
-        name: 'Core command',
+        name: 'List command',
         file: 'npx',
         args: ['ts-node', 'src/cli/index.ts', 'list', '--help'],
       },

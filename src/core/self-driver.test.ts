@@ -172,7 +172,7 @@ describe('SelfDriver', () => {
       expect(result).toBe(false);
     });
 
-    it('returns false when core command fails', async () => {
+    it('returns false when list command fails', async () => {
       mockExeca.mockImplementation(async (command: string, args?: string[]) => {
         if (command === 'npx' && args?.includes('list')) {
           return mockExecaResult(1, 'Command failed', '');
