@@ -235,7 +235,7 @@ describe('SelfDriver', () => {
       expect(criticalLintFixes.length).toBeGreaterThan(0);
     });
 
-    it('returns conservative improvements when no critical issues', async () => {
+    it('returns empty suggestions when no critical issues (AI decides improvements)', async () => {
       mockExeca.mockImplementation(async () => mockExecaResult(0, '', ''));
 
       const diagnosis: Diagnosis = {
@@ -251,14 +251,9 @@ describe('SelfDriver', () => {
       ).analyzeEvolutionSuggestions;
       const suggestions = await analyzeEvolutionSuggestions.call(driver, diagnosis);
 
-      // Should have at least type safety and documentation suggestions
-      expect(suggestions.length).toBeGreaterThan(0);
-
-      // Check that suggestions are prioritized correctly
-      const typeRefactor = suggestions.find(
-        (s) => s.category === 'refactor' && s.description.toLowerCase().includes('type')
-      );
-      expect(typeRefactor).toBeDefined();
+      // When no critical issues, suggestions should be empty
+      // AI will analyze codebase and decide improvements in buildPrompt
+      expect(suggestions.length).toBe(0);
     });
 
     it('sorts suggestions by priority', async () => {
@@ -756,85 +751,6 @@ describe('SelfDriver', () => {
     });
   });
 
-  describe('hasTestFiles', () => {
-    beforeEach(() => {
-      driver = new SelfDriver();
-    });
-
-    it('returns true when test files exist (Unix find)', async () => {
-      mockExeca.mockImplementation(async (command: string) => {
-        if (command === 'find') {
-          return mockExecaResult(0, 'src/core/example.test.ts', '');
-        }
-        return mockExecaResult(0, '', '');
-      });
-
-      const hasTestFiles = (driver as unknown as { hasTestFiles: () => Promise<boolean> })
-        .hasTestFiles;
-      const result = await hasTestFiles.call(driver);
-
-      expect(result).toBe(true);
-    });
-
-    it('returns false when no test files exist', async () => {
-      mockExeca.mockImplementation(async () => mockExecaResult(0, '', ''));
-
-      const hasTestFiles = (driver as unknown as { hasTestFiles: () => Promise<boolean> })
-        .hasTestFiles;
-      const result = await hasTestFiles.call(driver);
-
-      expect(result).toBe(false);
-    });
-
-    it('falls back to Windows dir command on Unix find failure', async () => {
-      mockExeca.mockImplementation(async (command: string) => {
-        if (command === 'find') {
-          throw new Error('Command not found');
-        }
-        if (command === 'cmd') {
-          return mockExecaResult(0, 'src\\core\\example.test.ts', '');
-        }
-        return mockExecaResult(0, '', '');
-      });
-
-      const hasTestFiles = (driver as unknown as { hasTestFiles: () => Promise<boolean> })
-        .hasTestFiles;
-      const result = await hasTestFiles.call(driver);
-
-      expect(result).toBe(true);
-    });
-
-    it('returns false when both find and dir fail', async () => {
-      mockExeca.mockImplementation(async () => {
-        throw new Error('Command failed');
-      });
-
-      const hasTestFiles = (driver as unknown as { hasTestFiles: () => Promise<boolean> })
-        .hasTestFiles;
-      const result = await hasTestFiles.call(driver);
-
-      expect(result).toBe(false);
-    });
-
-    it('returns false when Windows dir command also fails', async () => {
-      mockExeca.mockImplementation(async (command: string) => {
-        if (command === 'find') {
-          throw new Error('Command not found');
-        }
-        if (command === 'cmd') {
-          throw new Error('dir command failed');
-        }
-        return mockExecaResult(0, '', '');
-      });
-
-      const hasTestFiles = (driver as unknown as { hasTestFiles: () => Promise<boolean> })
-        .hasTestFiles;
-      const result = await hasTestFiles.call(driver);
-
-      expect(result).toBe(false);
-    });
-  });
-
   describe('hasChanges', () => {
     beforeEach(() => {
       driver = new SelfDriver();
@@ -999,7 +915,7 @@ describe('SelfDriver', () => {
       const prompt = buildPrompt.call(driver, diagnosis, suggestions);
 
       expect(prompt).toContain('No critical issues');
-      expect(prompt).toContain('Add more tests');
+      expect(prompt).toContain('ANALYZE the codebase');
     });
 
     it('includes verification checklist in prompt', () => {
@@ -1628,7 +1544,7 @@ describe('SelfDriver buildPrompt categorized suggestions', () => {
     expect(prompt).toContain('medium effort');
   });
 
-  it('includes high priority suggestions in prompt', () => {
+  it('includes high priority suggestions in detected opportunities section', () => {
     const diagnosis: Diagnosis = {
       testFailures: [],
       lintErrors: [],
@@ -1651,11 +1567,11 @@ describe('SelfDriver buildPrompt categorized suggestions', () => {
     ).buildPrompt;
     const prompt = buildPrompt.call(driver, diagnosis, suggestions);
 
-    expect(prompt).toContain('High Priority');
-    expect(prompt).toContain('Add unit tests');
+    expect(prompt).toContain('Detected Improvement Opportunities');
+    expect(prompt).toContain('[test] Add unit tests for core modules');
   });
 
-  it('includes medium priority suggestions in improvements section', () => {
+  it('includes medium priority suggestions in detected opportunities section', () => {
     const diagnosis: Diagnosis = {
       testFailures: [],
       lintErrors: [],
@@ -1678,11 +1594,11 @@ describe('SelfDriver buildPrompt categorized suggestions', () => {
     ).buildPrompt;
     const prompt = buildPrompt.call(driver, diagnosis, suggestions);
 
-    expect(prompt).toContain('Potential Improvements');
-    expect(prompt).toContain('Improve type safety');
+    expect(prompt).toContain('Detected Improvement Opportunities');
+    expect(prompt).toContain('[refactor] Improve type safety');
   });
 
-  it('includes low priority suggestions in improvements section', () => {
+  it('includes low priority suggestions in detected opportunities section', () => {
     const diagnosis: Diagnosis = {
       testFailures: [],
       lintErrors: [],
@@ -1705,8 +1621,8 @@ describe('SelfDriver buildPrompt categorized suggestions', () => {
     ).buildPrompt;
     const prompt = buildPrompt.call(driver, diagnosis, suggestions);
 
-    expect(prompt).toContain('Potential Improvements');
-    expect(prompt).toContain('Add JSDoc comments');
+    expect(prompt).toContain('Detected Improvement Opportunities');
+    expect(prompt).toContain('[docs] Add JSDoc comments');
   });
 });
 

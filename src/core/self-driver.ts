@@ -409,71 +409,13 @@ export class SelfDriver {
       }
     }
 
-    // 如果没有严重问题，生成保守的改进建议
-    if (suggestions.length === 0) {
-      // 检查测试覆盖率
-      const hasTests = await this.hasTestFiles();
-      if (!hasTests) {
-        suggestions.push({
-          priority: 'high',
-          category: 'test',
-          description: 'Add unit tests for core modules',
-          reason: 'No test files detected - risky for refactoring',
-          estimatedEffort: 'large',
-        });
-      }
-
-      // 检查类型完整性
-      suggestions.push({
-        priority: 'medium',
-        category: 'refactor',
-        description: 'Improve type safety and remove any types',
-        reason: 'Strict TypeScript ensures long-term maintainability',
-        estimatedEffort: 'medium',
-      });
-
-      // 检查文档
-      suggestions.push({
-        priority: 'low',
-        category: 'docs',
-        description: 'Add JSDoc comments to public APIs',
-        reason: 'Documentation helps future contributors',
-        estimatedEffort: 'small',
-      });
-    }
+    // 注意：不再生成硬编码建议。当没有严重问题时，AI将自主分析代码库
+    // 并基于实际代码状态决定改进方向（包括fix/test/docs/refactor/feature）
 
     return suggestions.sort((a, b) => {
       const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
       return priorityOrder[a.priority] - priorityOrder[b.priority];
     });
-  }
-
-  /**
-   * Checks if test files exist in the project.
-   */
-  private async hasTestFiles(): Promise<boolean> {
-    try {
-      const result = await execa(
-        'find',
-        ['src', '-name', '*.test.ts', '-o', '-name', '*.spec.ts'],
-        {
-          cwd: this.projectRoot,
-          reject: false,
-        }
-      );
-      return result.stdout.trim().length > 0;
-    } catch {
-      // Windows fallback
-      try {
-        const result = await execa('cmd', ['/c', 'dir', '/s', '/b', 'src\\*.test.ts'], {
-          cwd: this.projectRoot,
-          reject: false,
-        });
-        return result.stdout.trim().length > 0;
-      } catch {
-        return false;
-      }
-    }
   }
 
   /**
@@ -586,32 +528,65 @@ export class SelfDriver {
     });
 
     const hasCriticalIssues = criticalIssues.length > 0;
+    const hasSuggestions = suggestions.length > 0;
 
-    return `You are maintaining the ubuild project. Follow CONSERVATIVE evolution strategy.
+    return `You are maintaining the ubuild project. Follow CONSERVATIVE evolution strategy with INTELLIGENT analysis.
 
-${hasCriticalIssues ? '⚠️  CRITICAL ISSUES MUST BE FIXED FIRST ⚠️' : '✅ No critical issues - proceed with conservative improvements'}
+${hasCriticalIssues ? '⚠️  CRITICAL ISSUES MUST BE FIXED FIRST ⚠️' : '✅ No critical issues - analyze codebase for improvement opportunities'}
 
-## Critical Issues (FIX IMMEDIATELY)
-${criticalIssues.length > 0 ? criticalIssues.join('\n') : 'None'}
+## Current Health Status
+- Test failures: ${diagnosis.testFailures.length > 0 ? diagnosis.testFailures.join(', ') : 'None'}
+- Lint errors: ${diagnosis.lintErrors.length > 0 ? diagnosis.lintErrors.length + ' errors' : 'None'}
 
-## High Priority (Address if no critical issues)
-${highPriority.length > 0 ? highPriority.slice(0, 3).join('\n') : 'None'}
+${
+  hasCriticalIssues
+    ? `## Critical Issues (FIX IMMEDIATELY)
+${criticalIssues.join('\n')}`
+    : ''
+}
 
-## Potential Improvements (Only after above)
-${improvements.length > 0 ? improvements.slice(0, 3).join('\n') : 'None'}
-
-## CONSERVATIVE EVOLUTION PRIORITY
-1. FIX: Broken tests, lint errors, build failures, broken commands
-2. TEST: Add missing tests for uncovered code
-3. DOCS: Add JSDoc, improve README, clarify usage
-4. REFACTOR: Remove dead code, improve types, simplify logic
-5. FEATURE: Only add small, well-defined features when everything above is solid
+${
+  hasSuggestions && !hasCriticalIssues
+    ? `## Detected Improvement Opportunities
+${suggestions.map((s) => `- [${s.category}] ${s.description} (${s.priority} priority)`).join('\n')}`
+    : ''
+}
 
 ## YOUR TASK
-${hasCriticalIssues ? 'FIX ALL CRITICAL ISSUES FIRST. Do not do anything else.' : 'Pick ONE high priority or improvement item and implement it'}
+${
+  hasCriticalIssues
+    ? 'FIX ALL CRITICAL ISSUES FIRST. Do not do anything else.'
+    : `ANALYZE the codebase and choose ONE improvement to implement:
+
+1. EXPLORE the source code structure (src/commands/, src/core/, src/utils/)
+2. IDENTIFY what could be improved:
+   - Missing test coverage for critical paths?
+   - Incomplete error handling?
+   - Missing functionality that would be valuable?
+   - Code that could be cleaner or more robust?
+   - Small feature gaps that could be filled?
+3. SELECT the most valuable improvement based on:
+   - Impact: How much does it improve the project?
+   - Risk: How likely is it to break existing functionality?
+   - Effort: Can it be done in a focused change?
+
+Choose from these categories (in priority order):
+- FIX: Broken functionality, bugs, errors
+- TEST: Add tests for uncovered or critical code
+- DOCS: Improve documentation where it's lacking
+- REFACTOR: Clean up code, improve types, simplify
+- FEATURE: Add small, well-defined capabilities that fit naturally`
+}
+
+## CONSERVATIVE PRINCIPLES
+- Prefer fixing over adding
+- Prefer testing over refactoring  
+- Prefer small improvements over large changes
+- Only add features when codebase is solid and the feature is clearly valuable
+- When in doubt, choose the safer option
 
 ## VERIFICATION CHECKLIST (MUST ALL PASS)
-After making changes, verify:
+After making changes:
 - [ ] npm run build (compiles without errors)
 - [ ] npm test (all tests pass)
 - [ ] npm run lint (no lint errors)
@@ -622,10 +597,11 @@ After making changes, verify:
 - Do NOT use 'as any' or '@ts-ignore'
 - Fix root causes, not symptoms
 - Maintain existing code style
-- Make minimal, focused changes
+- Make minimal, focused changes (one improvement per iteration)
 - Do NOT commit - just implement
+- If you add a feature, ensure it has basic tests
 
-Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one conservative improvement'}`;
+Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one intelligent, conservative improvement based on actual code analysis'}`;
   }
 
   /**
