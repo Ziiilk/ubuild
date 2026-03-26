@@ -14,15 +14,9 @@ import { formatError } from '../utils/error';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 
-/** Options for configuring the self-evolution driver. */
-export interface SelfEvolverOptions {
-  /** Custom logger function for evolution output */
-  logger?: (msg: string) => void;
-  /** Run only one iteration and exit (default: false - run forever) */
-  once?: boolean;
-  /** Show what would be done without actually executing */
-  dryRun?: boolean;
-}
+import type { SelfEvolverOptions } from '../types/evolve';
+
+export type { SelfEvolverOptions };
 
 /**
  * Self-driving evolution engine for ubuild.
