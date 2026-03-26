@@ -199,37 +199,41 @@ describe('SelfDriver', () => {
     });
   });
 
-  describe('hasChanges', () => {
+  describe('isWorkingTreeClean', () => {
     beforeEach(() => {
       driver = new SelfDriver();
     });
 
-    it('returns true when git status shows changes', async () => {
+    it('returns false when git status shows changes', async () => {
       mockExeca.mockImplementation(async (command: string, args?: string[]) => {
-        if (command === 'git' && args?.includes('status')) {
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
           return mockExecaResult(0, 'M src/core/example.ts', '');
         }
         return mockExecaResult(0, '', '');
       });
 
-      const hasChanges = (driver as unknown as { hasChanges: () => Promise<boolean> }).hasChanges;
-      const result = await hasChanges.call(driver);
+      const isWorkingTreeClean = (
+        driver as unknown as { isWorkingTreeClean: () => Promise<boolean> }
+      ).isWorkingTreeClean;
+      const result = await isWorkingTreeClean.call(driver);
 
-      expect(result).toBe(true);
+      expect(result).toBe(false);
     });
 
-    it('returns false when git status is empty', async () => {
+    it('returns true when git status is empty', async () => {
       mockExeca.mockImplementation(async (command: string, args?: string[]) => {
-        if (command === 'git' && args?.includes('status')) {
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
           return mockExecaResult(0, '', '');
         }
         return mockExecaResult(0, '', '');
       });
 
-      const hasChanges = (driver as unknown as { hasChanges: () => Promise<boolean> }).hasChanges;
-      const result = await hasChanges.call(driver);
+      const isWorkingTreeClean = (
+        driver as unknown as { isWorkingTreeClean: () => Promise<boolean> }
+      ).isWorkingTreeClean;
+      const result = await isWorkingTreeClean.call(driver);
 
-      expect(result).toBe(false);
+      expect(result).toBe(true);
     });
 
     it('returns false when git command fails', async () => {
@@ -237,35 +241,12 @@ describe('SelfDriver', () => {
         throw new Error('Not a git repository');
       });
 
-      const hasChanges = (driver as unknown as { hasChanges: () => Promise<boolean> }).hasChanges;
-      const result = await hasChanges.call(driver);
+      const isWorkingTreeClean = (
+        driver as unknown as { isWorkingTreeClean: () => Promise<boolean> }
+      ).isWorkingTreeClean;
+      const result = await isWorkingTreeClean.call(driver);
 
       expect(result).toBe(false);
-    });
-  });
-
-  describe('commit', () => {
-    beforeEach(() => {
-      driver = new SelfDriver();
-    });
-
-    it('commits changes successfully', async () => {
-      mockExeca.mockImplementation(async () => mockExecaResult(0, '', ''));
-
-      const commit = (driver as unknown as { commit: (msg: string) => Promise<void> }).commit;
-      await expect(commit.call(driver, 'test: add example tests')).resolves.not.toThrow();
-    });
-
-    it('handles commit failure gracefully', async () => {
-      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
-        if (command === 'git' && args?.includes('commit')) {
-          throw new Error('Commit failed');
-        }
-        return mockExecaResult(0, '', '');
-      });
-
-      const commit = (driver as unknown as { commit: (msg: string) => Promise<void> }).commit;
-      await expect(commit.call(driver, 'test: add example tests')).resolves.not.toThrow();
     });
   });
 
