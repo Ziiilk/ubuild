@@ -415,31 +415,36 @@ describe('SelfDriver', () => {
   });
 
   describe('signal handling', () => {
+    const drivers: SelfDriver[] = [];
+
     afterEach(() => {
-      if (driver) {
-        driver.cleanup();
-      }
+      // Clean up all drivers created in this test
+      drivers.forEach((d) => d.cleanup());
+      drivers.length = 0;
     });
 
     it('handles SIGINT signal', () => {
-      driver = new SelfDriver();
+      const d = new SelfDriver();
+      drivers.push(d);
 
       // Emit SIGINT - should not throw
       expect(() => process.emit('SIGINT' as NodeJS.Signals)).not.toThrow();
     });
 
     it('handles SIGTERM signal', () => {
-      driver = new SelfDriver();
+      const d = new SelfDriver();
+      drivers.push(d);
 
       // Emit SIGTERM - should not throw
       expect(() => process.emit('SIGTERM' as NodeJS.Signals)).not.toThrow();
     });
 
     it('cleans up signal handlers when cleanup is called', () => {
-      driver = new SelfDriver();
+      const d = new SelfDriver();
+      drivers.push(d);
 
       // Cleanup should not throw
-      expect(() => driver.cleanup()).not.toThrow();
+      expect(() => d.cleanup()).not.toThrow();
 
       // Emitting signals after cleanup should not affect the driver
       expect(() => process.emit('SIGINT' as NodeJS.Signals)).not.toThrow();
@@ -447,12 +452,13 @@ describe('SelfDriver', () => {
     });
 
     it('handles multiple cleanup calls gracefully', () => {
-      driver = new SelfDriver();
+      const d = new SelfDriver();
+      drivers.push(d);
 
       // Multiple cleanups should not throw
       expect(() => {
-        driver.cleanup();
-        driver.cleanup();
+        d.cleanup();
+        d.cleanup();
       }).not.toThrow();
     });
   });
