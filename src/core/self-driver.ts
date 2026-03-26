@@ -293,8 +293,8 @@ Execute your decision. Make minimal, focused changes.
    - npm run build
    - npm test
    - npm run lint
-   - npx ts-node src/cli/index.ts evolve --help
-   - npx ts-node src/cli/index.ts list --help
+   - node dist/cli/index.js evolve --help
+   - node dist/cli/index.js list --help
 
 2. **Commit** if verification passes:
    \`\`\`bash
@@ -352,11 +352,11 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       { name: 'Tests', file: 'npm', args: ['test'] },
       { name: 'Lint', file: 'npm', args: ['run', 'lint'] },
       // Dynamically generate command checks from EVOLUTION_VERIFY_COMMANDS
-      // Use ts-node with source file to match the AI prompt expectations
+      // Use compiled dist/ output to verify the actual build artifacts
       ...EVOLUTION_VERIFY_COMMANDS.map((cmd) => ({
         name: `${cmd.charAt(0).toUpperCase() + cmd.slice(1)} command`,
-        file: 'npx',
-        args: ['ts-node', 'src/cli/index.ts', cmd, '--help'],
+        file: 'node',
+        args: ['dist/cli/index.js', cmd, '--help'],
       })),
     ];
 

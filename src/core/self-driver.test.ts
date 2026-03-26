@@ -239,7 +239,7 @@ describe('SelfDriver', () => {
 
     it('returns false when evolve command fails', async () => {
       mockExeca.mockImplementation(async (command: string, args?: string[]) => {
-        if (command === 'npx' && args?.includes('ts-node') && args?.includes('evolve')) {
+        if (command === 'node' && args?.includes('dist/cli/index.js') && args?.includes('evolve')) {
           return mockExecaResult(1, 'Command failed', '');
         }
         return mockExecaResult(0, '', '');
@@ -252,7 +252,7 @@ describe('SelfDriver', () => {
 
     it('returns false when list command fails', async () => {
       mockExeca.mockImplementation(async (command: string, args?: string[]) => {
-        if (command === 'npx' && args?.includes('ts-node') && args?.includes('list')) {
+        if (command === 'node' && args?.includes('dist/cli/index.js') && args?.includes('list')) {
           return mockExecaResult(1, 'Command failed', '');
         }
         return mockExecaResult(0, '', '');
