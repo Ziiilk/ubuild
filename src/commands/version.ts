@@ -49,7 +49,8 @@ async function getVersionInfo(): Promise<VersionInfo> {
       name: packageJson.name || '@zitool/ubuild',
       description: packageJson.description || 'Unreal Engine project management CLI tool',
     };
-  } catch {
+  } catch (error) {
+    Logger.debug(`Failed to read package.json: ${formatError(error)}`);
     // Fallback if package.json cannot be read
     return {
       version: 'unknown',

@@ -18,6 +18,9 @@ import { Validator } from '../utils/validator';
 import { formatError } from '../utils/error';
 import { EngineResolver } from './engine-resolver';
 
+/** Default engine version fallback when engine version detection fails. */
+const DEFAULT_ENGINE_VERSION_FALLBACK = '5.1';
+
 /**
  * Response from the engine selection interactive prompt.
  * Contains the user's chosen engine path or identifier.
@@ -347,7 +350,7 @@ export class ProjectInitializer {
       Logger.debug(`getEngineAssociationId failed, using default: ${formatError(error)}`);
     }
 
-    return '5.1';
+    return DEFAULT_ENGINE_VERSION_FALLBACK;
   }
 
   /**
