@@ -114,9 +114,34 @@ export class SelfDriver {
   }
 
   /**
+   * Checks if current directory is a git repository.
+   */
+  private async isGitRepository(): Promise<boolean> {
+    try {
+      const result = await execa('git', ['rev-parse', '--git-dir'], {
+        cwd: this.projectRoot,
+        reject: false,
+      });
+      return result.exitCode === 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Runs the self-evolution loop - continues indefinitely until interrupted by user.
    */
   async run(): Promise<void> {
+    // Pre-flight check: must be in a git repository
+    const isGitRepo = await this.isGitRepository();
+    if (!isGitRepo) {
+      this.log('❌ Error: Not a git repository');
+      this.log('   Self-evolution requires a git repository to track and revert changes.');
+      this.log(`   Current directory: ${this.projectRoot}`);
+      this.cleanup();
+      return;
+    }
+
     if (this.dryRun) {
       this.log('🔍 Dry run mode - showing what would be done');
       this.log(`📁 Project: ${this.projectRoot}`);

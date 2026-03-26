@@ -534,6 +534,137 @@ describe('SelfDriver', () => {
     });
   });
 
+  describe('isGitRepository', () => {
+    beforeEach(() => {
+      driver = new SelfDriver();
+    });
+
+    it('returns true when git rev-parse succeeds', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(0, '.git', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const isGitRepository = (driver as unknown as { isGitRepository: () => Promise<boolean> })
+        .isGitRepository;
+      const result = await isGitRepository.call(driver);
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false when git rev-parse fails', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(128, '', 'fatal: not a git repository');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const isGitRepository = (driver as unknown as { isGitRepository: () => Promise<boolean> })
+        .isGitRepository;
+      const result = await isGitRepository.call(driver);
+
+      expect(result).toBe(false);
+    });
+
+    it('returns false when git command throws', async () => {
+      mockExeca.mockImplementation(async (command: string) => {
+        if (command === 'git') {
+          throw new Error('Command not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const isGitRepository = (driver as unknown as { isGitRepository: () => Promise<boolean> })
+        .isGitRepository;
+      const result = await isGitRepository.call(driver);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('git repository validation in run', () => {
+    it('exits early when not in a git repository', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ once: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        // Git rev-parse fails - not a git repo
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(128, '', 'fatal: not a git repository');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const run = (driver as unknown as { run: () => Promise<void> }).run;
+      await run.call(driver);
+
+      expect(mockLogger).toHaveBeenCalledWith('❌ Error: Not a git repository');
+      expect(mockLogger).toHaveBeenCalledWith(
+        '   Self-evolution requires a git repository to track and revert changes.'
+      );
+      expect(mockLogger).toHaveBeenCalledWith(`   Current directory: ${mockProjectRoot}`);
+    });
+
+    it('proceeds with evolution when in a git repository', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ once: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+        // Git rev-parse succeeds
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(0, '.git', '');
+        }
+
+        // Git status returns clean
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+          return mockExecaResult(0, '', '');
+        }
+
+        // All verification checks pass
+        if (fullCommand.includes('npm run build')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (fullCommand.includes('npm test')) {
+          return mockExecaResult(0, 'Test Suites: 10 passed', '');
+        }
+        if (fullCommand.includes('npm run lint')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (fullCommand.includes('evolve --help') || fullCommand.includes('list --help')) {
+          return mockExecaResult(0, 'Usage: [command] [options]', '');
+        }
+
+        // OpenCode executes successfully
+        if (command === 'opencode') {
+          if (args?.includes('--version')) {
+            return mockExecaResult(0, '1.0.0', '');
+          }
+          if (args?.includes('run')) {
+            return mockExecaResult(0, '', '');
+          }
+        }
+
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts', '');
+        }
+
+        return mockExecaResult(0, '', '');
+      });
+
+      const run = (driver as unknown as { run: () => Promise<void> }).run;
+      await run.call(driver);
+
+      // Should proceed with evolution
+      expect(mockLogger).toHaveBeenCalledWith('🔄 Starting self-evolution...');
+      expect(mockLogger).toHaveBeenCalledWith('✅ Changes committed by AI');
+    });
+  });
+
   describe('dry-run behavior', () => {
     it('logs dry run information and exits early', async () => {
       const mockLogger = jest.fn();

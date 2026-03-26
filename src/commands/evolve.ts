@@ -11,6 +11,8 @@ import { Command } from 'commander';
 import { Logger } from '../utils/logger';
 import { formatError } from '../utils/error';
 import { runSelfEvolution } from '../core/self-driver';
+import * as fs from 'fs-extra';
+import * as path from 'path';
 
 /**
  * Register the 'evolve' command for self-evolution using OpenCode.
@@ -34,6 +36,14 @@ export function evolveCommand(program: Command): void {
         Logger.info('Mode: Single iteration (--once)\n');
       } else {
         Logger.info('Runs forever until Ctrl+C\n');
+      }
+
+      // Pre-flight check: EVOLVE.md should exist (warn only)
+      const projectRoot = process.cwd();
+      const constitutionPath = path.join(projectRoot, 'EVOLVE.md');
+      if (!(await fs.pathExists(constitutionPath))) {
+        Logger.warning('Warning: EVOLVE.md not found in project root');
+        Logger.warning('  Evolution will proceed without constitution guidance');
       }
 
       try {
