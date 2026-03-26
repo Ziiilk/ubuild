@@ -250,52 +250,40 @@ export class SelfDriver {
    */
   private async getFileTree(): Promise<string> {
     try {
-      // Get tracked source files
-      const srcResult = await execa('git', ['ls-files', 'src/'], {
-        cwd: this.projectRoot,
-        reject: false,
-      });
-
-      // Get untracked source files
-      const srcUntrackedResult = await execa(
-        'git',
-        ['ls-files', '--others', '--exclude-standard', 'src/'],
-        {
-          cwd: this.projectRoot,
-          reject: false,
-        }
-      );
-
-      // Get tracked config files
+      // Get config files (both tracked and untracked)
       const configResult = await execa(
         'git',
-        ['ls-files', '*.json', '*.js', '*.md', '*.yml', '*.yaml'],
+        [
+          'ls-files',
+          '--others',
+          '--exclude-standard',
+          '--cached',
+          '*.json',
+          '*.js',
+          '*.md',
+          '*.yml',
+          '*.yaml',
+        ],
         {
           cwd: this.projectRoot,
           reject: false,
         }
       );
 
-      // Get untracked config files
-      const configUntrackedResult = await execa(
+      // Get bin files (both tracked and untracked)
+      const binResult = await execa(
         'git',
-        ['ls-files', '--others', '--exclude-standard', '*.json', '*.js', '*.md', '*.yml', '*.yaml'],
+        ['ls-files', '--others', '--exclude-standard', '--cached', 'bin/'],
         {
           cwd: this.projectRoot,
           reject: false,
         }
       );
 
-      // Get tracked bin files
-      const binResult = await execa('git', ['ls-files', 'bin/'], {
-        cwd: this.projectRoot,
-        reject: false,
-      });
-
-      // Get untracked bin files
-      const binUntrackedResult = await execa(
+      // Get source files (both tracked and untracked)
+      const srcResult = await execa(
         'git',
-        ['ls-files', '--others', '--exclude-standard', 'bin/'],
+        ['ls-files', '--others', '--exclude-standard', '--cached', 'src/'],
         {
           cwd: this.projectRoot,
           reject: false,
@@ -304,22 +292,16 @@ export class SelfDriver {
 
       const parts: string[] = [];
 
-      // Combine tracked and untracked config files
-      const configFiles = this.combineFileLists(configResult.stdout, configUntrackedResult.stdout);
-      if (configFiles) {
-        parts.push('## Configuration Files\n' + configFiles);
+      if (configResult.stdout.trim()) {
+        parts.push('## Configuration Files\n' + configResult.stdout.trim());
       }
 
-      // Combine tracked and untracked bin files
-      const binFiles = this.combineFileLists(binResult.stdout, binUntrackedResult.stdout);
-      if (binFiles) {
-        parts.push('## Bin Files\n' + binFiles);
+      if (binResult.stdout.trim()) {
+        parts.push('## Bin Files\n' + binResult.stdout.trim());
       }
 
-      // Combine tracked and untracked source files
-      const srcFiles = this.combineFileLists(srcResult.stdout, srcUntrackedResult.stdout);
-      if (srcFiles) {
-        parts.push('## Source Files\n' + srcFiles);
+      if (srcResult.stdout.trim()) {
+        parts.push('## Source Files\n' + srcResult.stdout.trim());
       }
 
       if (parts.length === 0) {
@@ -331,22 +313,6 @@ export class SelfDriver {
       this.log(`⚠️  Error getting file tree: ${formatError(error)}`);
       return 'Project files (error occurred)';
     }
-  }
-
-  /**
-   * Combines tracked and untracked file lists, removing duplicates.
-   * @param tracked - Tracked files from git ls-files
-   * @param untracked - Untracked files from git ls-files --others
-   * @returns Combined sorted file list or empty string
-   */
-  private combineFileLists(tracked: string, untracked: string): string {
-    const trackedSet = new Set(tracked.split('\n').filter((f) => f.trim()));
-    const untrackedSet = new Set(untracked.split('\n').filter((f) => f.trim()));
-
-    // Merge and sort
-    const allFiles = [...new Set([...trackedSet, ...untrackedSet])].sort();
-
-    return allFiles.join('\n');
   }
 
   /**
