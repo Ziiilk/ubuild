@@ -575,5 +575,282 @@ describe('ProjectGenerator', () => {
         }
       });
     });
+
+    it('returns failure when project path does not exist', async () => {
+      await withTempDir(async (rootDir) => {
+        const engine = await createFakeEngine(rootDir);
+        const nonExistentPath = path.join(rootDir, 'NonExistent', 'Project.uproject');
+
+        const result = await ProjectGenerator.generate({
+          ide: 'sln',
+          projectPath: nonExistentPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(false);
+        // Error should indicate the path resolution failed
+        expect(result.error).toBeDefined();
+      });
+    });
+
+    it('returns failure when project path is a file without .uproject extension', async () => {
+      await withTempDir(async (rootDir) => {
+        const engine = await createFakeEngine(rootDir);
+        const invalidFilePath = path.join(rootDir, 'invalid.txt');
+        await fs.writeFile(invalidFilePath, 'not a project');
+
+        const result = await ProjectGenerator.generate({
+          ide: 'sln',
+          projectPath: invalidFilePath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(false);
+      });
+    });
+
+    it('handles permission errors when reading directory', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'PermissionGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: { stdout: 'Project files generated' },
+          })
+        );
+
+        // Mock fs.readdir to throw permission error
+        const originalReaddir = fs.readdir;
+        jest.spyOn(fs, 'readdir').mockImplementation(async (...args: unknown[]) => {
+          const firstArg = args[0];
+          if (typeof firstArg === 'string' && firstArg.includes(project.projectDir)) {
+            throw new Error('EACCES: permission denied');
+          }
+          return originalReaddir(...(args as [string]));
+        });
+
+        // Permission errors cause the generation to fail
+        const result = await ProjectGenerator.generate({
+          ide: 'sln',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        // The function catches errors and returns success: false
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('permission denied');
+
+        jest.restoreAllMocks();
+      });
+    });
+
+    it('handles non-Error exceptions gracefully', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'StringErrorGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        // Mock execa to throw a string instead of Error
+        mockExeca.mockImplementation(() => {
+          throw 'String error message';
+        });
+
+        const result = await ProjectGenerator.generate({
+          ide: 'sln',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('String error message');
+      });
+    });
+
+    it('handles undefined exception gracefully', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'UndefinedErrorGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        // Mock execa to throw undefined
+        mockExeca.mockImplementation(() => {
+          throw undefined;
+        });
+
+        const result = await ProjectGenerator.generate({
+          ide: 'sln',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('undefined');
+      });
+    });
+
+    it('handles null exception gracefully', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'NullErrorGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        // Mock execa to throw null
+        mockExeca.mockImplementation(() => {
+          throw null;
+        });
+
+        const result = await ProjectGenerator.generate({
+          ide: 'sln',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('null');
+      });
+    });
+
+    it('handles empty tasks array in existing tasks.json', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'EmptyTasksGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: { stdout: 'VSCode project files generated' },
+          })
+        );
+
+        const projectDir = path.dirname(project.uprojectPath);
+        const vscodeDir = path.join(projectDir, '.vscode');
+        await fs.ensureDir(vscodeDir);
+
+        const existingTasks = {
+          version: '2.0.0',
+          tasks: [],
+        };
+        await fs.writeJson(path.join(vscodeDir, 'tasks.json'), existingTasks, { spaces: 2 });
+
+        const result = await ProjectGenerator.generate({
+          ide: 'vscode',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(true);
+
+        const tasksConfig = await fs.readJson(path.join(vscodeDir, 'tasks.json'));
+        expect(tasksConfig.tasks).toHaveLength(2);
+        expect(tasksConfig.tasks[0].label).toBe('ubuild: Build Project');
+      });
+    });
+
+    it('handles tasks.json with no tasks property', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'NoTasksPropGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: { stdout: 'VSCode project files generated' },
+          })
+        );
+
+        const projectDir = path.dirname(project.uprojectPath);
+        const vscodeDir = path.join(projectDir, '.vscode');
+        await fs.ensureDir(vscodeDir);
+
+        const existingTasks = {
+          version: '2.0.0',
+        };
+        await fs.writeJson(path.join(vscodeDir, 'tasks.json'), existingTasks, { spaces: 2 });
+
+        const result = await ProjectGenerator.generate({
+          ide: 'vscode',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(true);
+
+        const tasksConfig = await fs.readJson(path.join(vscodeDir, 'tasks.json'));
+        expect(tasksConfig.tasks).toHaveLength(2);
+      });
+    });
+
+    it('handles tasks.json with invalid tasks type', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'InvalidTasksTypeGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: { stdout: 'VSCode project files generated' },
+          })
+        );
+
+        const projectDir = path.dirname(project.uprojectPath);
+        const vscodeDir = path.join(projectDir, '.vscode');
+        await fs.ensureDir(vscodeDir);
+
+        const existingTasks = {
+          version: '2.0.0',
+          tasks: 'not an array',
+        };
+        await fs.writeJson(path.join(vscodeDir, 'tasks.json'), existingTasks, { spaces: 2 });
+
+        const result = await ProjectGenerator.generate({
+          ide: 'vscode',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(true);
+      });
+    });
+
+    it('handles streaming output from UBT', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'StreamingGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: { stdout: '', exitCode: 0 },
+            streamedStdout: ['Building...', 'Compiling...', 'Done!'],
+            streamedStderr: ['Warning: deprecated'],
+          })
+        );
+
+        const result = await ProjectGenerator.generate({
+          ide: 'sln',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(true);
+      });
+    });
+
+    it('handles early exit code before stream ends', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'EarlyExitGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: { stdout: '', stderr: 'Fatal error', exitCode: 2 },
+            streamedStdout: ['Starting...'],
+          })
+        );
+
+        const result = await ProjectGenerator.generate({
+          ide: 'sln',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('exit code 2');
+      });
+    });
   });
 });

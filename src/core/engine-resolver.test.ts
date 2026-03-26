@@ -713,4 +713,488 @@ describe('EngineResolver', () => {
       expect(result[0].associationId).toBe('ENV_UE_ROOT');
     });
   });
+
+  describe('registry error handling', () => {
+    it('handles "unable to find the specified registry key" error silently', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      mockExeca.mockImplementation(async () => {
+        const error = new Error('unable to find the specified registry key');
+        throw error;
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result).toEqual([]);
+    });
+
+    it('handles other registry errors with debug logging', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      mockExeca.mockImplementation(async () => {
+        throw new Error('Permission denied accessing registry');
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('launcher manifest Category engine matching', () => {
+    it('includes engines with Category === engine', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      configureFs({
+        existingPaths: [manifestPath],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'SomeGameEngine',
+                InstallLocation: 'C:\\Epic\\SomeEngine',
+                DisplayName: 'Some Game Engine',
+                Category: 'engine',
+              },
+            ],
+          }),
+        },
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        path: 'C:\\Epic\\SomeEngine',
+        associationId: 'SomeGameEngine',
+        source: 'launcher',
+      });
+    });
+
+    it('skips non-UE installations without engine category', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      configureFs({
+        existingPaths: [manifestPath],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'RandomApp',
+                InstallLocation: 'C:\\Epic\\RandomApp',
+                DisplayName: 'Random Application',
+                Category: 'application',
+              },
+            ],
+          }),
+        },
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('version file parsing', () => {
+    it('handles malformed version file gracefully', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(false);
+
+      process.env.UE_ENGINE_PATH = 'C:\\Engines\\UE_Test';
+
+      configureFs({
+        existingPaths: [
+          'C:\\Engines\\UE_Test',
+          'C:\\Engines\\UE_Test\\Engine\\Binaries\\Win64\\UnrealEditor.version',
+        ],
+        fileContents: {
+          'C:\\Engines\\UE_Test\\Engine\\Binaries\\Win64\\UnrealEditor.version': 'not valid json',
+        },
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].version).toBeUndefined();
+    });
+
+    it('reads version from Build.version file', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(false);
+
+      process.env.UE_ENGINE_PATH = 'C:\\Engines\\UE_Test';
+
+      configureFs({
+        existingPaths: [
+          'C:\\Engines\\UE_Test',
+          'C:\\Engines\\UE_Test\\Engine\\Build\\Build.version',
+        ],
+        fileContents: {
+          'C:\\Engines\\UE_Test\\Engine\\Build\\Build.version': JSON.stringify({
+            MajorVersion: 5,
+            MinorVersion: 4,
+            PatchVersion: 1,
+            Changelist: 12345,
+            CompatibleChangelist: 12345,
+            IsLicenseeVersion: 0,
+            IsPromotedBuild: 1,
+            BranchName: '++UE5+Release-5.4',
+            BuildId: 'abc123',
+          }),
+        },
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].version).toEqual({
+        MajorVersion: 5,
+        MinorVersion: 4,
+        PatchVersion: 1,
+        Changelist: 12345,
+        CompatibleChangelist: 12345,
+        IsLicenseeVersion: 0,
+        IsPromotedBuild: 1,
+        BranchName: '++UE5+Release-5.4',
+        BuildId: 'abc123',
+      });
+      expect(result[0].displayName).toBe('UE 5.4.1');
+    });
+  });
+
+  describe('duplicate engine removal', () => {
+    it('keeps existing engine when new engine has lower priority', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      process.env.UE_ENGINE_PATH = 'C:\\Epic\\UE_5.3';
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      configureFs({
+        existingPaths: [manifestPath, 'C:\\Epic\\UE_5.3'],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_5_3',
+                InstallLocation: 'C:\\Epic\\UE_5.3',
+                DisplayName: 'Unreal Engine 5.3',
+              },
+            ],
+          }),
+        },
+      });
+
+      mockExeca.mockImplementation(async () => ({
+        stdout: '{REGISTRY-GUID}    REG_SZ    C:\\Epic\\UE_5.3',
+      }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].source).toBe('launcher');
+    });
+
+    it('replaces environment engine with launcher engine at same path', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      process.env.UE_ENGINE_PATH = 'c:\\epic\\ue_5.3';
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      configureFs({
+        existingPaths: [manifestPath, 'C:\\Epic\\UE_5.3'],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_5_3',
+                InstallLocation: 'C:\\Epic\\UE_5.3',
+                DisplayName: 'Unreal Engine 5.3',
+              },
+            ],
+          }),
+        },
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].source).toBe('launcher');
+    });
+  });
+
+  describe('version comparison edge cases', () => {
+    it('handles compareVersions with both undefined', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      configureFs({
+        existingPaths: [manifestPath],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_A',
+                InstallLocation: 'C:\\Epic\\UE_A',
+                DisplayName: 'UE A',
+              },
+              {
+                AppName: 'UE_B',
+                InstallLocation: 'C:\\Epic\\UE_B',
+                DisplayName: 'UE B',
+              },
+            ],
+          }),
+        },
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result).toHaveLength(2);
+    });
+
+    it('handles version string comparison with underscore separators', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const uprojectPath = 'C:\\Projects\\TestGame\\TestGame.uproject';
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      configureFs({
+        existingPaths: [uprojectPath, manifestPath],
+        fileContents: {
+          [uprojectPath]: JSON.stringify({ EngineAssociation: '5_3' }),
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_5_3',
+                InstallLocation: 'C:\\Epic\\UE_5.3',
+                DisplayName: 'Unreal Engine 5.3',
+              },
+            ],
+          }),
+        },
+      });
+
+      const result = await EngineResolver.resolveEngine(uprojectPath);
+
+      expect(result.engine).toBeDefined();
+      expect(result.engine?.associationId).toBe('UE_5_3');
+    });
+
+    it('handles version string comparison with different lengths', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const uprojectPath = 'C:\\Projects\\TestGame\\TestGame.uproject';
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      configureFs({
+        existingPaths: [uprojectPath, manifestPath],
+        fileContents: {
+          [uprojectPath]: JSON.stringify({ EngineAssociation: '5.3.2' }),
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_5_3',
+                InstallLocation: 'C:\\Epic\\UE_5.3',
+                DisplayName: 'Unreal Engine 5.3',
+              },
+            ],
+          }),
+        },
+      });
+
+      const result = await EngineResolver.resolveEngine(uprojectPath);
+
+      expect(result.engine).toBeDefined();
+    });
+  });
+
+  describe('resolveEngine edge cases', () => {
+    it('handles exceptions from getEngineAssociationFromProject gracefully', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(false);
+
+      const uprojectPath = 'C:\\Projects\\TestGame\\TestGame.uproject';
+
+      // Create a malformed setup that will cause readFile to throw
+      configureFs({
+        existingPaths: [uprojectPath],
+        fileContents: {},
+      });
+
+      mockReadFile.mockImplementation(async () => {
+        throw new Error('Permission denied reading project file');
+      });
+
+      const result = await EngineResolver.resolveEngine(uprojectPath);
+
+      // The function catches errors and returns them as warnings, not as error field
+      expect(result.warnings).toContain(
+        'Failed to read project file: Permission denied reading project file'
+      );
+      expect(result.uprojectEngine).toBeUndefined();
+    });
+
+    it('uses default engine when no project engine association', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const uprojectPath = 'C:\\Projects\\TestGame\\TestGame.uproject';
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+      const enginePath = 'C:\\Epic\\UE_5.3';
+      const versionFilePath = path.join(enginePath, 'Engine', 'Build', 'Build.version');
+
+      configureFs({
+        existingPaths: [uprojectPath, manifestPath, enginePath, versionFilePath],
+        fileContents: {
+          [uprojectPath]: JSON.stringify({ FileVersion: 3 }),
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_5_3',
+                InstallLocation: enginePath,
+                DisplayName: 'Unreal Engine 5.3',
+              },
+            ],
+          }),
+          [versionFilePath]: JSON.stringify({
+            MajorVersion: 5,
+            MinorVersion: 3,
+            PatchVersion: 2,
+            Changelist: 12345,
+            CompatibleChangelist: 12345,
+            IsLicenseeVersion: 0,
+            IsPromotedBuild: 1,
+            BranchName: '++UE5+Release-5.3',
+            BuildId: 'abc123',
+          }),
+        },
+      });
+
+      const result = await EngineResolver.resolveEngine(uprojectPath);
+
+      expect(result.engine).toBeDefined();
+      expect(result.warnings).toContain('No EngineAssociation found in .uproject file');
+      expect(result.warnings).toContain('Using engine UE 5.3.2 (not associated with project)');
+    });
+
+    it('returns no engine when no installations found', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(false);
+
+      const uprojectPath = 'C:\\Projects\\TestGame\\TestGame.uproject';
+
+      configureFs({
+        existingPaths: [uprojectPath],
+        fileContents: {
+          [uprojectPath]: JSON.stringify({ EngineAssociation: '5.3' }),
+        },
+      });
+
+      const result = await EngineResolver.resolveEngine(uprojectPath);
+
+      expect(result.engine).toBeUndefined();
+      expect(result.warnings).toEqual([]);
+    });
+  });
+
+  describe('registry parsing edge cases', () => {
+    it('handles multi-line registry format with path on next line', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const engineGuid = '{NEXTLINE-GUID-1234}';
+      const enginePath = 'C:\\Epic\\UE_NextLine';
+
+      mockExeca.mockImplementation(async () => ({
+        stdout: `HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds\n${engineGuid}\n    REG_SZ    ${enginePath}`,
+      }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result.some((e) => e.associationId === engineGuid)).toBe(true);
+    });
+
+    it('handles registry line with GUID but no REG_SZ on same line', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const engineGuid = '{MULTILINE-GUID-TEST}';
+      const enginePath = 'C:\\Epic\\UE_Multi';
+
+      mockExeca.mockImplementation(async () => ({
+        stdout: `HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds\n${engineGuid}\n    REG_SZ    ${enginePath}`,
+      }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result.some((e) => e.associationId === engineGuid)).toBe(true);
+    });
+
+    it('stops scanning when registry key header is encountered', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const firstGuid = '{STOP-GUID-1234}';
+
+      // Mock registry output where:
+      // - First GUID has no path on its line
+      // - Next line is a registry key header (contains the key path)
+      // The code should stop scanning for first GUID's path when it hits the key header
+      mockExeca.mockImplementation(async () => ({
+        stdout: [
+          'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds',
+          firstGuid,
+          '    REG_SZ',
+          'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds',
+          '{ANOTHER-GUID}    REG_SZ    C:\\Epic\\UE_Other',
+        ].join('\n'),
+      }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // First GUID has no path because scanning stopped at key header line
+      const firstEngine = result.find((e) => e.associationId === firstGuid);
+      expect(firstEngine).toBeUndefined();
+    });
+  });
 });

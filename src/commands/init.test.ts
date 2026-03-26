@@ -1,9 +1,12 @@
+import { Command } from 'commander';
 import { CapturedWritable } from '../test-utils/capture-stream';
 import { InitResult } from '../types/init';
+import { EngineInstallation } from '../types/engine';
 
 const mockInitialize = jest.fn<Promise<InitResult>, [unknown]>();
 const mockIsValidProjectName = jest.fn<boolean, [string]>();
 const mockIsValidProjectType = jest.fn<boolean, [string]>();
+const mockFindEngineInstallations = jest.fn<Promise<EngineInstallation[]>, []>();
 
 jest.mock('../core/project-initializer', () => ({
   ProjectInitializer: {
@@ -18,8 +21,14 @@ jest.mock('../utils/validator', () => ({
   },
 }));
 
+jest.mock('../core/engine-resolver', () => ({
+  EngineResolver: {
+    findEngineInstallations: () => mockFindEngineInstallations(),
+  },
+}));
+
 // Import after mocking
-import { executeInit, InitCommandOptions } from './init';
+import { executeInit, initCommand, InitCommandOptions } from './init';
 
 describe('executeInit', () => {
   let stdout: CapturedWritable;
@@ -544,5 +553,325 @@ describe('executeInit', () => {
       // Should not throw when stdout/stderr are not provided
       await expect(executeInit(createOptions())).resolves.toBeDefined();
     });
+  });
+
+  describe('initCommand registration', () => {
+    it('registers init command with Commander', () => {
+      const program = new Command();
+      initCommand(program);
+
+      const commands = program.commands.map((cmd) => cmd.name());
+      expect(commands).toContain('init');
+    });
+
+    it('configures required name option', () => {
+      const program = new Command();
+      initCommand(program);
+
+      const initCmd = program.commands.find((cmd) => cmd.name() === 'init');
+      expect(initCmd).toBeDefined();
+
+      const options = initCmd?.options.map((opt) => opt.long);
+      expect(options).toContain('--name');
+    });
+
+    it('configures optional type option with default', () => {
+      const program = new Command();
+      initCommand(program);
+
+      const initCmd = program.commands.find((cmd) => cmd.name() === 'init');
+      const typeOption = initCmd?.options.find((opt) => opt.long === '--type');
+
+      expect(typeOption).toBeDefined();
+    });
+
+    it('configures template option with default', () => {
+      const program = new Command();
+      initCommand(program);
+
+      const initCmd = program.commands.find((cmd) => cmd.name() === 'init');
+      const templateOption = initCmd?.options.find((opt) => opt.long === '--template');
+
+      expect(templateOption).toBeDefined();
+    });
+
+    it('configures directory option', () => {
+      const program = new Command();
+      initCommand(program);
+
+      const initCmd = program.commands.find((cmd) => cmd.name() === 'init');
+      const dirOption = initCmd?.options.find((opt) => opt.long === '--directory');
+
+      expect(dirOption).toBeDefined();
+    });
+
+    it('configures engine-path option', () => {
+      const program = new Command();
+      initCommand(program);
+
+      const initCmd = program.commands.find((cmd) => cmd.name() === 'init');
+      const engineOption = initCmd?.options.find((opt) => opt.long === '--engine-path');
+
+      expect(engineOption).toBeDefined();
+    });
+
+    it('configures force flag', () => {
+      const program = new Command();
+      initCommand(program);
+
+      const initCmd = program.commands.find((cmd) => cmd.name() === 'init');
+      const forceOption = initCmd?.options.find((opt) => opt.long === '--force');
+
+      expect(forceOption).toBeDefined();
+    });
+
+    it('configures dry-run flag', () => {
+      const program = new Command();
+      initCommand(program);
+
+      const initCmd = program.commands.find((cmd) => cmd.name() === 'init');
+      const dryRunOption = initCmd?.options.find((opt) => opt.long === '--dry-run');
+
+      expect(dryRunOption).toBeDefined();
+    });
+  });
+
+  describe('dry run engine detection', () => {
+    it('displays provided engine path in dry run', async () => {
+      mockFindEngineInstallations.mockResolvedValue([]);
+
+      await executeInit(
+        createOptions({
+          name: 'TestProject',
+          dryRun: true,
+          enginePath: 'C:\\Engines\\UE_5.3',
+          stdout,
+          stderr,
+        })
+      );
+
+      expect(stdout.output).toContain('Engine Path:');
+      expect(stdout.output).toContain('C:\\Engines\\UE_5.3');
+    });
+
+    it('shows warning when no engines found in dry run', async () => {
+      mockFindEngineInstallations.mockResolvedValue([]);
+
+      await executeInit(
+        createOptions({
+          name: 'TestProject',
+          dryRun: true,
+          stdout,
+          stderr,
+        })
+      );
+
+      expect(stdout.output).toContain('No engines found');
+      expect(stdout.output).toContain('will prompt for path');
+    });
+
+    it('displays single engine when only one is found', async () => {
+      mockFindEngineInstallations.mockResolvedValue([
+        {
+          associationId: 'UE_5.3',
+          displayName: 'Unreal Engine 5.3',
+          path: 'C:\\Engines\\UE_5.3',
+          version: {
+            MajorVersion: 5,
+            MinorVersion: 3,
+            PatchVersion: 2,
+            Changelist: 12345,
+            CompatibleChangelist: 12345,
+            IsLicenseeVersion: 0,
+            IsPromotedBuild: 1,
+            BranchName: '++UE5+Release-5.3',
+            BuildId: '5.3.2-12345',
+          },
+          source: 'registry',
+        },
+      ]);
+
+      await executeInit(
+        createOptions({
+          name: 'TestProject',
+          dryRun: true,
+          stdout,
+          stderr,
+        })
+      );
+
+      expect(stdout.output).toContain('Engine:');
+      expect(stdout.output).toContain('Unreal Engine 5.3');
+    });
+
+    it('displays multiple engines with prompt when multiple are found', async () => {
+      mockFindEngineInstallations.mockResolvedValue([
+        {
+          associationId: 'UE_5.2',
+          displayName: 'Unreal Engine 5.2',
+          path: 'C:\\Engines\\UE_5.2',
+          version: {
+            MajorVersion: 5,
+            MinorVersion: 2,
+            PatchVersion: 1,
+            Changelist: 12344,
+            CompatibleChangelist: 12344,
+            IsLicenseeVersion: 0,
+            IsPromotedBuild: 1,
+            BranchName: '++UE5+Release-5.2',
+            BuildId: '5.2.1-12344',
+          },
+          source: 'registry',
+        },
+        {
+          associationId: 'UE_5.3',
+          displayName: 'Unreal Engine 5.3',
+          path: 'C:\\Engines\\UE_5.3',
+          version: {
+            MajorVersion: 5,
+            MinorVersion: 3,
+            PatchVersion: 2,
+            Changelist: 12345,
+            CompatibleChangelist: 12345,
+            IsLicenseeVersion: 0,
+            IsPromotedBuild: 1,
+            BranchName: '++UE5+Release-5.3',
+            BuildId: '5.3.2-12345',
+          },
+          source: 'registry',
+        },
+      ]);
+
+      await executeInit(
+        createOptions({
+          name: 'TestProject',
+          dryRun: true,
+          stdout,
+          stderr,
+        })
+      );
+
+      expect(stdout.output).toContain('Multiple engines available');
+      expect(stdout.output).toContain('will prompt for selection');
+      expect(stdout.output).toContain('Unreal Engine 5.2');
+      expect(stdout.output).toContain('Unreal Engine 5.3');
+    });
+
+    it('displays unknown version when version is missing in multiple engines', async () => {
+      mockFindEngineInstallations.mockResolvedValue([
+        {
+          associationId: 'UE_5.2',
+          displayName: 'Engine 5.2',
+          path: 'C:\\Engines\\UE_5.2',
+          source: 'registry',
+        },
+        {
+          associationId: 'UE_5.3',
+          displayName: 'Engine 5.3',
+          path: 'C:\\Engines\\UE_5.3',
+          source: 'registry',
+        },
+      ]);
+
+      await executeInit(
+        createOptions({
+          name: 'TestProject',
+          dryRun: true,
+          stdout,
+          stderr,
+        })
+      );
+
+      expect(stdout.output).toContain('Unknown version');
+    });
+
+    it('handles engine detection failure gracefully in dry run', async () => {
+      mockFindEngineInstallations.mockRejectedValue(new Error('Registry access denied'));
+
+      await executeInit(
+        createOptions({
+          name: 'TestProject',
+          dryRun: true,
+          stdout,
+          stderr,
+        })
+      );
+
+      expect(stdout.output).toContain('Detection failed');
+      expect(stdout.output).toContain('will prompt for path');
+    });
+  });
+});
+
+describe('initCommand', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockInitialize.mockResolvedValue({
+      success: true,
+      projectPath: 'C:\\Projects\\TestProject',
+      uprojectPath: 'C:\\Projects\\TestProject\\TestProject.uproject',
+      engineAssociation: '5.3',
+      createdFiles: [],
+    });
+    mockIsValidProjectName.mockReturnValue(true);
+    mockIsValidProjectType.mockReturnValue(true);
+  });
+
+  it('registers the init command with correct options', () => {
+    const program = new Command();
+    const commandSpy = jest.spyOn(program, 'command');
+
+    initCommand(program);
+
+    expect(commandSpy).toHaveBeenCalledWith('init');
+  });
+
+  it('registers all required options', () => {
+    const program = new Command();
+    initCommand(program);
+
+    const initCmd = program.commands.find((cmd) => cmd.name() === 'init');
+    expect(initCmd).toBeDefined();
+
+    const options = initCmd?.options || [];
+    const optionFlags = options.map((opt) => opt.flags);
+
+    expect(optionFlags).toContain('-n, --name <name>');
+    expect(optionFlags).toContain('-t, --type <type>');
+    expect(optionFlags).toContain('--template <template>');
+    expect(optionFlags).toContain('-d, --directory <path>');
+    expect(optionFlags).toContain('--engine-path <path>');
+    expect(optionFlags).toContain('--force');
+    expect(optionFlags).toContain('--dry-run');
+  });
+
+  it('makes name option required', () => {
+    const program = new Command();
+    initCommand(program);
+
+    const initCmd = program.commands.find((cmd) => cmd.name() === 'init');
+    expect(initCmd).toBeDefined();
+
+    const requiredOptions = initCmd?.options.filter((opt) => opt.required);
+    const requiredFlags = requiredOptions?.map((opt) => opt.flags);
+
+    expect(requiredFlags).toContain('-n, --name <name>');
+  });
+
+  it('action handler exits with code 1 when executeInit throws', async () => {
+    mockInitialize.mockRejectedValue(new Error('Init failed'));
+
+    const program = new Command();
+    initCommand(program);
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+    program.parse(['node', 'test', 'init', '--name', 'TestProject']);
+
+    // Wait for async action
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
   });
 });

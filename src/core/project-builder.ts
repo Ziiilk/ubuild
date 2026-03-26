@@ -1,3 +1,12 @@
+/**
+ * Project builder for Unreal Engine projects.
+ *
+ * High-level builder interface that validates build options, executes builds,
+ * and provides formatted output for build operations.
+ *
+ * @module core/project-builder
+ */
+
 import chalk from 'chalk';
 import { Writable } from 'stream';
 import type { BuildConfiguration, BuildPlatform } from '../types/build';

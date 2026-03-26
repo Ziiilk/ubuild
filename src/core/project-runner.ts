@@ -1,3 +1,12 @@
+/**
+ * Project runner for executing Unreal Engine projects.
+ *
+ * Finds and runs the appropriate executable (Editor or Game) with support
+ * for various configurations, platforms, and optional pre-build steps.
+ *
+ * @module core/project-runner
+ */
+
 import chalk from 'chalk';
 import path from 'path';
 import fs from 'fs-extra';

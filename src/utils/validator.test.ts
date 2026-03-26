@@ -27,6 +27,68 @@ describe('Validator', () => {
       expect(Validator.isValidProjectName('My@Project')).toBe(false);
       expect(Validator.isValidProjectName('我的项目')).toBe(false);
     });
+
+    it('accepts single character names', () => {
+      expect(Validator.isValidProjectName('A')).toBe(true);
+      expect(Validator.isValidProjectName('a')).toBe(true);
+      expect(Validator.isValidProjectName('1')).toBe(true);
+      expect(Validator.isValidProjectName('_')).toBe(true);
+      expect(Validator.isValidProjectName('-')).toBe(true);
+    });
+
+    it('accepts names with only underscores', () => {
+      expect(Validator.isValidProjectName('_')).toBe(true);
+      expect(Validator.isValidProjectName('___')).toBe(true);
+      expect(Validator.isValidProjectName('__test__')).toBe(true);
+    });
+
+    it('accepts names with only hyphens', () => {
+      expect(Validator.isValidProjectName('-')).toBe(true);
+      expect(Validator.isValidProjectName('---')).toBe(true);
+      expect(Validator.isValidProjectName('--test--')).toBe(true);
+    });
+
+    it('accepts names starting with numbers', () => {
+      expect(Validator.isValidProjectName('123')).toBe(true);
+      expect(Validator.isValidProjectName('1MyProject')).toBe(true);
+      expect(Validator.isValidProjectName('42_Game')).toBe(true);
+    });
+
+    it('rejects names with only whitespace', () => {
+      expect(Validator.isValidProjectName(' ')).toBe(false);
+      expect(Validator.isValidProjectName('   ')).toBe(false);
+      expect(Validator.isValidProjectName('\t')).toBe(false);
+    });
+
+    it('rejects names with special characters', () => {
+      expect(Validator.isValidProjectName('My!Project')).toBe(false);
+      expect(Validator.isValidProjectName('My#Project')).toBe(false);
+      expect(Validator.isValidProjectName('My$Project')).toBe(false);
+      expect(Validator.isValidProjectName('My%Project')).toBe(false);
+      expect(Validator.isValidProjectName('My^Project')).toBe(false);
+      expect(Validator.isValidProjectName('My&Project')).toBe(false);
+      expect(Validator.isValidProjectName('My*Project')).toBe(false);
+      expect(Validator.isValidProjectName('My(Project')).toBe(false);
+      expect(Validator.isValidProjectName('My)Project')).toBe(false);
+      expect(Validator.isValidProjectName('My+Project')).toBe(false);
+      expect(Validator.isValidProjectName('My=Project')).toBe(false);
+      expect(Validator.isValidProjectName('My[Project')).toBe(false);
+      expect(Validator.isValidProjectName('My]Project')).toBe(false);
+      expect(Validator.isValidProjectName('My{Project')).toBe(false);
+      expect(Validator.isValidProjectName('My}Project')).toBe(false);
+      expect(Validator.isValidProjectName('My|Project')).toBe(false);
+      expect(Validator.isValidProjectName('My\\Project')).toBe(false);
+      expect(Validator.isValidProjectName('My/Project')).toBe(false);
+      expect(Validator.isValidProjectName('My:Project')).toBe(false);
+      expect(Validator.isValidProjectName('My;Project')).toBe(false);
+      expect(Validator.isValidProjectName('My"Project')).toBe(false);
+      expect(Validator.isValidProjectName("My'Project")).toBe(false);
+      expect(Validator.isValidProjectName('My<Project')).toBe(false);
+      expect(Validator.isValidProjectName('My>Project')).toBe(false);
+      expect(Validator.isValidProjectName('My?Project')).toBe(false);
+      expect(Validator.isValidProjectName('My`Project')).toBe(false);
+      expect(Validator.isValidProjectName('My~Project')).toBe(false);
+    });
   });
 
   describe('isValidBuildTarget', () => {
@@ -280,6 +342,50 @@ describe('Validator', () => {
       const result = await Validator.isSafeForInit('/root/protected', false);
       expect(result).toHaveProperty('safe');
       expect(result).toHaveProperty('message');
+    });
+
+    it('handles stat errors gracefully', async () => {
+      await withTempDir(async (tempDir) => {
+        // Create a file to trigger stat, then mock stat to throw
+        const testFile = path.join(tempDir, 'testfile');
+        await fs.writeFile(testFile, 'content');
+
+        const mockStat = jest
+          .spyOn(fs, 'stat')
+          .mockRejectedValue(new Error('Permission denied') as never);
+
+        try {
+          const result = await Validator.isSafeForInit(testFile);
+
+          expect(result.safe).toBe(false);
+          expect(result.message).toContain('Failed to check directory');
+          expect(result.message).toContain('Permission denied');
+        } finally {
+          mockStat.mockRestore();
+        }
+      });
+    });
+  });
+
+  describe('isValidEnginePath error handling', () => {
+    it('handles fs errors gracefully', async () => {
+      await withTempDir(async (tempDir) => {
+        const enginePath = path.join(tempDir, 'Engine');
+        await fs.ensureDir(enginePath);
+
+        // Mock pathExists to throw an error
+        const mockPathExists = jest
+          .spyOn(fs, 'pathExists')
+          .mockRejectedValue(new Error('EACCES') as never);
+
+        try {
+          const result = await Validator.isValidEnginePath(enginePath);
+
+          expect(result).toBe(false);
+        } finally {
+          mockPathExists.mockRestore();
+        }
+      });
     });
   });
 });

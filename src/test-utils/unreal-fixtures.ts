@@ -312,6 +312,13 @@ export async function createFakeEngine(
   };
 }
 
+/**
+ * Creates default build targets for a project.
+ * Generates Editor and Game targets with standard naming conventions.
+ *
+ * @param projectName - The name of the project
+ * @returns Array of default targets (Editor and Game)
+ */
 function defaultTargets(projectName: string): FakeProjectTarget[] {
   return [
     { name: `${projectName}Editor`, type: 'Editor' },
@@ -319,6 +326,13 @@ function defaultTargets(projectName: string): FakeProjectTarget[] {
   ];
 }
 
+/**
+ * Infers the target type from a target name.
+ * Analyzes the target name to determine if it's an Editor, Client, Server, or Game target.
+ *
+ * @param targetName - The name of the target to analyze
+ * @returns The inferred target type
+ */
 function inferTargetType(targetName: string): ProjectTargetType {
   const normalizedTargetName = targetName.toLowerCase();
 
@@ -337,6 +351,14 @@ function inferTargetType(targetName: string): ProjectTargetType {
   return 'Game';
 }
 
+/**
+ * Renders a C# target rules file content.
+ * Generates the source code for a Target.cs file used by UnrealBuildTool.
+ *
+ * @param targetName - The name of the target
+ * @param targetType - The type of the target (Editor, Game, Client, Server)
+ * @returns The rendered C# source code
+ */
 function renderTargetFile(targetName: string, targetType: ProjectTargetType): string {
   return [
     'using UnrealBuildTool;',
@@ -353,6 +375,13 @@ function renderTargetFile(targetName: string, targetType: ProjectTargetType): st
   ].join('\n');
 }
 
+/**
+ * Renders a C# module rules file content.
+ * Generates the source code for a Build.cs file used by UnrealBuildTool.
+ *
+ * @param moduleName - The name of the module
+ * @returns The rendered C# source code
+ */
 function renderModuleFile(moduleName: string): string {
   return [
     'using UnrealBuildTool;',
@@ -368,6 +397,13 @@ function renderModuleFile(moduleName: string): string {
   ].join('\n');
 }
 
+/**
+ * Creates version info with defaults for missing fields.
+ * Provides sensible defaults for engine version information.
+ *
+ * @param overrides - Partial version info to override defaults
+ * @returns Complete version info with all fields populated
+ */
 function createVersionInfo(overrides: Partial<EngineVersionInfo> = {}): EngineVersionInfo {
   return {
     MajorVersion: overrides.MajorVersion ?? 5,

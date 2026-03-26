@@ -1,3 +1,13 @@
+/**
+ * Engine resolver module for ubuild
+ *
+ * Resolves Unreal Engine installations from various sources including
+ * Windows Registry, Epic Launcher, environment variables, and manual paths.
+ * Provides engine version detection and project association resolution.
+ *
+ * @module core/engine-resolver
+ */
+
 import fs from 'fs-extra';
 import path from 'path';
 import { execa } from 'execa';

@@ -1,5 +1,6 @@
 import path from 'path';
-import { runProject } from './run';
+import { Command } from 'commander';
+import { runProject, runCommand, ProjectRunner } from './run';
 import {
   createFakeEngine,
   createFakeExecaChild,
@@ -247,5 +248,177 @@ describe('runProject', () => {
       expect(mockExeca).not.toHaveBeenCalled();
       expect(capture.getStderr()).toContain('Build failed. Cannot run project.');
     });
+  });
+});
+
+describe('runCommand', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetAvailableTargets.mockResolvedValue([]);
+    mockResolveEngine.mockResolvedValue({ warnings: [] });
+    mockResolveEnginePath.mockResolvedValue('');
+  });
+
+  it('registers the run command with commander', () => {
+    const program = new Command();
+    runCommand(program);
+
+    const commands = program.commands.map((cmd) => cmd.name());
+    expect(commands).toContain('run');
+  });
+
+  it('command has all expected options', () => {
+    const program = new Command();
+    runCommand(program);
+
+    const runCmd = program.commands.find((cmd) => cmd.name() === 'run');
+    expect(runCmd).toBeDefined();
+
+    const options = runCmd!.options.map((opt) => opt.long);
+    expect(options).toContain('--target');
+    expect(options).toContain('--config');
+    expect(options).toContain('--platform');
+    expect(options).toContain('--project');
+    expect(options).toContain('--engine-path');
+    expect(options).toContain('--dry-run');
+    expect(options).toContain('--build-first');
+    expect(options).toContain('--no-build');
+    expect(options).toContain('--detached');
+    expect(options).toContain('--args');
+  });
+
+  it('exits with error code 1 when run fails', async () => {
+    const program = new Command();
+    runCommand(program);
+
+    const runCmd = program.commands.find((cmd) => cmd.name() === 'run');
+    expect(runCmd).toBeDefined();
+
+    // Mock ProjectRunner to throw an error
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`process.exit(${code})`);
+    });
+
+    const mockRun = jest
+      .spyOn(ProjectRunner.prototype, 'run')
+      .mockRejectedValue(new Error('Run failed'));
+
+    try {
+      await runCmd!.parseAsync(['node', 'test', '--dry-run']);
+    } catch {
+      // Expected to throw
+    }
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+
+    mockExit.mockRestore();
+    mockRun.mockRestore();
+  });
+
+  it('handles non-Error exceptions during run', async () => {
+    const program = new Command();
+    runCommand(program);
+
+    const runCmd = program.commands.find((cmd) => cmd.name() === 'run');
+    expect(runCmd).toBeDefined();
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`process.exit(${code})`);
+    });
+
+    const mockRun = jest.spyOn(ProjectRunner.prototype, 'run').mockRejectedValue('String error');
+
+    try {
+      await runCmd!.parseAsync(['node', 'test', '--dry-run']);
+    } catch {
+      // Expected to throw
+    }
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+
+    mockExit.mockRestore();
+    mockRun.mockRestore();
+  });
+
+  it('passes options correctly to ProjectRunner', async () => {
+    const program = new Command();
+    runCommand(program);
+
+    const runCmd = program.commands.find((cmd) => cmd.name() === 'run');
+    expect(runCmd).toBeDefined();
+
+    const mockRun = jest.spyOn(ProjectRunner.prototype, 'run').mockResolvedValue(undefined);
+
+    await runCmd!.parseAsync([
+      'node',
+      'test',
+      '--target',
+      'Game',
+      '--config',
+      'Shipping',
+      '--platform',
+      'Linux',
+      '--dry-run',
+      '--build-first',
+      '--detached',
+      '--args',
+      '-log',
+    ]);
+
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: 'Game',
+        config: 'Shipping',
+        platform: 'Linux',
+        dryRun: true,
+        buildFirst: true,
+        detached: true,
+        args: ['-log'],
+      })
+    );
+
+    mockRun.mockRestore();
+  });
+
+  it('uses default values when options are not specified', async () => {
+    const program = new Command();
+    runCommand(program);
+
+    const runCmd = program.commands.find((cmd) => cmd.name() === 'run');
+    expect(runCmd).toBeDefined();
+
+    const mockRun = jest.spyOn(ProjectRunner.prototype, 'run').mockResolvedValue(undefined);
+
+    await runCmd!.parseAsync(['node', 'test']);
+
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: 'Editor',
+        config: 'Development',
+        platform: 'Win64',
+      })
+    );
+
+    mockRun.mockRestore();
+  });
+
+  it('respects --no-build flag', async () => {
+    const program = new Command();
+    runCommand(program);
+
+    const runCmd = program.commands.find((cmd) => cmd.name() === 'run');
+    expect(runCmd).toBeDefined();
+
+    const mockRun = jest.spyOn(ProjectRunner.prototype, 'run').mockResolvedValue(undefined);
+
+    await runCmd!.parseAsync(['node', 'test', '--no-build']);
+
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        build: false,
+      })
+    );
+
+    mockRun.mockRestore();
   });
 });

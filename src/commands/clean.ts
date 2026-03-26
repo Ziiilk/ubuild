@@ -1,3 +1,12 @@
+/**
+ * Clean command for ubuild CLI
+ *
+ * Removes build artifacts from Unreal Engine projects including
+ * Binaries, Intermediate, and Saved directories to enable clean builds.
+ *
+ * @module commands/clean
+ */
+
 import { Command } from 'commander';
 import { Writable } from 'stream';
 import { CleanOptions, CleanResult } from '../types/clean';
@@ -25,7 +34,8 @@ export interface CleanCommandOptions {
 /**
  * Executes the clean command to remove build artifacts from an Unreal Engine project.
  * @param options - Command execution options
- * @returns Promise that resolves to the clean result
+ * @returns Promise that resolves to the clean result containing deleted paths,
+ *          failed paths with error details, and success status
  */
 export async function executeClean(options: CleanCommandOptions): Promise<CleanResult> {
   const cleanOptions: CleanOptions = {

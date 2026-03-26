@@ -6,6 +6,7 @@ const mockLoggerInfo = jest.fn();
 const mockLoggerSubTitle = jest.fn();
 const mockLoggerSuccess = jest.fn();
 const mockLoggerError = jest.fn();
+const mockLoggerWarning = jest.fn();
 
 jest.mock('../utils/logger', () => ({
   Logger: {
@@ -14,6 +15,7 @@ jest.mock('../utils/logger', () => ({
     subTitle: (...args: unknown[]) => mockLoggerSubTitle(...args),
     success: (...args: unknown[]) => mockLoggerSuccess(...args),
     error: (...args: unknown[]) => mockLoggerError(...args),
+    warning: (...args: unknown[]) => mockLoggerWarning(...args),
   },
 }));
 
@@ -130,6 +132,92 @@ describe('evolveCommand', () => {
           interval: 10000,
         })
       );
+    });
+
+    it('falls back to default interval when non-numeric string is provided', async () => {
+      mockRunSelfEvolution.mockResolvedValue({
+        success: true,
+        iterations: 1,
+        improvements: [],
+        errors: [],
+      });
+
+      evolveCommand(program);
+
+      await program.parseAsync(['node', 'test', 'evolve', '--interval', 'invalid']);
+
+      expect(mockRunSelfEvolution).toHaveBeenCalledWith(
+        expect.objectContaining({
+          interval: 5000,
+        })
+      );
+      expect(mockLoggerWarning).toHaveBeenCalledWith(
+        'Invalid interval value, using default of 5000ms'
+      );
+    });
+
+    it('falls back to default interval when value is less than 1000ms', async () => {
+      mockRunSelfEvolution.mockResolvedValue({
+        success: true,
+        iterations: 1,
+        improvements: [],
+        errors: [],
+      });
+
+      evolveCommand(program);
+
+      await program.parseAsync(['node', 'test', 'evolve', '--interval', '500']);
+
+      expect(mockRunSelfEvolution).toHaveBeenCalledWith(
+        expect.objectContaining({
+          interval: 5000,
+        })
+      );
+      expect(mockLoggerWarning).toHaveBeenCalledWith(
+        'Invalid interval value, using default of 5000ms'
+      );
+    });
+
+    it('falls back to default interval when value is negative', async () => {
+      mockRunSelfEvolution.mockResolvedValue({
+        success: true,
+        iterations: 1,
+        improvements: [],
+        errors: [],
+      });
+
+      evolveCommand(program);
+
+      await program.parseAsync(['node', 'test', 'evolve', '--interval', '-100']);
+
+      expect(mockRunSelfEvolution).toHaveBeenCalledWith(
+        expect.objectContaining({
+          interval: 5000,
+        })
+      );
+      expect(mockLoggerWarning).toHaveBeenCalledWith(
+        'Invalid interval value, using default of 5000ms'
+      );
+    });
+
+    it('accepts minimum valid interval of 1000ms', async () => {
+      mockRunSelfEvolution.mockResolvedValue({
+        success: true,
+        iterations: 1,
+        improvements: [],
+        errors: [],
+      });
+
+      evolveCommand(program);
+
+      await program.parseAsync(['node', 'test', 'evolve', '--interval', '1000']);
+
+      expect(mockRunSelfEvolution).toHaveBeenCalledWith(
+        expect.objectContaining({
+          interval: 1000,
+        })
+      );
+      expect(mockLoggerWarning).not.toHaveBeenCalled();
     });
 
     it('passes API key when provided', async () => {

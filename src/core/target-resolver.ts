@@ -1,3 +1,12 @@
+/**
+ * Target resolver module for ubuild
+ *
+ * Resolves generic build targets (Editor, Game, Client, Server) to specific
+ * project target names. Handles target file discovery and mapping.
+ *
+ * @module core/target-resolver
+ */
+
 import { BuildExecutor } from './build-executor';
 
 /** Represents a resolved build target with its name and type. */
@@ -8,7 +17,20 @@ export interface ResolvedTarget {
   type: string;
 }
 
+/** Generic target types that can be resolved to specific project targets. */
 const GENERIC_TARGETS = ['Editor', 'Game', 'Client', 'Server'] as const;
+
+/** Type representing valid generic target names. */
+type GenericTarget = (typeof GENERIC_TARGETS)[number];
+
+/**
+ * Type guard to check if a string is a valid generic target type.
+ * @param target - The target name to check
+ * @returns True if the target is a valid generic type
+ */
+function isGenericTargetType(target: string): target is GenericTarget {
+  return GENERIC_TARGETS.includes(target as GenericTarget);
+}
 
 /**
  * Resolves generic build target names (like 'Editor') to actual project target names.
@@ -65,11 +87,7 @@ export class TargetResolver {
     requestedTarget: string,
     availableTargets: ResolvedTarget[]
   ): string | undefined {
-    const isGenericType = GENERIC_TARGETS.includes(
-      requestedTarget as (typeof GENERIC_TARGETS)[number]
-    );
-
-    if (isGenericType) {
+    if (isGenericTargetType(requestedTarget)) {
       // Look for a target with matching type
       const matchingTarget = availableTargets.find((t) => t.type === requestedTarget);
       if (matchingTarget) {
@@ -103,7 +121,7 @@ export class TargetResolver {
    * @returns True if the target is a generic type
    */
   static isGenericTarget(target: string): boolean {
-    return GENERIC_TARGETS.includes(target as (typeof GENERIC_TARGETS)[number]);
+    return isGenericTargetType(target);
   }
 
   /**

@@ -17,6 +17,10 @@ async function writeJsonFile(filePath: string, data: unknown): Promise<void> {
 }
 
 describe('CleanExecutor', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   describe('execute', () => {
     it('successfully cleans a project with all build artifacts', async () => {
       const tempDir = await createTempDir('clean-executor-test-');
@@ -454,6 +458,155 @@ describe('CleanExecutor', () => {
       expect(await fs.pathExists(path.join(plugin1Dir, 'Intermediate'))).toBe(false);
       expect(await fs.pathExists(path.join(plugin2Dir, 'Binaries'))).toBe(false);
       expect(await fs.pathExists(path.join(plugin2Dir, 'Intermediate'))).toBe(false);
+
+      await tempDir.cleanup();
+    });
+
+    it('handles errors when removing individual paths fails', async () => {
+      const tempDir = await createTempDir('clean-executor-test-');
+      const projectName = 'TestProject';
+      const projectFilePath = path.join(tempDir.path, `${projectName}.uproject`);
+      const capture = createOutputCapture();
+
+      await writeJsonFile(projectFilePath, {
+        FileVersion: 3,
+        EngineAssociation: '5.3',
+        Modules: [{ Name: projectName, Type: 'Runtime', LoadingPhase: 'Default' }],
+      });
+
+      // Create Binaries directory
+      const binariesPath = path.join(tempDir.path, 'Binaries');
+      await fs.ensureDir(binariesPath);
+
+      // Create a file inside that we'll make read-only to cause deletion failure
+      const testFile = path.join(binariesPath, 'test.dll');
+      await fs.writeFile(testFile, 'test content');
+
+      // Mock fs.remove to simulate failure for this specific path
+      const originalRemove = fs.remove;
+      let callCount = 0;
+      jest.spyOn(fs, 'remove').mockImplementation(async (filepath: string) => {
+        // Fail on first call (Binaries), succeed on others
+        if (callCount === 0 && filepath.includes('Binaries')) {
+          callCount++;
+          throw new Error('Permission denied');
+        }
+        return originalRemove(filepath);
+      });
+
+      const executor = new CleanExecutor({
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+        silent: true,
+      });
+
+      const result = await executor.execute({
+        projectPath: tempDir.path,
+      });
+
+      // Restore mock
+      jest.restoreAllMocks();
+
+      expect(result.success).toBe(false);
+      expect(result.failedPaths.length).toBeGreaterThan(0);
+      expect(result.failedPaths[0].error).toContain('Permission denied');
+      expect(result.error).toContain('Failed to clean');
+
+      await tempDir.cleanup();
+    });
+
+    it('handles errors when reading plugin directory fails', async () => {
+      const tempDir = await createTempDir('clean-executor-test-');
+      const projectName = 'TestProject';
+      const projectFilePath = path.join(tempDir.path, `${projectName}.uproject`);
+      const capture = createOutputCapture();
+
+      await writeJsonFile(projectFilePath, {
+        FileVersion: 3,
+        EngineAssociation: '5.3',
+        Modules: [{ Name: projectName, Type: 'Runtime', LoadingPhase: 'Default' }],
+      });
+
+      // Create build artifacts so the main cleaning succeeds
+      await fs.ensureDir(path.join(tempDir.path, 'Binaries'));
+
+      // Create Plugins directory
+      const pluginsDir = path.join(tempDir.path, 'Plugins');
+      await fs.ensureDir(pluginsDir);
+
+      // Create a plugin subdirectory
+      await fs.ensureDir(path.join(pluginsDir, 'TestPlugin'));
+
+      // Mock fs.readdir specifically for the Plugins directory
+      const originalReaddir = fs.readdir;
+      jest.spyOn(fs, 'readdir').mockImplementation(async (filepath, ...args) => {
+        if (typeof filepath === 'string' && filepath.includes('Plugins')) {
+          throw new Error('Access denied');
+        }
+        return originalReaddir(filepath, ...args);
+      });
+
+      const executor = new CleanExecutor({
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+        silent: true,
+      });
+
+      const result = await executor.execute({
+        projectPath: tempDir.path,
+      });
+
+      // Restore mock
+      jest.restoreAllMocks();
+
+      // Should still succeed even if plugin cleaning fails
+      expect(result.success).toBe(true);
+
+      await tempDir.cleanup();
+    });
+
+    it('handles plugin cleaning when individual plugin path fails', async () => {
+      const tempDir = await createTempDir('clean-executor-test-');
+      const projectName = 'TestProject';
+      const projectFilePath = path.join(tempDir.path, `${projectName}.uproject`);
+      const capture = createOutputCapture();
+
+      await writeJsonFile(projectFilePath, {
+        FileVersion: 3,
+        EngineAssociation: '5.3',
+        Modules: [{ Name: projectName, Type: 'Runtime', LoadingPhase: 'Default' }],
+      });
+
+      // Create plugin with Binaries
+      const pluginDir = path.join(tempDir.path, 'Plugins', 'TestPlugin');
+      const pluginBinaries = path.join(pluginDir, 'Binaries');
+      await fs.ensureDir(pluginBinaries);
+      await fs.writeFile(path.join(pluginBinaries, 'test.dll'), 'content');
+
+      // Mock fs.remove to fail on plugin path
+      const originalRemove = fs.remove;
+      jest.spyOn(fs, 'remove').mockImplementation(async (filepath: string) => {
+        if (filepath.includes('Plugins') && filepath.includes('Binaries')) {
+          throw new Error('Plugin file locked');
+        }
+        return originalRemove(filepath);
+      });
+
+      const executor = new CleanExecutor({
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+        silent: true,
+      });
+
+      const result = await executor.execute({
+        projectPath: tempDir.path,
+      });
+
+      jest.restoreAllMocks();
+
+      expect(result.success).toBe(false);
+      expect(result.failedPaths.some((p) => p.path.includes('Plugins'))).toBe(true);
+      expect(result.failedPaths.some((p) => p.error.includes('Plugin file locked'))).toBe(true);
 
       await tempDir.cleanup();
     });

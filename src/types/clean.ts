@@ -1,7 +1,20 @@
+/**
+ * Type definitions for clean operations.
+ *
+ * Provides TypeScript interfaces for configuring and executing clean
+ * operations on Unreal Engine projects, including options for removing
+ * build artifacts and the result structure.
+ *
+ * @module types/clean
+ * @see {@link CleanOptions} for clean configuration options
+ * @see {@link CleanResult} for clean operation results
+ */
+
 import { Writable } from 'stream';
 import { Logger } from '../utils/logger';
 
-/** Options for executing a clean operation.
+/**
+ * Options for executing a clean operation.
  *
  * Controls which files are removed and how the operation behaves.
  *
@@ -10,10 +23,11 @@ import { Logger } from '../utils/logger';
  * const options: CleanOptions = {
  *   projectPath: './MyProject',
  *   dryRun: true,
- *   binariesOnly: false,
- *   verbose: true
+ *   binariesOnly: false
  * };
  * ```
+ *
+ * @see {@link CleanResult} for the result type returned after cleaning
  */
 export interface CleanOptions {
   /** Path to project directory or .uproject file */
@@ -34,7 +48,8 @@ export interface CleanOptions {
   silent?: boolean;
 }
 
-/** Result of a clean operation.
+/**
+ * Result of a clean operation.
  *
  * Contains details about what was deleted and any failures.
  *
@@ -49,6 +64,8 @@ export interface CleanOptions {
  *   failedPaths: []
  * };
  * ```
+ *
+ * @see {@link CleanOptions} for the options used to configure the clean operation
  */
 export interface CleanResult {
   /** Whether the clean operation succeeded */

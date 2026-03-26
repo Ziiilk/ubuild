@@ -7,6 +7,11 @@ import {
   BUILD_PLATFORMS,
   IDE_TYPES,
   PROJECT_TYPES,
+  type BuildTarget,
+  type BuildConfig,
+  type BuildPlatform,
+  type IDEType,
+  type ProjectType,
 } from './constants';
 
 /**
@@ -61,7 +66,7 @@ export class Validator {
    * @param target - The target to validate
    * @returns True if valid or non-empty string for custom targets
    */
-  static isValidBuildTarget(target: string): boolean {
+  static isValidBuildTarget(target: string): target is BuildTarget | string {
     // Accept known targets or any non-empty string (for custom targets)
     return (
       BUILD_TARGETS.includes(target as (typeof BUILD_TARGETS)[number]) || target.trim().length > 0
@@ -73,7 +78,7 @@ export class Validator {
    * @param config - The configuration to validate
    * @returns True if the configuration is valid
    */
-  static isValidBuildConfig(config: string): boolean {
+  static isValidBuildConfig(config: string): config is BuildConfig {
     return BUILD_CONFIGS.includes(config as (typeof BUILD_CONFIGS)[number]);
   }
 
@@ -82,7 +87,7 @@ export class Validator {
    * @param platform - The platform to validate
    * @returns True if the platform is valid
    */
-  static isValidBuildPlatform(platform: string): boolean {
+  static isValidBuildPlatform(platform: string): platform is BuildPlatform {
     return BUILD_PLATFORMS.includes(platform as (typeof BUILD_PLATFORMS)[number]);
   }
 
@@ -91,7 +96,7 @@ export class Validator {
    * @param ide - The IDE type to validate
    * @returns True if the IDE type is valid
    */
-  static isValidIDE(ide: string): boolean {
+  static isValidIDE(ide: string): ide is IDEType {
     return IDE_TYPES.includes(ide as (typeof IDE_TYPES)[number]);
   }
 
@@ -100,7 +105,7 @@ export class Validator {
    * @param type - The project type to validate
    * @returns True if the project type is valid
    */
-  static isValidProjectType(type: string): boolean {
+  static isValidProjectType(type: string): type is ProjectType {
     return PROJECT_TYPES.includes(type as (typeof PROJECT_TYPES)[number]);
   }
 

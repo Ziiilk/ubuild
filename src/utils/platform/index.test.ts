@@ -61,6 +61,14 @@ describe('Platform', () => {
       });
       expect(Platform.isLinux()).toBe(false);
     });
+
+    it('should return false for other Unix platforms (freebsd)', () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'freebsd',
+        configurable: true,
+      });
+      expect(Platform.isLinux()).toBe(false);
+    });
   });
 
   describe('isMac', () => {
@@ -113,6 +121,22 @@ describe('Platform', () => {
       });
       expect(Platform.pathSeparator()).toBe(':');
     });
+
+    it('should return colon on FreeBSD', () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'freebsd',
+        configurable: true,
+      });
+      expect(Platform.pathSeparator()).toBe(':');
+    });
+
+    it('should return colon on OpenBSD', () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'openbsd',
+        configurable: true,
+      });
+      expect(Platform.pathSeparator()).toBe(':');
+    });
   });
 
   describe('exeExtension', () => {
@@ -139,6 +163,22 @@ describe('Platform', () => {
       });
       expect(Platform.exeExtension()).toBe('');
     });
+
+    it('should return empty string on FreeBSD', () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'freebsd',
+        configurable: true,
+      });
+      expect(Platform.exeExtension()).toBe('');
+    });
+
+    it('should return empty string on AIX', () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'aix',
+        configurable: true,
+      });
+      expect(Platform.exeExtension()).toBe('');
+    });
   });
 
   describe('batExtension', () => {
@@ -161,6 +201,30 @@ describe('Platform', () => {
     it('should return .sh on macOS', () => {
       Object.defineProperty(process, 'platform', {
         value: 'darwin',
+        configurable: true,
+      });
+      expect(Platform.batExtension()).toBe('.sh');
+    });
+
+    it('should return .sh on FreeBSD', () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'freebsd',
+        configurable: true,
+      });
+      expect(Platform.batExtension()).toBe('.sh');
+    });
+
+    it('should return .sh on OpenBSD', () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'openbsd',
+        configurable: true,
+      });
+      expect(Platform.batExtension()).toBe('.sh');
+    });
+
+    it('should return .sh on SunOS', () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'sunos',
         configurable: true,
       });
       expect(Platform.batExtension()).toBe('.sh');
@@ -254,6 +318,30 @@ describe('Platform', () => {
         configurable: true,
       });
       expect(Platform.normalizePath('/home/user/file.txt')).toBe('/home/user/file.txt');
+    });
+
+    it('should convert backslashes to forward slashes on FreeBSD', () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'freebsd',
+        configurable: true,
+      });
+      expect(Platform.normalizePath('path\\to\\file')).toBe('path/to/file');
+    });
+
+    it('should convert backslashes to forward slashes on OpenBSD', () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'openbsd',
+        configurable: true,
+      });
+      expect(Platform.normalizePath('path\\to\\file')).toBe('path/to/file');
+    });
+
+    it('should convert backslashes to forward slashes on AIX', () => {
+      Object.defineProperty(process, 'platform', {
+        value: 'aix',
+        configurable: true,
+      });
+      expect(Platform.normalizePath('path\\to\\file')).toBe('path/to/file');
     });
   });
 });

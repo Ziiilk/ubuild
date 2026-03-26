@@ -11,6 +11,7 @@ const mockUpdateCommand = jest.fn();
 const mockGencodebaseCommand = jest.fn();
 const mockEvolveCommand = jest.fn();
 const mockCleanCommand = jest.fn();
+const mockVersionCommand = jest.fn();
 const mockRunSelfEvolution = jest.fn();
 
 jest.mock('./commands/list', () => ({
@@ -53,6 +54,10 @@ jest.mock('./commands/clean', () => ({
   cleanCommand: mockCleanCommand,
 }));
 
+jest.mock('./commands/version', () => ({
+  versionCommand: mockVersionCommand,
+}));
+
 jest.mock('./core/self-driver', () => ({
   runSelfEvolution: mockRunSelfEvolution,
 }));
@@ -69,6 +74,7 @@ import {
   gencodebaseCommand,
   evolveCommand,
   cleanCommand,
+  versionCommand,
   runSelfEvolution,
 } from './index';
 
@@ -126,6 +132,11 @@ describe('Public API exports', () => {
     it('exports cleanCommand', () => {
       expect(cleanCommand).toBeDefined();
       expect(typeof cleanCommand).toBe('function');
+    });
+
+    it('exports versionCommand', () => {
+      expect(versionCommand).toBeDefined();
+      expect(typeof versionCommand).toBe('function');
     });
 
     it('exports runSelfEvolution', () => {
@@ -211,6 +222,12 @@ describe('Public API exports', () => {
       cleanCommand(program);
       expect(mockCleanCommand).toHaveBeenCalledWith(program);
     });
+
+    it('versionCommand can be called with a Commander program', () => {
+      const program = createMockProgram();
+      versionCommand(program);
+      expect(mockVersionCommand).toHaveBeenCalledWith(program);
+    });
   });
 
   describe('runSelfEvolution function', () => {
@@ -255,6 +272,7 @@ describe('Public API exports', () => {
       expect(gencodebaseCommand).toBe(mockGencodebaseCommand);
       expect(evolveCommand).toBe(mockEvolveCommand);
       expect(cleanCommand).toBe(mockCleanCommand);
+      expect(versionCommand).toBe(mockVersionCommand);
       expect(runSelfEvolution).toBe(mockRunSelfEvolution);
     });
   });

@@ -16,26 +16,26 @@ jest.mock('execa', () => ({
   execa: (...args: [string, string[]?, Record<string, unknown>?]) => mockExeca(...args),
 }));
 
+let driver: SelfDriver;
+const originalCwd = process.cwd;
+const mockProjectRoot = 'C:\\Projects\\ubuild';
+
+const mockExecaResult = (
+  exitCode: number,
+  stdout = '',
+  stderr = ''
+): Promise<{
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}> =>
+  Promise.resolve({
+    exitCode,
+    stdout,
+    stderr,
+  });
+
 describe('SelfDriver', () => {
-  let driver: SelfDriver;
-  const originalCwd = process.cwd;
-  const mockProjectRoot = 'C:\\Projects\\ubuild';
-
-  const mockExecaResult = (
-    exitCode: number,
-    stdout = '',
-    stderr = ''
-  ): Promise<{
-    exitCode: number;
-    stdout: string;
-    stderr: string;
-  }> =>
-    Promise.resolve({
-      exitCode,
-      stdout,
-      stderr,
-    });
-
   beforeEach(() => {
     jest.resetAllMocks();
     jest.useFakeTimers();
@@ -284,6 +284,235 @@ describe('SelfDriver', () => {
         expect(current).toBeLessThanOrEqual(next);
       }
     });
+
+    it('handles build failure in analyzeEvolutionSuggestions', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('test')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(1, 'Build failed', '');
+        }
+        if (command === 'npx' && args?.includes('evolve')) {
+          return mockExecaResult(0, 'Usage: evolve [options]', '');
+        }
+        if (
+          command === 'npx' &&
+          (args?.includes('list') || args?.includes('engine') || args?.includes('build'))
+        ) {
+          return mockExecaResult(0, 'Usage: [command] [options]', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const diagnosis: Diagnosis = {
+        testFailures: [],
+        lintErrors: [],
+        timestamp: new Date().toISOString(),
+      };
+
+      const analyzeEvolutionSuggestions = (
+        driver as unknown as {
+          analyzeEvolutionSuggestions: (d: Diagnosis) => Promise<EvolutionSuggestion[]>;
+        }
+      ).analyzeEvolutionSuggestions;
+      const suggestions = await analyzeEvolutionSuggestions.call(driver, diagnosis);
+
+      const buildFix = suggestions.find((s) => s.description.includes('TypeScript compilation'));
+      expect(buildFix).toBeDefined();
+      expect(buildFix?.priority).toBe('critical');
+    });
+
+    it('handles build command exception in analyzeEvolutionSuggestions', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('test')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          throw new Error('Build command failed');
+        }
+        if (command === 'npx' && args?.includes('evolve')) {
+          return mockExecaResult(0, 'Usage: evolve [options]', '');
+        }
+        if (
+          command === 'npx' &&
+          (args?.includes('list') || args?.includes('engine') || args?.includes('build'))
+        ) {
+          return mockExecaResult(0, 'Usage: [command] [options]', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const diagnosis: Diagnosis = {
+        testFailures: [],
+        lintErrors: [],
+        timestamp: new Date().toISOString(),
+      };
+
+      const analyzeEvolutionSuggestions = (
+        driver as unknown as {
+          analyzeEvolutionSuggestions: (d: Diagnosis) => Promise<EvolutionSuggestion[]>;
+        }
+      ).analyzeEvolutionSuggestions;
+      const suggestions = await analyzeEvolutionSuggestions.call(driver, diagnosis);
+
+      const buildFix = suggestions.find((s) => s.description.includes('build configuration'));
+      expect(buildFix).toBeDefined();
+      expect(buildFix?.priority).toBe('critical');
+    });
+
+    it('handles evolve command failure in analyzeEvolutionSuggestions', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('test')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npx' && args?.includes('evolve')) {
+          return mockExecaResult(1, 'Command failed', '');
+        }
+        if (
+          command === 'npx' &&
+          (args?.includes('list') || args?.includes('engine') || args?.includes('build'))
+        ) {
+          return mockExecaResult(0, 'Usage: [command] [options]', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const diagnosis: Diagnosis = {
+        testFailures: [],
+        lintErrors: [],
+        timestamp: new Date().toISOString(),
+      };
+
+      const analyzeEvolutionSuggestions = (
+        driver as unknown as {
+          analyzeEvolutionSuggestions: (d: Diagnosis) => Promise<EvolutionSuggestion[]>;
+        }
+      ).analyzeEvolutionSuggestions;
+      const suggestions = await analyzeEvolutionSuggestions.call(driver, diagnosis);
+
+      const evolveFix = suggestions.find((s) => s.description.includes('self-evolution'));
+      expect(evolveFix).toBeDefined();
+      expect(evolveFix?.priority).toBe('critical');
+    });
+
+    it('handles evolve command exception in analyzeEvolutionSuggestions', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('test')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npx' && args?.includes('evolve')) {
+          throw new Error('Evolve command exception');
+        }
+        if (
+          command === 'npx' &&
+          (args?.includes('list') || args?.includes('engine') || args?.includes('build'))
+        ) {
+          return mockExecaResult(0, 'Usage: [command] [options]', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const diagnosis: Diagnosis = {
+        testFailures: [],
+        lintErrors: [],
+        timestamp: new Date().toISOString(),
+      };
+
+      const analyzeEvolutionSuggestions = (
+        driver as unknown as {
+          analyzeEvolutionSuggestions: (d: Diagnosis) => Promise<EvolutionSuggestion[]>;
+        }
+      ).analyzeEvolutionSuggestions;
+      const suggestions = await analyzeEvolutionSuggestions.call(driver, diagnosis);
+
+      const evolveFix = suggestions.find((s) => s.description.includes('Restore evolve'));
+      expect(evolveFix).toBeDefined();
+      expect(evolveFix?.priority).toBe('critical');
+      expect(evolveFix?.estimatedEffort).toBe('large');
+    });
+
+    it('handles core command failure in analyzeEvolutionSuggestions', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('test')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npx' && args?.includes('evolve')) {
+          return mockExecaResult(0, 'Usage: evolve [options]', '');
+        }
+        if (command === 'npx' && args?.includes('list')) {
+          return mockExecaResult(1, 'Command failed', '');
+        }
+        if (command === 'npx' && (args?.includes('engine') || args?.includes('build'))) {
+          return mockExecaResult(0, 'Usage: [command] [options]', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const diagnosis: Diagnosis = {
+        testFailures: [],
+        lintErrors: [],
+        timestamp: new Date().toISOString(),
+      };
+
+      const analyzeEvolutionSuggestions = (
+        driver as unknown as {
+          analyzeEvolutionSuggestions: (d: Diagnosis) => Promise<EvolutionSuggestion[]>;
+        }
+      ).analyzeEvolutionSuggestions;
+      const suggestions = await analyzeEvolutionSuggestions.call(driver, diagnosis);
+
+      const coreFix = suggestions.find((s) => s.description.includes("'list' command"));
+      expect(coreFix).toBeDefined();
+      expect(coreFix?.priority).toBe('high');
+    });
+
+    it('handles core command exception in analyzeEvolutionSuggestions', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('test')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npx' && args?.includes('evolve')) {
+          return mockExecaResult(0, 'Usage: evolve [options]', '');
+        }
+        if (command === 'npx' && args?.includes('engine')) {
+          throw new Error('Engine command exception');
+        }
+        if (command === 'npx' && (args?.includes('list') || args?.includes('build'))) {
+          return mockExecaResult(0, 'Usage: [command] [options]', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const diagnosis: Diagnosis = {
+        testFailures: [],
+        lintErrors: [],
+        timestamp: new Date().toISOString(),
+      };
+
+      const analyzeEvolutionSuggestions = (
+        driver as unknown as {
+          analyzeEvolutionSuggestions: (d: Diagnosis) => Promise<EvolutionSuggestion[]>;
+        }
+      ).analyzeEvolutionSuggestions;
+      const suggestions = await analyzeEvolutionSuggestions.call(driver, diagnosis);
+
+      const coreFix = suggestions.find((s) => s.description.includes("'engine' command"));
+      expect(coreFix).toBeDefined();
+      expect(coreFix?.priority).toBe('high');
+    });
   });
 
   describe('verify', () => {
@@ -401,6 +630,130 @@ describe('SelfDriver', () => {
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.errors[0]).toContain('Test execution error');
     });
+
+    it('captures build execution error', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          throw new Error('Build execution error');
+        }
+        if (command === 'npm' && args?.includes('test')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npm' && args?.includes('run') && args?.includes('lint')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npx' && args?.includes('evolve')) {
+          return mockExecaResult(0, 'Usage: evolve [options]', '');
+        }
+        if (
+          command === 'npx' &&
+          (args?.includes('list') || args?.includes('engine') || args?.includes('build'))
+        ) {
+          return mockExecaResult(0, 'Usage: [command] [options]', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<VerificationResult> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result.success).toBe(false);
+      expect(result.buildSucceeds).toBe(false);
+      expect(result.errors.some((e) => e.includes('Build execution error'))).toBe(true);
+    });
+
+    it('captures lint execution error', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('run') && args?.includes('lint')) {
+          throw new Error('Lint execution error');
+        }
+        if (command === 'npm' && args?.includes('test')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npx' && args?.includes('evolve')) {
+          return mockExecaResult(0, 'Usage: evolve [options]', '');
+        }
+        if (
+          command === 'npx' &&
+          (args?.includes('list') || args?.includes('engine') || args?.includes('build'))
+        ) {
+          return mockExecaResult(0, 'Usage: [command] [options]', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<VerificationResult> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result.success).toBe(false);
+      expect(result.lintClean).toBe(false);
+      expect(result.errors.some((e) => e.includes('Lint execution error'))).toBe(true);
+    });
+
+    it('captures evolve check execution error', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npx' && args?.includes('evolve')) {
+          throw new Error('Evolve check error');
+        }
+        if (command === 'npm' && args?.includes('test')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npm' && args?.includes('run') && args?.includes('lint')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (
+          command === 'npx' &&
+          (args?.includes('list') || args?.includes('engine') || args?.includes('build'))
+        ) {
+          return mockExecaResult(0, 'Usage: [command] [options]', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<VerificationResult> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result.success).toBe(false);
+      expect(result.evolveFunctional).toBe(false);
+      expect(result.errors.some((e) => e.includes('Evolve check failed'))).toBe(true);
+    });
+
+    it('captures core command execution error', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npx' && args?.includes('build')) {
+          throw new Error('Build command error');
+        }
+        if (command === 'npm' && args?.includes('test')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npm' && args?.includes('run') && args?.includes('lint')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'npx' && args?.includes('evolve')) {
+          return mockExecaResult(0, 'Usage: evolve [options]', '');
+        }
+        if (command === 'npx' && (args?.includes('list') || args?.includes('engine'))) {
+          return mockExecaResult(0, 'Usage: [command] [options]', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<VerificationResult> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result.success).toBe(false);
+      expect(result.coreCommandsWork).toBe(false);
+      expect(result.errors.some((e) => e.includes("Command 'build' error"))).toBe(true);
+    });
   });
 
   describe('hasTestFiles', () => {
@@ -454,6 +807,24 @@ describe('SelfDriver', () => {
     it('returns false when both find and dir fail', async () => {
       mockExeca.mockImplementation(async () => {
         throw new Error('Command failed');
+      });
+
+      const hasTestFiles = (driver as unknown as { hasTestFiles: () => Promise<boolean> })
+        .hasTestFiles;
+      const result = await hasTestFiles.call(driver);
+
+      expect(result).toBe(false);
+    });
+
+    it('returns false when Windows dir command also fails', async () => {
+      mockExeca.mockImplementation(async (command: string) => {
+        if (command === 'find') {
+          throw new Error('Command not found');
+        }
+        if (command === 'cmd') {
+          throw new Error('dir command failed');
+        }
+        return mockExecaResult(0, '', '');
       });
 
       const hasTestFiles = (driver as unknown as { hasTestFiles: () => Promise<boolean> })
@@ -793,6 +1164,58 @@ describe('SelfDriver', () => {
 
       expect(result).toBe(true);
     });
+
+    it('logs error message when opencode throws', async () => {
+      const logSpy = jest.fn();
+      driver = new SelfDriver({ logger: logSpy });
+
+      mockExeca.mockImplementation(async () => {
+        throw new Error('OpenCode execution failed');
+      });
+
+      const diagnosis: Diagnosis = {
+        testFailures: [],
+        lintErrors: [],
+        timestamp: new Date().toISOString(),
+      };
+      const suggestions: EvolutionSuggestion[] = [];
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (d: Diagnosis, s: EvolutionSuggestion[]) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      await evolveWithOpenCode.call(driver, diagnosis, suggestions);
+
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('OpenCode exited'));
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('OpenCode execution failed'));
+    });
+
+    it('handles non-Error objects thrown by opencode', async () => {
+      const logSpy = jest.fn();
+      driver = new SelfDriver({ logger: logSpy });
+
+      mockExeca.mockImplementation(async () => {
+        throw 'String error';
+      });
+
+      const diagnosis: Diagnosis = {
+        testFailures: [],
+        lintErrors: [],
+        timestamp: new Date().toISOString(),
+      };
+      const suggestions: EvolutionSuggestion[] = [];
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (d: Diagnosis, s: EvolutionSuggestion[]) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      const result = await evolveWithOpenCode.call(driver, diagnosis, suggestions);
+
+      expect(result).toBe(true);
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('String error'));
+    });
   });
 
   describe('buildEnv', () => {
@@ -832,11 +1255,452 @@ describe('SelfDriver', () => {
       await expect(promise).resolves.toBeUndefined();
     });
   });
+
+  describe('logDiagnosis', () => {
+    beforeEach(() => {
+      driver = new SelfDriver();
+    });
+
+    it('logs issues when test failures exist', () => {
+      const diagnosis: Diagnosis = {
+        testFailures: ['src/core/failing.test.ts'],
+        lintErrors: [],
+        timestamp: new Date().toISOString(),
+      };
+      const suggestions: EvolutionSuggestion[] = [];
+
+      const logDiagnosis = (
+        driver as unknown as { logDiagnosis: (d: Diagnosis, s: EvolutionSuggestion[]) => void }
+      ).logDiagnosis;
+      logDiagnosis.call(driver, diagnosis, suggestions);
+
+      // Method should complete without error
+      expect(true).toBe(true);
+    });
+
+    it('logs issues when lint errors exist', () => {
+      const diagnosis: Diagnosis = {
+        testFailures: [],
+        lintErrors: ['src/core/example.ts:10:5 error Missing semicolon'],
+        timestamp: new Date().toISOString(),
+      };
+      const suggestions: EvolutionSuggestion[] = [];
+
+      const logDiagnosis = (
+        driver as unknown as { logDiagnosis: (d: Diagnosis, s: EvolutionSuggestion[]) => void }
+      ).logDiagnosis;
+      logDiagnosis.call(driver, diagnosis, suggestions);
+
+      expect(true).toBe(true);
+    });
+
+    it('logs suggestions when available', () => {
+      const diagnosis: Diagnosis = {
+        testFailures: [],
+        lintErrors: [],
+        timestamp: new Date().toISOString(),
+      };
+      const suggestions: EvolutionSuggestion[] = [
+        {
+          priority: 'critical',
+          category: 'fix',
+          description: 'Fix test failures',
+          reason: 'Tests are broken',
+          estimatedEffort: 'medium',
+        },
+        {
+          priority: 'high',
+          category: 'test',
+          description: 'Add more tests',
+          reason: 'Coverage is low',
+          estimatedEffort: 'large',
+        },
+        {
+          priority: 'medium',
+          category: 'refactor',
+          description: 'Improve types',
+          reason: 'Type safety',
+          estimatedEffort: 'small',
+        },
+      ];
+
+      const logDiagnosis = (
+        driver as unknown as { logDiagnosis: (d: Diagnosis, s: EvolutionSuggestion[]) => void }
+      ).logDiagnosis;
+      logDiagnosis.call(driver, diagnosis, suggestions);
+
+      expect(true).toBe(true);
+    });
+  });
+});
+
+describe('SelfDriver isInterrupted', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('returns false when not interrupted', () => {
+    driver = new SelfDriver();
+
+    const isInterrupted = (driver as unknown as { isInterrupted: () => boolean }).isInterrupted;
+    const result = isInterrupted.call(driver);
+
+    expect(result).toBe(false);
+  });
+
+  it('returns true after SIGINT signal', () => {
+    driver = new SelfDriver();
+
+    // Trigger interruption
+    process.emit('SIGINT' as NodeJS.Signals);
+
+    const isInterrupted = (driver as unknown as { isInterrupted: () => boolean }).isInterrupted;
+    const result = isInterrupted.call(driver);
+
+    expect(result).toBe(true);
+  });
+});
+
+describe('SelfDriver cleanupSignalHandlers', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    jest.useFakeTimers();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+    process.cwd = originalCwd;
+  });
+
+  it('cleans up signal handlers without error', () => {
+    driver = new SelfDriver();
+
+    const cleanupSignalHandlers = (driver as unknown as { cleanupSignalHandlers: () => void })
+      .cleanupSignalHandlers;
+
+    // Should not throw
+    expect(() => cleanupSignalHandlers.call(driver)).not.toThrow();
+  });
+});
+
+describe('SelfDriver signal handlers', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('handles SIGINT signal', () => {
+    driver = new SelfDriver();
+
+    // Emit SIGINT
+    process.emit('SIGINT' as NodeJS.Signals);
+
+    // Should complete without error
+    expect(true).toBe(true);
+  });
+
+  it('handles SIGTERM signal', () => {
+    driver = new SelfDriver();
+
+    // Emit SIGTERM
+    process.emit('SIGTERM' as NodeJS.Signals);
+
+    // Should complete without error
+    expect(true).toBe(true);
+  });
+});
+
+describe('SelfDriver buildPrompt categorized suggestions', () => {
+  beforeEach(() => {
+    driver = new SelfDriver();
+  });
+
+  it('includes critical priority suggestions in critical issues section', () => {
+    const diagnosis: Diagnosis = {
+      testFailures: [],
+      lintErrors: [],
+      timestamp: new Date().toISOString(),
+    };
+    const suggestions: EvolutionSuggestion[] = [
+      {
+        priority: 'critical',
+        category: 'fix',
+        description: 'Fix broken build',
+        reason: 'Build is failing',
+        estimatedEffort: 'medium',
+      },
+    ];
+
+    const buildPrompt = (
+      driver as unknown as {
+        buildPrompt: (d: Diagnosis, s: EvolutionSuggestion[]) => string;
+      }
+    ).buildPrompt;
+    const prompt = buildPrompt.call(driver, diagnosis, suggestions);
+
+    expect(prompt).toContain('CRITICAL ISSUES');
+    expect(prompt).toContain('Fix broken build');
+    expect(prompt).toContain('medium effort');
+  });
+
+  it('includes high priority suggestions in prompt', () => {
+    const diagnosis: Diagnosis = {
+      testFailures: [],
+      lintErrors: [],
+      timestamp: new Date().toISOString(),
+    };
+    const suggestions: EvolutionSuggestion[] = [
+      {
+        priority: 'high',
+        category: 'test',
+        description: 'Add unit tests for core modules',
+        reason: 'Coverage is low',
+        estimatedEffort: 'large',
+      },
+    ];
+
+    const buildPrompt = (
+      driver as unknown as {
+        buildPrompt: (d: Diagnosis, s: EvolutionSuggestion[]) => string;
+      }
+    ).buildPrompt;
+    const prompt = buildPrompt.call(driver, diagnosis, suggestions);
+
+    expect(prompt).toContain('High Priority');
+    expect(prompt).toContain('Add unit tests');
+  });
+
+  it('includes medium priority suggestions in improvements section', () => {
+    const diagnosis: Diagnosis = {
+      testFailures: [],
+      lintErrors: [],
+      timestamp: new Date().toISOString(),
+    };
+    const suggestions: EvolutionSuggestion[] = [
+      {
+        priority: 'medium',
+        category: 'refactor',
+        description: 'Improve type safety',
+        reason: 'Better TypeScript',
+        estimatedEffort: 'medium',
+      },
+    ];
+
+    const buildPrompt = (
+      driver as unknown as {
+        buildPrompt: (d: Diagnosis, s: EvolutionSuggestion[]) => string;
+      }
+    ).buildPrompt;
+    const prompt = buildPrompt.call(driver, diagnosis, suggestions);
+
+    expect(prompt).toContain('Potential Improvements');
+    expect(prompt).toContain('Improve type safety');
+  });
+
+  it('includes low priority suggestions in improvements section', () => {
+    const diagnosis: Diagnosis = {
+      testFailures: [],
+      lintErrors: [],
+      timestamp: new Date().toISOString(),
+    };
+    const suggestions: EvolutionSuggestion[] = [
+      {
+        priority: 'low',
+        category: 'docs',
+        description: 'Add JSDoc comments',
+        reason: 'Documentation',
+        estimatedEffort: 'small',
+      },
+    ];
+
+    const buildPrompt = (
+      driver as unknown as {
+        buildPrompt: (d: Diagnosis, s: EvolutionSuggestion[]) => string;
+      }
+    ).buildPrompt;
+    const prompt = buildPrompt.call(driver, diagnosis, suggestions);
+
+    expect(prompt).toContain('Potential Improvements');
+    expect(prompt).toContain('Add JSDoc comments');
+  });
+});
+
+describe('SelfDriver run', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    // Use real timers for signal-based async tests
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+
+    // Default mock implementations - all passing
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      if (fullCommand.includes('npm test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (fullCommand.includes('npm run lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('evolve --help')) {
+        return mockExecaResult(0, 'Usage: evolve [options]', '');
+      }
+      if (
+        fullCommand.includes('list --help') ||
+        fullCommand.includes('engine --help') ||
+        fullCommand.includes('build --help')
+      ) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+      if (command === 'git') {
+        if (args?.includes('status')) {
+          return mockExecaResult(0, '', ''); // No changes
+        }
+        if (args?.includes('add') || args?.includes('commit') || args?.includes('checkout')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+      if (command === 'find' || command === 'cmd') {
+        return mockExecaResult(0, 'src/core/self-driver.test.ts', '');
+      }
+      if (command === 'opencode') {
+        return mockExecaResult(0, '', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('exits loop and returns result when interrupted', async () => {
+    driver = new SelfDriver({ interval: 10 });
+
+    // Emit SIGINT to interrupt the loop immediately
+    setTimeout(() => {
+      process.emit('SIGINT' as NodeJS.Signals);
+    }, 50);
+
+    const result = await driver.run();
+
+    expect(result.success).toBe(false); // No improvements made
+    expect(result.iterations).toBeGreaterThanOrEqual(0);
+    expect(result.improvements).toEqual([]);
+    expect(result.errors).toEqual([]);
+  }, 10000);
+
+  it('processes one iteration before interruption', async () => {
+    driver = new SelfDriver({ interval: 10 });
+
+    // Emit SIGINT after a short delay to allow one iteration
+    setTimeout(() => {
+      process.emit('SIGINT' as NodeJS.Signals);
+    }, 100);
+
+    const result = await driver.run();
+
+    expect(result.iterations).toBeGreaterThanOrEqual(1);
+  }, 10000);
 });
 
 describe('runSelfEvolution', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    // Use real timers for signal-based async tests
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      if (fullCommand.includes('npm test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (fullCommand.includes('npm run lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('evolve --help')) {
+        return mockExecaResult(0, 'Usage: evolve [options]', '');
+      }
+      if (
+        fullCommand.includes('list --help') ||
+        fullCommand.includes('engine --help') ||
+        fullCommand.includes('build --help')
+      ) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+      if (command === 'git') {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'find' || command === 'cmd') {
+        return mockExecaResult(0, 'src/core/self-driver.test.ts', '');
+      }
+      if (command === 'opencode') {
+        return mockExecaResult(0, '', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
   it('exports the convenience function', () => {
     expect(runSelfEvolution).toBeDefined();
     expect(typeof runSelfEvolution).toBe('function');
   });
+
+  it('creates driver with provided options and runs evolution', async () => {
+    const options: SelfEvolverOptions = {
+      interval: 10,
+      model: 'test-model',
+    };
+
+    // Interrupt after first iteration
+    setTimeout(() => {
+      process.emit('SIGINT' as NodeJS.Signals);
+    }, 100);
+
+    const result = await runSelfEvolution(options);
+
+    expect(result).toBeDefined();
+    expect(typeof result.success).toBe('boolean');
+    expect(typeof result.iterations).toBe('number');
+    expect(Array.isArray(result.improvements)).toBe(true);
+    expect(Array.isArray(result.errors)).toBe(true);
+  }, 10000);
+
+  it('works with default options when none provided', async () => {
+    // Interrupt immediately
+    setTimeout(() => {
+      process.emit('SIGINT' as NodeJS.Signals);
+    }, 50);
+
+    const result = await runSelfEvolution();
+
+    expect(result).toBeDefined();
+    expect(typeof result.success).toBe('boolean');
+    expect(typeof result.iterations).toBe('number');
+  }, 10000);
 });

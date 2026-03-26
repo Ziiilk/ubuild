@@ -1,3 +1,4 @@
+import { Command } from 'commander';
 import { ProjectDetectionResult, ProjectInfo, UProject } from '../types/project';
 import { CapturedWritable } from '../test-utils/capture-stream';
 
@@ -10,7 +11,7 @@ jest.mock('../core/project-detector', () => ({
 }));
 
 // Import after mocking
-import { executeList } from './list';
+import { executeList, listCommand } from './list';
 
 describe('executeList', () => {
   let stdout: CapturedWritable;
@@ -412,5 +413,77 @@ describe('executeList', () => {
       expect(stdout.output).toContain('Modules');
       expect(stdout.output).toContain('Runtime');
     });
+  });
+});
+
+describe('listCommand', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('registers the list command with correct options', () => {
+    const program = new Command();
+    const commandSpy = jest.spyOn(program, 'command');
+
+    listCommand(program);
+
+    expect(commandSpy).toHaveBeenCalledWith('list');
+  });
+
+  it('registers the ls alias', () => {
+    const program = new Command();
+    listCommand(program);
+
+    const listCmd = program.commands.find((cmd) => cmd.name() === 'list');
+    expect(listCmd).toBeDefined();
+    expect(listCmd?.alias()).toBe('ls');
+  });
+
+  it('registers all required options', () => {
+    const program = new Command();
+    listCommand(program);
+
+    const listCmd = program.commands.find((cmd) => cmd.name() === 'list');
+    expect(listCmd).toBeDefined();
+
+    const options = listCmd?.options || [];
+    const optionFlags = options.map((opt) => opt.flags);
+
+    expect(optionFlags).toContain('-r, --recursive');
+    expect(optionFlags).toContain('-j, --json');
+  });
+
+  it('action handler passes options to executeList', async () => {
+    mockDetectProject.mockResolvedValue({
+      isValid: true,
+      project: {
+        name: 'TestProject',
+        path: '/test/project',
+        uproject: {
+          FileVersion: 3,
+          EngineAssociation: '5.3',
+          Modules: [],
+        },
+        sourceDir: '/test/project/Source',
+        targets: [],
+        modules: [],
+      },
+      warnings: [],
+    });
+
+    const program = new Command();
+    listCommand(program);
+
+    // Parse with test arguments
+    program.parse(['node', 'test', 'list', '--recursive', '--json']);
+
+    // Wait for async action
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(mockDetectProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recursive: true,
+      })
+    );
   });
 });

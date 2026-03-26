@@ -100,9 +100,9 @@ npx jest -t "test name"
 
 Reality check:
 
-- Jest is configured.
-- No committed `*.test.ts` or `*.spec.ts` files were found during analysis.
-- Single-test commands are valid Jest usage, but there may be no checked-in test files to target yet.
+- Jest is configured with 42 test files covering core modules, commands, types, and utilities
+- All tests pass: `npm test`
+- Single-test execution works via Jest CLI: `npx jest --runTestsByPath "src/path/to/file.test.ts"`
 
 ### Publish hooks
 
@@ -304,7 +304,7 @@ Reuse `Validator` where it already matches the responsibility.
 
 ## Testing guidance
 
-Because Jest is configured but no committed Jest tests were found, use a pragmatic validation strategy:
+Because Jest is configured with comprehensive test coverage (42 test files), maintain the existing high standard:
 
 - If you add a clear unit boundary, consider adding a Jest test under `src/` with `*.test.ts` or `*.spec.ts` naming.
 - If you add a test, verify it with `npx jest --runTestsByPath <path>`.

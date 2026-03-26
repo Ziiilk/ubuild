@@ -1,3 +1,13 @@
+/**
+ * Project detector module for ubuild
+ *
+ * Detects and validates Unreal Engine projects from .uproject files.
+ * Provides methods to find, parse, and validate project configurations
+ * including modules, plugins, and target files.
+ *
+ * @module core/project-detector
+ */
+
 import fs from 'fs-extra';
 import path from 'path';
 import { glob } from 'glob';

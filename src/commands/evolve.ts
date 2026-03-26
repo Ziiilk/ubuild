@@ -1,14 +1,37 @@
+/**
+ * Evolve command for ubuild CLI
+ *
+ * Runs self-evolution using OpenCode to continuously analyze and improve
+ * the ubuild codebase. Development-only feature that runs until interrupted.
+ *
+ * @module commands/evolve
+ */
+
 import { Command } from 'commander';
 import { Logger } from '../utils/logger';
 import { runSelfEvolution } from '../core/self-driver';
 
-/** Options for the evolve command. */
+/**
+ * Options for the evolve command.
+ * Controls the behavior of the self-evolution process including timing,
+ * API authentication, and model selection.
+ */
 interface EvolveCommandOptions {
-  /** Interval between evolution iterations in milliseconds */
+  /**
+   * Interval between evolution iterations in milliseconds.
+   * Values below 1000ms will be clamped to 5000ms.
+   * @default '5000'
+   */
   interval?: string;
-  /** OpenAI/Anthropic API key for evolution */
+  /**
+   * OpenAI/Anthropic API key for evolution.
+   * If not provided, uses OpenCode default model.
+   */
   apiKey?: string;
-  /** Model to use for evolution */
+  /**
+   * Model identifier to use for evolution.
+   * @default ''
+   */
   model?: string;
 }
 
@@ -41,8 +64,15 @@ export function evolveCommand(program: Command): void {
       Logger.info('Runs forever until Ctrl+C\n');
 
       try {
+        const parsedInterval = parseInt(options.interval ?? '5000', 10);
+        const interval = isNaN(parsedInterval) || parsedInterval < 1000 ? 5000 : parsedInterval;
+
+        if (interval !== parsedInterval) {
+          Logger.warning('Invalid interval value, using default of 5000ms');
+        }
+
         const result = await runSelfEvolution({
-          interval: parseInt(options.interval ?? '5000', 10),
+          interval,
           apiKey: options.apiKey,
           model: options.model || '',
           logger: (msg: string) => Logger.info(msg),

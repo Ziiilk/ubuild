@@ -1,3 +1,12 @@
+/**
+ * Engine command for ubuild CLI
+ *
+ * Displays information about the Unreal Engine installation
+ * associated with the current project or specified path.
+ *
+ * @module commands/engine
+ */
+
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { Writable } from 'stream';

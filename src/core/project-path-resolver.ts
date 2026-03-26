@@ -1,3 +1,12 @@
+/**
+ * Project path resolver module for ubuild
+ *
+ * Resolves project paths to .uproject files.
+ * Handles both directory paths (finding the .uproject inside) and direct .uproject file paths.
+ *
+ * @module core/project-path-resolver
+ */
+
 import fs from 'fs-extra';
 import path from 'path';
 import { ProjectPathResolution } from '../types/project';

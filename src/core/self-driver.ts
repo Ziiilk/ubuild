@@ -1,3 +1,13 @@
+/**
+ * Self-driving evolution engine for ubuild.
+ *
+ * Automated codebase improvement system that continuously diagnoses health,
+ * generates improvement suggestions, and applies changes through OpenCode.
+ * Runs in an infinite loop until interrupted by user.
+ *
+ * @module core/self-driver
+ */
+
 import { execa } from 'execa';
 import { Logger } from '../utils/logger';
 
@@ -88,13 +98,52 @@ export class SelfDriver {
   private projectRoot: string;
   private iterationCount = 0;
   private improvementCount = 0;
+  private interrupted = false;
+  private signalHandlers: Array<() => void> = [];
 
+  /**
+   * Creates a new SelfDriver instance.
+   * @param options - Configuration options for the evolution process
+   */
   constructor(options: SelfEvolverOptions = {}) {
     this.interval = options.interval || 5000;
     this.apiKey = options.apiKey;
     this.model = options.model || '';
     this.log = options.logger || ((msg: string) => Logger.info(msg));
     this.projectRoot = process.cwd();
+    this.setupSignalHandlers();
+  }
+
+  /**
+   * Sets up signal handlers for graceful interruption (Ctrl+C, SIGTERM).
+   */
+  private setupSignalHandlers(): void {
+    const sigintHandler = (): void => {
+      this.interrupted = true;
+      this.log('\n\n⚠️  Interrupted by user (Ctrl+C)');
+    };
+
+    const sigtermHandler = (): void => {
+      this.interrupted = true;
+      this.log('\n\n⚠️  Termination signal received');
+    };
+
+    process.setMaxListeners(100);
+    process.on('SIGINT', sigintHandler);
+    process.on('SIGTERM', sigtermHandler);
+
+    this.signalHandlers.push(() => process.removeListener('SIGINT', sigintHandler));
+    this.signalHandlers.push(() => process.removeListener('SIGTERM', sigtermHandler));
+  }
+
+  /**
+   * Cleans up signal handlers to prevent memory leaks.
+   */
+  private cleanupSignalHandlers(): void {
+    for (const cleanup of this.signalHandlers) {
+      cleanup();
+    }
+    this.signalHandlers = [];
   }
 
   /**
@@ -165,6 +214,8 @@ export class SelfDriver {
       await this.sleep(this.interval);
     }
 
+    this.cleanupSignalHandlers();
+
     this.log(`\n✨ Evolution stopped`);
     this.log(`📊 Total iterations: ${this.iterationCount}`);
     this.log(`📊 Total improvements: ${improvements.length}`);
@@ -181,7 +232,7 @@ export class SelfDriver {
    * Checks if the process has been interrupted by the user.
    */
   private isInterrupted(): boolean {
-    return false;
+    return this.interrupted;
   }
 
   /**
@@ -777,7 +828,9 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one conser
 }
 
 /**
- * 便捷函数：运行自进化
+ * Convenience function to run the self-evolution process.
+ * @param options - Optional configuration for the self-evolution process
+ * @returns Promise that resolves with the evolution result
  */
 export async function runSelfEvolution(options?: SelfEvolverOptions): Promise<EvolutionResult> {
   const driver = new SelfDriver(options);

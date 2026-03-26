@@ -178,4 +178,52 @@ describe('CLI Entry Point', () => {
       );
     });
   });
+
+  describe('error handling', () => {
+    it('exits with code 1 when program.parseAsync throws an error', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+        // Suppress console.error output during test
+      });
+      process.argv = ['node', 'ubuild', 'list'];
+
+      // Mock list command to throw an error during execution
+      mockListCommand.mockImplementation((program: Command) => {
+        program
+          .command('list')
+          .description('List projects')
+          .action(async () => {
+            throw new Error('Test error');
+          });
+      });
+
+      await import('./index');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(process.exit).toHaveBeenCalledWith(1);
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('handles non-Error exceptions in main', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
+        // Suppress console.error output during test
+      });
+      process.argv = ['node', 'ubuild', 'list'];
+
+      // Mock list command to throw a non-Error value
+      mockListCommand.mockImplementation((program: Command) => {
+        program
+          .command('list')
+          .description('List projects')
+          .action(async () => {
+            throw 'String error';
+          });
+      });
+
+      await import('./index');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(process.exit).toHaveBeenCalledWith(1);
+      consoleErrorSpy.mockRestore();
+    });
+  });
 });

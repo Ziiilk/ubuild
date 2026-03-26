@@ -145,6 +145,25 @@ describe('ProjectRunner', () => {
   });
 
   describe('run validation', () => {
+    it('throws error for invalid target', async () => {
+      const capture = createOutputCapture();
+      const runner = new ProjectRunner({
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+      });
+
+      // Use whitespace-only target which is falsy after trim
+      await expect(
+        runner.run({
+          target: '   ',
+          config: 'Development',
+          platform: 'Win64',
+        })
+      ).rejects.toThrow('Invalid target');
+
+      expect(capture.getStderr()).toContain('Invalid run target');
+    });
+
     it('throws error for invalid config', async () => {
       const capture = createOutputCapture();
       const runner = new ProjectRunner({
@@ -251,6 +270,67 @@ describe('ProjectRunner', () => {
         });
 
         expect(capture.getStdout()).toContain('Detection failed - specify with --engine-path');
+      });
+    });
+
+    it('shows non-existent executable warning in dry run', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+        const engine = await createFakeEngine(rootDir, { includeEditorExecutable: false });
+        const capture = createOutputCapture();
+
+        mockResolveEngine.mockResolvedValue({
+          engine: { path: engine.enginePath },
+          warnings: [],
+        });
+        mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+
+        const runner = new ProjectRunner({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await runner.run({
+          project: project.projectDir,
+          target: 'Editor',
+          config: 'Development',
+          platform: 'Win64',
+          dryRun: true,
+        });
+
+        expect(capture.getStdout()).toContain('Executable exists:');
+        expect(capture.getStdout()).toContain('No - may need to build first');
+      });
+    });
+
+    it('handles executable path detection failure in dry run', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+        const engine = await createFakeEngine(rootDir);
+        const capture = createOutputCapture();
+
+        mockResolveEngine.mockResolvedValue({
+          engine: { path: engine.enginePath },
+          warnings: [],
+        });
+        // Mock resolveEnginePath to throw an error during executable finding
+        mockResolveEnginePath.mockRejectedValue(new Error('Engine path resolution failed'));
+
+        const runner = new ProjectRunner({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await runner.run({
+          project: project.projectDir,
+          target: 'Editor',
+          config: 'Development',
+          platform: 'Win64',
+          dryRun: true,
+        });
+
+        // When findExecutable returns null due to engine resolution failure
+        expect(capture.getStdout()).toContain('Could not determine path');
       });
     });
 
@@ -538,6 +618,80 @@ describe('ProjectRunner', () => {
       });
     });
 
+    it('finds alternative editor executables when main one is missing', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+        const engine = await createFakeEngine(rootDir, { includeEditorExecutable: false });
+        const capture = createOutputCapture();
+
+        // Create UE4Editor.exe as alternative
+        const binariesDir = path.join(engine.enginePath, 'Engine', 'Binaries', 'Win64');
+        await fs.ensureDir(binariesDir);
+        await fs.writeFile(path.join(binariesDir, 'UE4Editor.exe'), '');
+
+        mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+        mockExeca.mockImplementation(() => {
+          const child = createFakeExecaChild({ exitCode: 0 });
+          const originalOn = child.on.bind(child);
+          child.on = (event: 'exit', listener: (code: number) => void) => {
+            const registeredChild = originalOn(event, listener);
+            listener(0);
+            return registeredChild;
+          };
+          return child;
+        });
+
+        const runner = new ProjectRunner({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await runner.run({
+          project: project.projectDir,
+          enginePath: engine.enginePath,
+          target: 'Editor',
+          config: 'Development',
+          platform: 'Win64',
+        });
+
+        expect(mockExeca).toHaveBeenCalledWith(
+          path.join(binariesDir, 'UE4Editor.exe'),
+          [project.uprojectPath],
+          expect.any(Object)
+        );
+      });
+    });
+
+    it('handles engine path resolution failure in dry run', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+        const capture = createOutputCapture();
+
+        mockResolveEngine.mockResolvedValue({
+          engine: { path: 'some/path' },
+          warnings: [],
+        });
+        // Make engine path resolution fail for editor target path lookups
+        mockResolveEnginePath.mockRejectedValue(new Error('Engine resolution failed'));
+
+        const runner = new ProjectRunner({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await runner.run({
+          project: project.projectDir,
+          target: 'Editor',
+          config: 'Development',
+          platform: 'Win64',
+          dryRun: true,
+        });
+
+        // When engine resolution fails for editor targets, executable path cannot be determined
+        expect(capture.getStdout()).toContain('Could not determine path');
+      });
+    });
+
     it('throws when project file does not exist', async () => {
       await withTempDir(async (rootDir) => {
         const nonExistentProject = path.join(rootDir, 'NonExistent', 'Project.uproject');
@@ -581,6 +735,62 @@ describe('ProjectRunner', () => {
             platform: 'Win64',
           })
         ).rejects.toThrow('Executable not found');
+      });
+    });
+
+    it('throws when executable path cannot be determined', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+        const engine = await createFakeEngine(rootDir);
+        const capture = createOutputCapture();
+
+        mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+        // Mock execa to throw an error that triggers the catch block in findExecutable
+        // This will cause findExecutable to return null
+        mockResolveTarget.mockRejectedValue(new Error('Target resolution failed'));
+
+        const runner = new ProjectRunner({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await expect(
+          runner.run({
+            project: project.projectDir,
+            enginePath: engine.enginePath,
+            target: 'Game',
+            config: 'Development',
+            platform: 'Win64',
+          })
+        ).rejects.toThrow('Could not determine executable path');
+      });
+    });
+
+    it('handles execa execution errors', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+        const engine = await createFakeEngine(rootDir);
+        const capture = createOutputCapture();
+
+        mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+        mockExeca.mockImplementation(() => {
+          throw new Error('Execution failed: Permission denied');
+        });
+
+        const runner = new ProjectRunner({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await expect(
+          runner.run({
+            project: project.projectDir,
+            enginePath: engine.enginePath,
+            target: 'Editor',
+            config: 'Development',
+            platform: 'Win64',
+          })
+        ).rejects.toThrow('Failed to run executable: Execution failed: Permission denied');
       });
     });
 

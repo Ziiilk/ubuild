@@ -1,7 +1,34 @@
+/**
+ * Run command for ubuild CLI
+ *
+ * Runs Unreal Engine projects in Editor or Game mode
+ * with configurable targets and configurations.
+ *
+ * @module commands/run
+ */
+
 import { Command } from 'commander';
 import { ProjectRunner } from '../core/project-runner';
 
-export { ProjectRunner, runProject } from '../core/project-runner';
+/**
+ * Project runner class for executing projects.
+ * Re-exported from {@link ../core/project-runner}.
+ * @see {@link ProjectRunner} for implementation details
+ */
+export { ProjectRunner } from '../core/project-runner';
+
+/**
+ * Run a project with the specified options.
+ * Re-exported from {@link ../core/project-runner}.
+ * @see {@link runProject} for implementation details
+ */
+export { runProject } from '../core/project-runner';
+
+/**
+ * Options for the run command.
+ * Re-exported from {@link ../core/project-runner}.
+ * @see {@link RunOptions} for details
+ */
 export type { RunOptions } from '../core/project-runner';
 
 /**

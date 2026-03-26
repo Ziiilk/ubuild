@@ -1,3 +1,13 @@
+/**
+ * Clean executor module for ubuild
+ *
+ * Executes clean operations for Unreal Engine projects by removing build
+ * artifacts including Binaries, Intermediate, and Saved directories.
+ * Supports dry-run mode and selective cleaning.
+ *
+ * @module core/clean-executor
+ */
+
 import fs from 'fs-extra';
 import path from 'path';
 import { Writable } from 'stream';

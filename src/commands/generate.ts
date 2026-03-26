@@ -1,10 +1,18 @@
+/**
+ * Generate command for ubuild CLI
+ *
+ * Generates IDE project files for Unreal Engine projects including
+ * Visual Studio solutions, VSCode workspaces, CLion, and Xcode projects.
+ *
+ * @module commands/generate
+ */
+
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { Writable } from 'stream';
 import { ProjectGenerator } from '../core/project-generator';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
-import { IDE } from '../types/generate';
 
 /** Options for the generate command. */
 export interface GenerateCommandOptions {
@@ -55,7 +63,7 @@ export async function executeGenerate(options: GenerateCommandOptions): Promise<
     logger.divider();
 
     const result = await ProjectGenerator.generate({
-      ide: ide as IDE,
+      ide: ide,
       projectPath: options.projectPath,
       enginePath: options.enginePath,
       force: options.force,

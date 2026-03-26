@@ -1,3 +1,13 @@
+/**
+ * Project initializer module for ubuild
+ *
+ * Initializes new Unreal Engine projects with support for C++, Blueprint,
+ * and Blank project types. Handles project directory creation, template
+ * selection, and engine association setup.
+ *
+ * @module core/project-initializer
+ */
+
 import path from 'path';
 import fs from 'fs-extra';
 import inquirer from 'inquirer';
@@ -7,7 +17,12 @@ import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
 import { EngineResolver } from './engine-resolver';
 
+/**
+ * Response from the engine selection interactive prompt.
+ * Contains the user's chosen engine path or identifier.
+ */
 interface EngineSelectionPromptAnswer {
+  /** The path or identifier of the selected Unreal Engine installation */
   selectedEngine: string;
 }
 
@@ -227,7 +242,7 @@ export class ProjectInitializer {
   /**
    * Creates the directory structure for a blank project.
    * @param _name - Project name (unused but kept for API consistency)
-   @param directory - Target directory for the project
+   * @param directory - Target directory for the project
    * @param _enginePath - Engine path (unused but kept for API consistency)
    */
   private static async createBlankProject(

@@ -1,3 +1,4 @@
+import { Command } from 'commander';
 import { CleanResult } from '../types/clean';
 import { CapturedWritable } from '../test-utils/capture-stream';
 
@@ -10,7 +11,7 @@ jest.mock('../core/clean-executor', () => ({
 }));
 
 // Import after mocking
-import { executeClean, CleanCommandOptions } from './clean';
+import { executeClean, cleanCommand, CleanCommandOptions } from './clean';
 
 describe('executeClean', () => {
   let stdout: CapturedWritable;
@@ -291,5 +292,194 @@ describe('executeClean', () => {
         })
       );
     });
+  });
+});
+
+describe('cleanCommand', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('registers the clean command with commander', () => {
+    const program = new Command();
+    cleanCommand(program);
+
+    const cleanCmd = program.commands.find((cmd) => cmd.name() === 'clean');
+    expect(cleanCmd).toBeDefined();
+    expect(cleanCmd?.description()).toBe('Clean build artifacts from Unreal Engine project');
+  });
+
+  it('command has all expected options', () => {
+    const program = new Command();
+    cleanCommand(program);
+
+    const cleanCmd = program.commands.find((cmd) => cmd.name() === 'clean');
+    const options = cleanCmd?.options || [];
+
+    const optionFlags = options.map((opt) => opt.long);
+    expect(optionFlags).toContain('--project');
+    expect(optionFlags).toContain('--engine-path');
+    expect(optionFlags).toContain('--dry-run');
+    expect(optionFlags).toContain('--binaries-only');
+  });
+
+  it('displays success message when cleaning succeeds with deleted paths', async () => {
+    const program = new Command();
+    cleanCommand(program);
+
+    mockExecute.mockResolvedValue({
+      success: true,
+      deletedPaths: [
+        'C:\\Projects\\TestProject\\Binaries',
+        'C:\\Projects\\TestProject\\Intermediate',
+      ],
+      failedPaths: [],
+    });
+
+    const cleanCmd = program.commands.find((cmd) => cmd.name() === 'clean');
+    await cleanCmd?.parseAsync([]);
+
+    expect(mockExecute).toHaveBeenCalled();
+  });
+
+  it('displays no artifacts message when nothing to clean', async () => {
+    const program = new Command();
+    cleanCommand(program);
+
+    mockExecute.mockResolvedValue({
+      success: true,
+      deletedPaths: [],
+      failedPaths: [],
+    });
+
+    const cleanCmd = program.commands.find((cmd) => cmd.name() === 'clean');
+    await cleanCmd?.parseAsync([]);
+
+    expect(mockExecute).toHaveBeenCalled();
+  });
+
+  it('exits with error code 1 when cleaning fails', async () => {
+    const program = new Command();
+    cleanCommand(program);
+
+    mockExecute.mockResolvedValue({
+      success: false,
+      deletedPaths: [],
+      failedPaths: [{ path: 'C:\\Projects\\TestProject\\Binaries', error: 'Permission denied' }],
+      error: 'Failed to clean 1 path(s)',
+    });
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    const cleanCmd = program.commands.find((cmd) => cmd.name() === 'clean');
+    await expect(cleanCmd?.parseAsync([])).rejects.toThrow('process.exit called');
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
+
+  it('displays failed paths when cleaning has failures', async () => {
+    const program = new Command();
+    cleanCommand(program);
+
+    mockExecute.mockResolvedValue({
+      success: false,
+      deletedPaths: ['C:\\Projects\\TestProject\\Saved'],
+      failedPaths: [
+        { path: 'C:\\Projects\\TestProject\\Binaries', error: 'Permission denied' },
+        { path: 'C:\\Projects\\TestProject\\Intermediate', error: 'Access denied' },
+      ],
+      error: 'Failed to clean 2 path(s)',
+    });
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    const cleanCmd = program.commands.find((cmd) => cmd.name() === 'clean');
+    await expect(cleanCmd?.parseAsync([])).rejects.toThrow('process.exit called');
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
+
+  it('handles failure with error message but no failed paths', async () => {
+    const program = new Command();
+    cleanCommand(program);
+
+    mockExecute.mockResolvedValue({
+      success: false,
+      deletedPaths: [],
+      failedPaths: [],
+      error: 'Project directory not found',
+    });
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    const cleanCmd = program.commands.find((cmd) => cmd.name() === 'clean');
+    await expect(cleanCmd?.parseAsync([])).rejects.toThrow('process.exit called');
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
+
+  it('handles failure with no error message and no failed paths', async () => {
+    const program = new Command();
+    cleanCommand(program);
+
+    mockExecute.mockResolvedValue({
+      success: false,
+      deletedPaths: [],
+      failedPaths: [],
+      error: undefined,
+    });
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    const cleanCmd = program.commands.find((cmd) => cmd.name() === 'clean');
+    await expect(cleanCmd?.parseAsync([])).rejects.toThrow('process.exit called');
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
+
+  it('handles exceptions during cleaning', async () => {
+    const program = new Command();
+    cleanCommand(program);
+
+    mockExecute.mockRejectedValue(new Error('Unexpected error during cleaning'));
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    const cleanCmd = program.commands.find((cmd) => cmd.name() === 'clean');
+    await expect(cleanCmd?.parseAsync([])).rejects.toThrow('process.exit called');
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
+
+  it('handles non-Error exceptions', async () => {
+    const program = new Command();
+    cleanCommand(program);
+
+    mockExecute.mockRejectedValue('String error');
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    const cleanCmd = program.commands.find((cmd) => cmd.name() === 'clean');
+    await expect(cleanCmd?.parseAsync([])).rejects.toThrow('process.exit called');
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
   });
 });

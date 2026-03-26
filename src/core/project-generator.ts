@@ -1,3 +1,12 @@
+/**
+ * Project generator for IDE project files.
+ *
+ * Generates IDE-specific project files (Visual Studio, VSCode, CLion, Xcode)
+ * using UnrealBuildTool to enable development workflow integration.
+ *
+ * @module core/project-generator
+ */
+
 import { execa } from 'execa';
 import path from 'path';
 import fs from 'fs-extra';
@@ -7,15 +16,32 @@ import { Logger } from '../utils/logger';
 import { Platform } from '../utils/platform';
 import { ProjectPathResolver } from './project-path-resolver';
 
+/**
+ * Represents a VSCode task definition in tasks.json.
+ * Used for parsing and validating VSCode workspace task configurations.
+ */
 interface VSCodeTaskDefinition {
+  /** The display label for the task */
   label?: string;
 }
 
+/**
+ * Represents the structure of a VSCode tasks.json file.
+ * Used for reading and validating VSCode workspace task configurations.
+ */
 interface VSCodeTasksFile {
+  /** The version of the tasks file format */
   version?: string;
+  /** Array of task definitions */
   tasks?: VSCodeTaskDefinition[];
 }
 
+/**
+ * Type guard to check if a value is a valid VSCodeTaskDefinition.
+ * Validates that the task has the expected structure with optional label property.
+ * @param task - The value to check
+ * @returns True if the value is a valid VSCodeTaskDefinition
+ */
 function isVSCodeTaskDefinition(task: unknown): task is VSCodeTaskDefinition {
   if (typeof task !== 'object' || task === null) {
     return false;
@@ -25,6 +51,12 @@ function isVSCodeTaskDefinition(task: unknown): task is VSCodeTaskDefinition {
   return candidate.label === undefined || typeof candidate.label === 'string';
 }
 
+/**
+ * Type guard to check if a value is a valid VSCodeTasksFile.
+ * Validates that the file has the expected structure with optional version and tasks array.
+ * @param value - The value to check
+ * @returns True if the value is a valid VSCodeTasksFile
+ */
 function isVSCodeTasksFile(value: unknown): value is VSCodeTasksFile {
   if (typeof value !== 'object' || value === null) {
     return false;

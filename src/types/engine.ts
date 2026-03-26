@@ -1,4 +1,8 @@
-/** Version information for an Unreal Engine installation. */
+/**
+ * Version information for an Unreal Engine installation.
+ *
+ * @see {@link EngineInstallation} for the engine installation containing this version info
+ */
 export interface EngineVersionInfo {
   /** Major version number (e.g., 5 for UE 5.x) */
   MajorVersion: number;
@@ -21,6 +25,10 @@ export interface EngineVersionInfo {
 }
 
 /** Represents a detected Unreal Engine installation.
+ *
+ * @see {@link EngineVersionInfo} for detailed version information
+ * @see {@link EngineDetectionResult} for the detection result containing this installation
+ * @see {@link EngineAssociation} for engine association from .uproject files
  *
  * @example
  * ```typescript
@@ -49,6 +57,8 @@ export interface EngineInstallation {
 
 /** Engine association from a .uproject file.
  *
+ * @see {@link EngineDetectionResult} for the detection result containing this association
+ *
  * @example
  * ```typescript
  * const association: EngineAssociation = {
@@ -70,6 +80,10 @@ export interface EngineAssociation {
 }
 
 /** Result of an engine detection operation.
+ *
+ * @see {@link EngineInstallation} for the detected engine information
+ * @see {@link EngineAssociation} for the engine association from the project
+ * @see {@link EnginePathResolutionOptions} for options to configure path resolution
  *
  * @example
  * ```typescript
@@ -99,6 +113,8 @@ export interface EngineDetectionResult {
 }
 
 /** Options for resolving engine paths.
+ *
+ * @see {@link EngineDetectionResult} for the result of detection using these options
  *
  * @example
  * ```typescript

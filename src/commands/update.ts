@@ -1,3 +1,12 @@
+/**
+ * Update command for ubuild CLI
+ *
+ * Updates ubuild to the latest version from npm registry.
+ * Detects whether installed globally or locally and updates accordingly.
+ *
+ * @module commands/update
+ */
+
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { execa } from 'execa';
@@ -5,6 +14,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { Writable } from 'stream';
 import { Logger } from '../utils/logger';
+import { compareVersions } from '../utils/version';
 
 export interface UpdateCommandOptions {
   /** Writable stream for standard output (defaults to process.stdout) */
@@ -13,19 +23,23 @@ export interface UpdateCommandOptions {
   stderr?: Writable;
 }
 
-/** Minimal interface for reading version from package.json. */
-interface PackageJsonVersion {
-  /** Package version string (semver format) */
-  version: string;
-}
-
 /**
  * Reads the current version from package.json.
  * @returns Promise resolving to the current version string
+ * @throws Error if package.json cannot be read or version is missing
  */
 async function getCurrentVersion(): Promise<string> {
   const packageJsonPath = path.resolve(__dirname, '../../package.json');
-  const packageJson = (await fs.readJson(packageJsonPath)) as PackageJsonVersion;
+  const packageJson = await fs.readJson(packageJsonPath);
+
+  if (typeof packageJson !== 'object' || packageJson === null) {
+    throw new Error('Invalid package.json format');
+  }
+
+  if (!('version' in packageJson) || typeof packageJson.version !== 'string') {
+    throw new Error('Missing or invalid version in package.json');
+  }
+
   return packageJson.version;
 }
 
@@ -112,9 +126,9 @@ export async function executeUpdate(options: UpdateCommandOptions = {}): Promise
 
       logger.success(`Successfully updated to version ${chalk.bold(newVersion)}!`);
       logger.info('You may need to restart your terminal for changes to take effect.');
-    } catch (npmError) {
+    } catch (error) {
       logger.error(
-        `Failed to check npm: ${npmError instanceof Error ? npmError.message : String(npmError)}`
+        `Failed to check npm: ${error instanceof Error ? error.message : String(error)}`
       );
       logger.info('You can manually update using: npm install -g @zitool/ubuild');
       process.exit(1);
@@ -145,24 +159,4 @@ export function updateCommand(program: Command): void {
     .action(async () => {
       await executeUpdate();
     });
-}
-
-/**
- * Compares two semantic version strings.
- * @param a - First version string (e.g., "1.2.3")
- * @param b - Second version string (e.g., "1.2.4")
- * @returns Negative if a < b, positive if a > b, zero if equal
- */
-function compareVersions(a: string, b: string): number {
-  const partsA = a.split('.').map(Number);
-  const partsB = b.split('.').map(Number);
-
-  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-    const partA = partsA[i] || 0;
-    const partB = partsB[i] || 0;
-    if (partA !== partB) {
-      return partA - partB;
-    }
-  }
-  return 0;
 }

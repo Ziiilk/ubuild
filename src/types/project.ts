@@ -2,6 +2,9 @@
  *
  * This interface matches the JSON structure of Unreal Engine project files.
  *
+ * @see {@link ProjectInfo} for the detected project information derived from a UProject
+ * @see {@link ProjectDetectionResult} for the result of project detection operations
+ *
  * @example
  * ```typescript
  * const project: UProject = {
@@ -56,6 +59,9 @@ export interface UProject {
 
 /** Information about a detected Unreal Engine project.
  *
+ * @see {@link UProject} for the underlying project file structure
+ * @see {@link ProjectDetectionResult} for the result containing this information
+ *
  * @example
  * ```typescript
  * const info: ProjectInfo = {
@@ -101,6 +107,9 @@ export interface ProjectInfo {
 
 /** Options for project detection operations.
  *
+ * @see {@link ProjectDetectionResult} for the result type returned after detection
+ * @see {@link ProjectPathResolution} for path resolution information
+ *
  * @example
  * ```typescript
  * const options: ProjectDetectionOptions = {
@@ -117,6 +126,10 @@ export interface ProjectDetectionOptions {
 }
 
 /** Result of a project detection operation.
+ *
+ * @see {@link ProjectInfo} for the detected project information
+ * @see {@link ProjectDetectionOptions} for the options used to configure detection
+ * @see {@link ProjectPathResolution} for path resolution results
  *
  * @example
  * ```typescript
@@ -142,6 +155,9 @@ export interface ProjectDetectionResult {
  *
  * Contains information about how a project path was resolved from
  * the original input to the final absolute path.
+ *
+ * @see {@link ProjectDetectionResult} for the full detection result using this resolution
+ * @see {@link ProjectDetectionOptions} for the options used when detecting projects
  *
  * @example
  * ```typescript

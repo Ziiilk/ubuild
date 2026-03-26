@@ -1,12 +1,40 @@
+/**
+ * Gencodebase command for ubuild CLI
+ *
+ * Generates compile_commands.json for IDE integration with clangd-based
+ * language servers (VSCode, CLion, etc.) to enable code completion and navigation.
+ *
+ * @module commands/gencodebase
+ */
+
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { CompileCommandsGenerator } from '../core/compile-commands-generator';
 import type { CompileCommandsGenerateOptions } from '../core/compile-commands-generator';
 import { Logger } from '../utils/logger';
 
-/** Options for the gencodebase command. */
+/**
+ * Options for the gencodebase command.
+ *
+ * Extends the base compile commands generation options with CLI-specific
+ * settings for output formatting and user interaction.
+ *
+ * @example
+ * ```typescript
+ * const options: GencodebaseCommandOptions = {
+ *   target: 'Editor',
+ *   config: 'Development',
+ *   platform: 'Win64',
+ *   json: true
+ * };
+ * ```
+ */
 export type GencodebaseCommandOptions = CompileCommandsGenerateOptions & {
-  /** Output result as JSON */
+  /**
+   * Output result as JSON instead of formatted text.
+   * When true, suppresses all non-JSON logging output for programmatic consumption.
+   * @default false
+   */
   json?: boolean;
 };
 

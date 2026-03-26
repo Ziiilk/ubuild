@@ -1,3 +1,13 @@
+/**
+ * Init command for ubuild CLI
+ *
+ * Initializes new Unreal Engine projects with support for C++, Blueprint,
+ * and Blank project templates. Handles project structure creation and
+ * engine association setup.
+ *
+ * @module commands/init
+ */
+
 import { Command } from 'commander';
 import chalk from 'chalk';
 import path from 'path';

@@ -1,3 +1,13 @@
+/**
+ * Build executor module for ubuild
+ *
+ * Executes Unreal Engine project builds using UnrealBuildTool or Build.bat.
+ * Supports various build targets, configurations, and platforms with proper
+ * logging and error handling.
+ *
+ * @module core/build-executor
+ */
+
 import { execa } from 'execa';
 import path from 'path';
 import fs from 'fs-extra';
@@ -130,13 +140,23 @@ export class BuildExecutor {
 
     if (availableTargets.length > 0) {
       const result = await TargetResolver.resolveTarget(projectPath, target);
-      if (result) {
+      if (result && result !== target) {
+        // Target was resolved to a different name (generic -> specific)
         resolvedTarget = result;
         this.logger.debug(`Resolved target "${target}" to "${resolvedTarget}"`);
-      } else {
+      } else if (TargetResolver.isGenericTarget(target) && availableTargets.length > 0) {
+        // Generic target that couldn't be resolved and we have targets - error
         throw new Error(
           `No ${target} target found in project. Available targets: ${availableTargets.map((t) => t.name).join(', ')}`
         );
+      } else {
+        // Specific target name - check if it exists
+        const targetExists = availableTargets.some((t) => t.name === target);
+        if (!targetExists) {
+          throw new Error(
+            `No ${target} target found in project. Available targets: ${availableTargets.map((t) => t.name).join(', ')}`
+          );
+        }
       }
     } else {
       this.logger.debug('No target files found, using generic target name');

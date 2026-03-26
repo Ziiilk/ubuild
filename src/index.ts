@@ -24,6 +24,7 @@ import { updateCommand } from './commands/update';
 import { gencodebaseCommand } from './commands/gencodebase';
 import { evolveCommand } from './commands/evolve';
 import { cleanCommand } from './commands/clean';
+import { versionCommand } from './commands/version';
 
 // Command registration functions
 export {
@@ -47,6 +48,8 @@ export {
   evolveCommand,
   /** Register the 'clean' command for cleaning build artifacts */
   cleanCommand,
+  /** Register the 'version' command for displaying version information */
+  versionCommand,
 };
 
 // Development-only exports

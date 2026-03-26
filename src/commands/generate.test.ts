@@ -1,3 +1,4 @@
+import { Command } from 'commander';
 import { CapturedWritable } from '../test-utils/capture-stream';
 import { GenerateResult } from '../types/generate';
 
@@ -10,7 +11,7 @@ jest.mock('../core/project-generator', () => ({
 }));
 
 // Import after mocking
-import { executeGenerate } from './generate';
+import { executeGenerate, generateCommand } from './generate';
 
 describe('executeGenerate', () => {
   let stdout: CapturedWritable;
@@ -390,5 +391,68 @@ describe('executeGenerate', () => {
         expect(stdout.output).toContain(ide.toUpperCase());
       }
     });
+  });
+});
+
+describe('generateCommand', () => {
+  it('registers the generate command with correct options', () => {
+    const program = new Command();
+    const commandSpy = jest.spyOn(program, 'command');
+
+    generateCommand(program);
+
+    expect(commandSpy).toHaveBeenCalledWith('generate');
+  });
+
+  it('registers the gen alias', () => {
+    const program = new Command();
+    generateCommand(program);
+
+    const generateCmd = program.commands.find((cmd) => cmd.name() === 'generate');
+    expect(generateCmd).toBeDefined();
+    expect(generateCmd?.alias()).toBe('gen');
+  });
+
+  it('registers all required options', () => {
+    const program = new Command();
+    generateCommand(program);
+
+    const generateCmd = program.commands.find((cmd) => cmd.name() === 'generate');
+    expect(generateCmd).toBeDefined();
+
+    const options = generateCmd?.options || [];
+    const optionFlags = options.map((opt) => opt.flags);
+
+    expect(optionFlags).toContain('-i, --ide <ide>');
+    expect(optionFlags).toContain('--project <path>');
+    expect(optionFlags).toContain('--engine-path <path>');
+    expect(optionFlags).toContain('--force');
+    expect(optionFlags).toContain('--list-ides');
+  });
+
+  it('action handler passes options to executeGenerate', async () => {
+    mockGenerate.mockResolvedValue({
+      success: true,
+      generatedFiles: ['TestProject.sln'],
+    });
+
+    const program = new Command();
+    generateCommand(program);
+
+    const generateCmd = program.commands.find((cmd) => cmd.name() === 'generate');
+    expect(generateCmd).toBeDefined();
+
+    // Parse with test arguments
+    program.parse(['node', 'test', 'generate', '--ide', 'vscode', '--force']);
+
+    // Wait for async action
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(mockGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ide: 'vscode',
+        force: true,
+      })
+    );
   });
 });

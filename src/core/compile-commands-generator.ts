@@ -1,3 +1,12 @@
+/**
+ * Compile commands generator for IDE integration.
+ *
+ * Generates compile_commands.json files for clangd-based IDEs (VSCode, CLion, etc.)
+ * to enable code completion, navigation, and IntelliSense for Unreal Engine projects.
+ *
+ * @module core/compile-commands-generator
+ */
+
 import chalk from 'chalk';
 import path from 'path';
 import fs from 'fs-extra';
@@ -159,6 +168,13 @@ export class CompileCommandsGenerator {
     return actualCompileCommandsPath;
   }
 
+  /**
+   * Resolves a generic target name (e.g., 'Editor', 'Game') to a specific project target.
+   * Falls back to a default target if resolution fails.
+   * @param projectPath - Path to the .uproject file
+   * @param target - Generic target name to resolve
+   * @returns Promise resolving to the resolved target name or a default target
+   */
   private static async resolveTargetName(projectPath: string, target: string): Promise<string> {
     const resolved = await TargetResolver.resolveTargetName(projectPath, target);
     // If resolution fails (returns undefined), use a sensible default
@@ -168,6 +184,13 @@ export class CompileCommandsGenerator {
     return resolved;
   }
 
+  /**
+   * Updates VSCode settings to configure clangd and C/C++ extension for Unreal Engine development.
+   * Creates or merges settings.json in the .vscode directory to point to the compile commands database.
+   * @param projectDir - Path to the project directory
+   * @param silent - Whether to suppress output messages
+   * @returns Promise resolving when settings have been updated
+   */
   private static async updateVSCodeSettings(projectDir: string, silent = false): Promise<void> {
     const vscodeDir = path.join(projectDir, '.vscode');
     const settingsPath = path.join(vscodeDir, 'settings.json');
@@ -186,9 +209,9 @@ export class CompileCommandsGenerator {
       try {
         const content = await fs.readFile(settingsPath, 'utf-8');
         settings = JSON.parse(content);
-      } catch (parseError) {
+      } catch (error) {
         Logger.debug(
-          `Failed to parse existing settings.json, starting fresh: ${parseError instanceof Error ? parseError.message : String(parseError)}`
+          `Failed to parse existing settings.json, starting fresh: ${error instanceof Error ? error.message : String(error)}`
         );
         settings = {};
       }

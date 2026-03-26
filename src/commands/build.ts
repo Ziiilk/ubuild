@@ -1,7 +1,34 @@
+/**
+ * Build command for ubuild CLI
+ *
+ * Builds Unreal Engine projects with various targets,
+ * configurations, and platforms.
+ *
+ * @module commands/build
+ */
+
 import { Command } from 'commander';
 import { ProjectBuilder } from '../core/project-builder';
 
-export { ProjectBuilder, executeBuild } from '../core/project-builder';
+/**
+ * Project builder class for executing builds.
+ * Re-exported from {@link ../core/project-builder}.
+ * @see {@link ProjectBuilder} for implementation details
+ */
+export { ProjectBuilder } from '../core/project-builder';
+
+/**
+ * Execute a build operation.
+ * Re-exported from {@link ../core/project-builder}.
+ * @see {@link executeBuild} for implementation details
+ */
+export { executeBuild } from '../core/project-builder';
+
+/**
+ * Options for the build command.
+ * Re-exported from {@link ../core/project-builder}.
+ * @see {@link BuildCommandOptions} for details
+ */
 export type { BuildCommandOptions } from '../core/project-builder';
 
 /**

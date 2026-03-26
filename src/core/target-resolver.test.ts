@@ -274,4 +274,116 @@ describe('TargetResolver', () => {
       expect(targets).toContain('Server');
     });
   });
+
+  describe('error handling', () => {
+    it('handles errors from getAvailableTargets gracefully', async () => {
+      mockGetAvailableTargets.mockRejectedValue(new Error('Permission denied'));
+
+      await expect(TargetResolver.resolveTargetName('/project', 'Editor')).rejects.toThrow(
+        'Permission denied'
+      );
+    });
+
+    it('handles non-Error exceptions from getAvailableTargets', async () => {
+      mockGetAvailableTargets.mockRejectedValue('String error');
+
+      await expect(TargetResolver.resolveTargetName('/project', 'Editor')).rejects.toBe(
+        'String error'
+      );
+    });
+
+    it('handles null/undefined exceptions from getAvailableTargets', async () => {
+      mockGetAvailableTargets.mockRejectedValue(null);
+
+      await expect(TargetResolver.resolveTargetName('/project', 'Editor')).rejects.toBe(null);
+    });
+  });
+
+  describe('edge cases with special characters', () => {
+    it('handles target names with hyphens', async () => {
+      const availableTargets: ResolvedTarget[] = [
+        { name: 'My-Game-Editor', type: 'Editor' },
+        { name: 'My-Game', type: 'Game' },
+      ];
+      mockGetAvailableTargets.mockResolvedValue(availableTargets);
+
+      const result = await TargetResolver.resolveTargetName('/project', 'Editor');
+
+      expect(result).toBe('My-Game-Editor');
+    });
+
+    it('handles target names with underscores', async () => {
+      const availableTargets: ResolvedTarget[] = [
+        { name: 'My_Game_Editor', type: 'Editor' },
+        { name: 'My_Game', type: 'Game' },
+      ];
+      mockGetAvailableTargets.mockResolvedValue(availableTargets);
+
+      const result = await TargetResolver.resolveTargetName('/project', 'Editor');
+
+      expect(result).toBe('My_Game_Editor');
+    });
+
+    it('handles target names with numbers', async () => {
+      const availableTargets: ResolvedTarget[] = [
+        { name: 'MyGame2Editor', type: 'Editor' },
+        { name: 'MyGame2', type: 'Game' },
+      ];
+      mockGetAvailableTargets.mockResolvedValue(availableTargets);
+
+      const result = await TargetResolver.resolveTargetName('/project', 'Editor');
+
+      expect(result).toBe('MyGame2Editor');
+    });
+  });
+
+  describe('resolveTarget edge cases', () => {
+    it('returns original target when getAvailableTargets throws', async () => {
+      mockGetAvailableTargets.mockRejectedValue(new Error('Network error'));
+
+      // resolveTarget should throw when getAvailableTargets fails
+      await expect(TargetResolver.resolveTarget('/project', 'Editor')).rejects.toThrow(
+        'Network error'
+      );
+    });
+
+    it('returns original target when project path is empty', async () => {
+      mockGetAvailableTargets.mockResolvedValue([]);
+
+      const result = await TargetResolver.resolveTarget('', 'Editor');
+
+      expect(result).toBe('Editor');
+    });
+  });
+
+  describe('multiple targets with mixed results', () => {
+    it('resolves some targets and filters unresolved ones', async () => {
+      const availableTargets: ResolvedTarget[] = [
+        { name: 'MyGame', type: 'Game' },
+        { name: 'MyGameEditor', type: 'Editor' },
+      ];
+      mockGetAvailableTargets.mockResolvedValue(availableTargets);
+
+      // Editor and Game resolve, but Client and Server don't
+      const result = await TargetResolver.resolveTargetName(
+        '/project',
+        'Editor Client Game Server'
+      );
+
+      expect(result).toBe('MyGameEditor MyGame');
+    });
+
+    it('handles duplicate target requests', async () => {
+      const availableTargets: ResolvedTarget[] = [
+        { name: 'MyGame', type: 'Game' },
+        { name: 'MyGameEditor', type: 'Editor' },
+      ];
+      mockGetAvailableTargets.mockResolvedValue(availableTargets);
+
+      const result = await TargetResolver.resolveTargetName('/project', 'Editor Editor Game Game');
+
+      // Duplicates are preserved as they appear in the input
+      expect(result).toBe('MyGameEditor MyGameEditor MyGame MyGame');
+    });
+  });
 });

@@ -481,4 +481,24 @@ describe('buildCommand', () => {
     expect(mockExit).toHaveBeenCalledWith(1);
     mockExit.mockRestore();
   });
+
+  it('handles non-Error exceptions in command action', async () => {
+    const program = new Command();
+    buildCommand(program);
+
+    // Mock build to throw a non-Error value (string)
+    mockBuildExecute.mockRejectedValue('String error message');
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    const buildCmd = program.commands.find((cmd) => cmd.name() === 'build');
+    await expect(
+      buildCmd?.parseAsync(['--target', 'Editor', '--config', 'Development', '--platform', 'Win64'])
+    ).rejects.toThrow('process.exit called');
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
 });

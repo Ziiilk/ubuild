@@ -1,3 +1,12 @@
+/**
+ * List command for ubuild CLI
+ *
+ * Detects and displays information about Unreal Engine projects
+ * in the current directory or specified path.
+ *
+ * @module commands/list
+ */
+
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { Writable } from 'stream';
