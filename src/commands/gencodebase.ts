@@ -12,6 +12,7 @@ import chalk from 'chalk';
 import { CompileCommandsGenerator } from '../core/compile-commands-generator';
 import type { CompileCommandsGenerateOptions } from '../core/compile-commands-generator';
 import { Logger } from '../utils/logger';
+import { formatError } from '../utils/error';
 
 /**
  * Options for the gencodebase command.
@@ -95,9 +96,7 @@ export function gencodebaseCommand(program: Command): void {
         Logger.success(`Compile commands generated: ${chalk.bold(compileCommandsPath)}`);
         Logger.success('VSCode settings updated: .vscode/settings.json');
       } catch (error) {
-        Logger.error(
-          `Failed to generate compile commands: ${error instanceof Error ? error.message : String(error)}`
-        );
+        Logger.error(`Failed to generate compile commands: ${formatError(error)}`);
         process.exit(1);
       }
     });

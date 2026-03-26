@@ -9,6 +9,7 @@
 
 import { Command } from 'commander';
 import { ProjectBuilder } from '../core/project-builder';
+import { formatError } from '../utils/error';
 
 /**
  * Project builder class for executing builds.
@@ -61,9 +62,7 @@ export function buildCommand(program: Command): void {
       try {
         await builder.build(options);
       } catch (error) {
-        builder
-          .getLogger()
-          .error(`Build failed: ${error instanceof Error ? error.message : String(error)}`);
+        builder.getLogger().error(`Build failed: ${formatError(error)}`);
         process.exit(1);
       }
     });

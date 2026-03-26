@@ -9,6 +9,7 @@
 
 import { Command } from 'commander';
 import { ProjectRunner } from '../core/project-runner';
+import { formatError } from '../utils/error';
 
 /**
  * Project runner class for executing projects.
@@ -62,9 +63,7 @@ export function runCommand(program: Command): void {
       try {
         await runner.run(options);
       } catch (error) {
-        runner
-          .getLogger()
-          .error(`Run failed: ${error instanceof Error ? error.message : String(error)}`);
+        runner.getLogger().error(`Run failed: ${formatError(error)}`);
         process.exit(1);
       }
     });

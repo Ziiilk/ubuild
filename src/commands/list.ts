@@ -12,6 +12,7 @@ import chalk from 'chalk';
 import { Writable } from 'stream';
 import { ProjectDetector } from '../core/project-detector';
 import { Logger } from '../utils/logger';
+import { formatError } from '../utils/error';
 
 /** Options for the list command. */
 export interface ListCommandOptions {
@@ -112,7 +113,7 @@ export async function executeList(options: ListCommandOptions): Promise<void> {
     logger.write('\n');
     logger.success('Project detection complete');
   } catch (error) {
-    logger.error(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+    logger.error(`Unexpected error: ${formatError(error)}`);
     process.exit(1);
   }
 }

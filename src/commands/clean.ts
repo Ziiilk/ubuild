@@ -12,6 +12,7 @@ import { Writable } from 'stream';
 import { CleanOptions, CleanResult } from '../types/clean';
 import { CleanExecutor } from '../core/clean-executor';
 import { Logger } from '../utils/logger';
+import { formatError } from '../utils/error';
 
 /** Options for the clean command. */
 export interface CleanCommandOptions {
@@ -99,7 +100,7 @@ export function cleanCommand(program: Command): void {
           logger.info('No build artifacts found to clean');
         }
       } catch (error) {
-        logger.error(`Clean failed: ${error instanceof Error ? error.message : String(error)}`);
+        logger.error(`Clean failed: ${formatError(error)}`);
         process.exit(1);
       }
     });

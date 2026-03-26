@@ -13,6 +13,7 @@ import { Writable } from 'stream';
 import { ProjectGenerator } from '../core/project-generator';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
+import { formatError } from '../utils/error';
 
 /** Options for the generate command. */
 export interface GenerateCommandOptions {
@@ -95,7 +96,7 @@ export async function executeGenerate(options: GenerateCommandOptions): Promise<
       process.exit(1);
     }
   } catch (error) {
-    logger.error(`Generation failed: ${error instanceof Error ? error.message : String(error)}`);
+    logger.error(`Generation failed: ${formatError(error)}`);
     process.exit(1);
   }
 }
