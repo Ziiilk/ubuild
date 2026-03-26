@@ -34,6 +34,16 @@ export function evolveCommand(program: Command): void {
       parseInt
     )
     .option('--use-ts-node', 'Use ts-node for verification instead of compiled dist')
+    .option(
+      '--verify-timeout <ms>',
+      'Timeout for verification checks in milliseconds (default: 60000)',
+      parseInt
+    )
+    .option(
+      '--opencode-timeout <ms>',
+      'Timeout for OpenCode execution in milliseconds (default: 600000)',
+      parseInt
+    )
     .action(async (options) => {
       Logger.title('ubuild Self-Evolution');
       Logger.info('Using OpenCode (default model)');
@@ -59,6 +69,8 @@ export function evolveCommand(program: Command): void {
           dryRun: options.dryRun,
           sleepMs: options.sleep,
           useTsNode: options.useTsNode,
+          verifyTimeoutMs: options.verifyTimeout,
+          opencodeTimeoutMs: options.opencodeTimeout,
         });
       } catch (error) {
         Logger.error(`Error: ${formatError(error)}`);

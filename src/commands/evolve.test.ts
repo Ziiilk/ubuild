@@ -85,6 +85,9 @@ describe('evolveCommand', () => {
         once: undefined,
         dryRun: undefined,
         sleepMs: undefined,
+        useTsNode: undefined,
+        verifyTimeoutMs: undefined,
+        opencodeTimeoutMs: undefined,
       });
     });
 
@@ -123,6 +126,9 @@ describe('evolveCommand', () => {
           once: true,
           dryRun: undefined,
           sleepMs: undefined,
+          useTsNode: undefined,
+          verifyTimeoutMs: undefined,
+          opencodeTimeoutMs: undefined,
         });
       });
     });
@@ -150,6 +156,10 @@ describe('evolveCommand', () => {
           logger: expect.any(Function),
           once: undefined,
           dryRun: true,
+          sleepMs: undefined,
+          useTsNode: undefined,
+          verifyTimeoutMs: undefined,
+          opencodeTimeoutMs: undefined,
         });
       });
 
@@ -165,6 +175,9 @@ describe('evolveCommand', () => {
           once: true,
           dryRun: true,
           sleepMs: undefined,
+          useTsNode: undefined,
+          verifyTimeoutMs: undefined,
+          opencodeTimeoutMs: undefined,
         });
       });
     });
@@ -193,6 +206,9 @@ describe('evolveCommand', () => {
           once: undefined,
           dryRun: undefined,
           sleepMs: 10000,
+          useTsNode: undefined,
+          verifyTimeoutMs: undefined,
+          opencodeTimeoutMs: undefined,
         });
       });
 
@@ -208,6 +224,9 @@ describe('evolveCommand', () => {
           once: true,
           dryRun: undefined,
           sleepMs: 5000,
+          useTsNode: undefined,
+          verifyTimeoutMs: undefined,
+          opencodeTimeoutMs: undefined,
         });
       });
     });
@@ -237,6 +256,8 @@ describe('evolveCommand', () => {
           dryRun: undefined,
           sleepMs: undefined,
           useTsNode: true,
+          verifyTimeoutMs: undefined,
+          opencodeTimeoutMs: undefined,
         });
       });
 
@@ -260,6 +281,99 @@ describe('evolveCommand', () => {
           dryRun: true,
           sleepMs: undefined,
           useTsNode: true,
+          verifyTimeoutMs: undefined,
+          opencodeTimeoutMs: undefined,
+        });
+      });
+    });
+
+    describe('--verify-timeout option', () => {
+      it('registers the --verify-timeout option', () => {
+        evolveCommand(program);
+
+        const commands = program.commands;
+        const evolveCmd = commands.find((cmd) => cmd.name() === 'evolve');
+
+        expect(evolveCmd).toBeDefined();
+        const verifyTimeoutOption = evolveCmd?.options.find(
+          (opt) => opt.long === '--verify-timeout'
+        );
+        expect(verifyTimeoutOption).toBeDefined();
+      });
+
+      it('passes verifyTimeoutMs to runSelfEvolution when --verify-timeout is used', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync(['node', 'test', 'evolve', '--verify-timeout', '120000']);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: undefined,
+          dryRun: undefined,
+          sleepMs: undefined,
+          useTsNode: undefined,
+          verifyTimeoutMs: 120000,
+        });
+      });
+    });
+
+    describe('--opencode-timeout option', () => {
+      it('registers the --opencode-timeout option', () => {
+        evolveCommand(program);
+
+        const commands = program.commands;
+        const evolveCmd = commands.find((cmd) => cmd.name() === 'evolve');
+
+        expect(evolveCmd).toBeDefined();
+        const opencodeTimeoutOption = evolveCmd?.options.find(
+          (opt) => opt.long === '--opencode-timeout'
+        );
+        expect(opencodeTimeoutOption).toBeDefined();
+      });
+
+      it('passes opencodeTimeoutMs to runSelfEvolution when --opencode-timeout is used', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync(['node', 'test', 'evolve', '--opencode-timeout', '900000']);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: undefined,
+          dryRun: undefined,
+          sleepMs: undefined,
+          useTsNode: undefined,
+          verifyTimeoutMs: undefined,
+          opencodeTimeoutMs: 900000,
+        });
+      });
+
+      it('can combine both timeout options', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync([
+          'node',
+          'test',
+          'evolve',
+          '--verify-timeout',
+          '120000',
+          '--opencode-timeout',
+          '900000',
+        ]);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: undefined,
+          dryRun: undefined,
+          sleepMs: undefined,
+          useTsNode: undefined,
+          verifyTimeoutMs: 120000,
+          opencodeTimeoutMs: 900000,
         });
       });
     });
