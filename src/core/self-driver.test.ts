@@ -549,7 +549,7 @@ describe('SelfDriver', () => {
       expect(mockLogger).toHaveBeenCalledWith('🔍 Dry run mode - showing what would be done');
       expect(mockLogger).toHaveBeenCalledWith(`📁 Project: ${mockProjectRoot}`);
       expect(mockLogger).toHaveBeenCalledWith('\n📝 Would perform the following actions:');
-      expect(mockLogger).toHaveBeenCalledWith('✨ Dry run complete - no changes made');
+      expect(mockLogger).toHaveBeenCalledWith('\n✨ Dry run complete - no changes made');
     });
 
     it('shows single iteration mode in dry run with --once', async () => {
@@ -564,7 +564,7 @@ describe('SelfDriver', () => {
       const run = (driver as unknown as { run: () => Promise<void> }).run;
       await run.call(driver);
 
-      expect(mockLogger).toHaveBeenCalledWith('  Mode: Single iteration (--once)');
+      expect(mockLogger).toHaveBeenCalledWith('\n  Mode: Single iteration (--once)');
     });
 
     it('shows continuous mode in dry run without --once', async () => {
@@ -579,7 +579,7 @@ describe('SelfDriver', () => {
       const run = (driver as unknown as { run: () => Promise<void> }).run;
       await run.call(driver);
 
-      expect(mockLogger).toHaveBeenCalledWith('  Mode: Continuous (runs until Ctrl+C)');
+      expect(mockLogger).toHaveBeenCalledWith('\n  Mode: Continuous (runs until Ctrl+C)');
       expect(mockLogger).toHaveBeenCalledWith('  Would loop every 5 seconds');
     });
   });
