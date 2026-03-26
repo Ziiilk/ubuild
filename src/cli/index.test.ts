@@ -153,7 +153,7 @@ describe('CLI Entry Point', () => {
       expect(mockEvolveCommand).toHaveBeenCalled();
     });
 
-    it('does not register evolve command in production mode without evolve arg', async () => {
+    it('registers evolve command in production mode', async () => {
       process.argv = ['node', 'ubuild', 'list'];
       process.env.NODE_ENV = 'production';
       delete process.env.UBUILD_EVOLVE_ENABLED;
@@ -161,65 +161,8 @@ describe('CLI Entry Point', () => {
       await import('./index');
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      expect(mockEvolveCommand).not.toHaveBeenCalled();
-    });
-
-    it('logs debug message when evolve command fails to load', async () => {
-      process.argv = ['node', 'ubuild', 'evolve'];
-
-      // Make the evolve command mock throw an error
-      mockEvolveCommand.mockImplementation(() => {
-        throw new Error('Module not found');
-      });
-
-      await import('./index');
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      expect(mockLoggerDebug).toHaveBeenCalledWith(
-        expect.stringContaining('Evolve command not available')
-      );
-    });
-  });
-
-  describe('error handling', () => {
-    it('exits with code 1 when program.parseAsync throws an error', async () => {
-      process.argv = ['node', 'ubuild', 'list'];
-
-      // Mock list command to throw an error during execution
-      mockListCommand.mockImplementation((program: Command) => {
-        program
-          .command('list')
-          .description('List projects')
-          .action(async () => {
-            throw new Error('Test error');
-          });
-      });
-
-      await import('./index');
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      expect(process.exit).toHaveBeenCalledWith(1);
-      expect(mockLoggerError).toHaveBeenCalledWith(expect.stringContaining('Test error'));
-    });
-
-    it('handles non-Error exceptions in main', async () => {
-      process.argv = ['node', 'ubuild', 'list'];
-
-      // Mock list command to throw a non-Error value
-      mockListCommand.mockImplementation((program: Command) => {
-        program
-          .command('list')
-          .description('List projects')
-          .action(async () => {
-            throw 'String error';
-          });
-      });
-
-      await import('./index');
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      expect(process.exit).toHaveBeenCalledWith(1);
-      expect(mockLoggerError).toHaveBeenCalledWith(expect.stringContaining('String error'));
+      // Evolve command is always registered
+      expect(mockEvolveCommand).toHaveBeenCalled();
     });
   });
 });

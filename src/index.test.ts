@@ -231,12 +231,12 @@ describe('Public API exports', () => {
   });
 
   describe('runSelfEvolution function', () => {
-    it('can be called with options', async () => {
+    it('can be called with custom logger option', async () => {
       mockRunSelfEvolution.mockResolvedValue(undefined);
 
+      const customLogger = jest.fn();
       const options = {
-        interval: 5000,
-        model: 'gpt-4',
+        logger: customLogger,
       };
 
       await runSelfEvolution(options);
@@ -256,19 +256,6 @@ describe('Public API exports', () => {
       mockRunSelfEvolution.mockRejectedValue(error);
 
       await expect(runSelfEvolution()).rejects.toThrow('Evolution failed');
-    });
-
-    it('can be called with API key option', async () => {
-      mockRunSelfEvolution.mockResolvedValue(undefined);
-
-      const options = {
-        interval: 10000,
-        apiKey: 'test-api-key',
-        model: 'claude-3',
-      };
-
-      await runSelfEvolution(options);
-      expect(mockRunSelfEvolution).toHaveBeenCalledWith(options);
     });
 
     it('handles empty options object', async () => {
