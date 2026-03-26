@@ -446,6 +446,20 @@ describe('SelfDriver', () => {
 
       expect(result).toBe('');
     });
+
+    it('returns empty string when reading EVOLVE.md throws an error', async () => {
+      mockPathExists.mockResolvedValue(true);
+      mockReadFile.mockRejectedValue(new Error('Permission denied'));
+
+      const readConstitution = (
+        driver as unknown as {
+          readConstitution: () => Promise<string>;
+        }
+      ).readConstitution;
+      const result = await readConstitution.call(driver);
+
+      expect(result).toBe('');
+    });
   });
 
   describe('getFileTree', () => {
@@ -467,6 +481,24 @@ describe('SelfDriver', () => {
 
       expect(result).toContain('self-driver.ts');
       expect(result).toContain('evolve.ts');
+    });
+
+    it('returns default message when git ls-files returns non-zero exit code', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(128, '', 'fatal: not a git repository');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const getFileTree = (
+        driver as unknown as {
+          getFileTree: () => Promise<string>;
+        }
+      ).getFileTree;
+      const result = await getFileTree.call(driver);
+
+      expect(result).toBe('src/ directory');
     });
 
     it('returns default message when git fails', async () => {
