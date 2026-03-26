@@ -109,11 +109,17 @@ describe('BuildExecutor', () => {
       });
       expect(mockExeca).toHaveBeenCalledTimes(1);
       expect(mockExeca).toHaveBeenCalledWith(
-        `"${engine.buildBatPath}" FactoryGameEditor Win64 Development -project="${project.uprojectPath}" -NoMutex`,
+        engine.buildBatPath,
+        [
+          'FactoryGameEditor',
+          'Win64',
+          'Development',
+          `-project="${project.uprojectPath}"`,
+          '-NoMutex',
+        ],
         {
           stdio: 'pipe',
           cwd: path.dirname(engine.buildBatPath),
-          shell: true,
         }
       );
     });
@@ -151,11 +157,20 @@ describe('BuildExecutor', () => {
       });
       expect(mockExeca).toHaveBeenCalledTimes(1);
       expect(mockExeca).toHaveBeenCalledWith(
-        `"${engine.unrealBuildToolPath}" FallbackGame Win64 Shipping -project="${project.uprojectPath}" -NoMutex -clean -verbose -FromTest`,
+        engine.unrealBuildToolPath,
+        [
+          'FallbackGame',
+          'Win64',
+          'Shipping',
+          `-project="${project.uprojectPath}"`,
+          '-NoMutex',
+          '-clean',
+          '-verbose',
+          '-FromTest',
+        ],
         {
           stdio: 'pipe',
           cwd: path.dirname(engine.unrealBuildToolPath),
-          shell: true,
         }
       );
     });
@@ -250,7 +265,8 @@ describe('BuildExecutor', () => {
           stdout: 'Build succeeded with Server target',
         });
         expect(mockExeca).toHaveBeenCalledWith(
-          expect.stringContaining('Server'),
+          expect.any(String),
+          expect.arrayContaining(['Server']),
           expect.any(Object)
         );
       });
@@ -386,11 +402,13 @@ describe('BuildExecutor', () => {
           stdout: 'Build with flags',
         });
         expect(mockExeca).toHaveBeenCalledWith(
-          expect.stringContaining('-clean'),
+          expect.any(String),
+          expect.arrayContaining(['-clean']),
           expect.any(Object)
         );
         expect(mockExeca).toHaveBeenCalledWith(
-          expect.stringContaining('-verbose'),
+          expect.any(String),
+          expect.arrayContaining(['-verbose']),
           expect.any(Object)
         );
       });

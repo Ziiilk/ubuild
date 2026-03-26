@@ -215,13 +215,11 @@ export class BuildExecutor {
     executablePath: string,
     args: string[]
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    const command = `"${executablePath}" ${args.join(' ')}`;
-    this.logger.debug(`Executing: ${command}`);
+    this.logger.debug(`Executing: ${executablePath} ${args.join(' ')}`);
 
-    const childProcess = execa(command, {
+    const childProcess = execa(executablePath, args, {
       stdio: 'pipe',
       cwd: path.dirname(executablePath),
-      shell: true,
     });
 
     let stdout = '';
