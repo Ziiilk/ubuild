@@ -963,3 +963,21 @@ describe('runSelfEvolution', () => {
     expect(() => runSelfEvolution({ logger: mockLogger, once: true, dryRun: true })).not.toThrow();
   });
 });
+
+describe('sleep behavior after cleanup', () => {
+  it('resolves immediately when sleep is called after cleanup', async () => {
+    const d = new SelfDriver({ once: true });
+
+    // Cleanup first
+    d.cleanup();
+
+    // Access and call sleep after cleanup - should resolve immediately
+    const sleep = (d as unknown as { sleep: (ms: number) => Promise<void> }).sleep;
+    const startTime = Date.now();
+    await sleep.call(d, 1000); // Request 1 second sleep
+    const elapsed = Date.now() - startTime;
+
+    // Should resolve almost immediately (less than 100ms)
+    expect(elapsed).toBeLessThan(100);
+  });
+});
