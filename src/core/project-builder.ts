@@ -9,7 +9,6 @@
 
 import chalk from 'chalk';
 import { Writable } from 'stream';
-import type { BuildConfiguration, BuildPlatform } from '../types/build';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
 import { formatError } from '../utils/error';
@@ -97,32 +96,36 @@ export class ProjectBuilder {
       return;
     }
 
-    if (!Validator.isValidBuildTarget(this.getTarget(options))) {
+    // Validate and capture typed values
+    const target = options.target || 'Editor';
+    if (!Validator.isValidBuildTarget(target)) {
       this.logger.error(`Invalid build target: ${options.target}`);
       this.logger.info('Valid generic targets: Editor, Game, Client, Server');
       this.logger.info('Use --list-targets to see available project-specific targets');
       throw new Error('Invalid target');
     }
 
-    if (!Validator.isValidBuildConfig(this.getConfigValue(options))) {
+    const config = options.config || 'Development';
+    if (!Validator.isValidBuildConfig(config)) {
       this.logger.error(`Invalid build configuration: ${options.config}`);
       this.logger.info('Valid configurations: Debug, DebugGame, Development, Shipping, Test');
       throw new Error('Invalid config');
     }
 
-    if (!Validator.isValidBuildPlatform(this.getPlatformValue(options))) {
+    const platform = options.platform || 'Win64';
+    if (!Validator.isValidBuildPlatform(platform)) {
       this.logger.error(`Invalid build platform: ${options.platform}`);
       this.logger.info('Valid platforms: Win64, Win32, Linux, Mac, Android, IOS');
       throw new Error('Invalid platform');
     }
 
     if (options.dryRun) {
-      await this.dryRunBuild(options);
+      await this.dryRunBuild({ ...options, target, config, platform });
       return;
     }
 
     this.logger.info(
-      `Preparing to build: ${chalk.bold(this.getTarget(options))} | ${chalk.bold(this.getPlatformValue(options))} | ${chalk.bold(this.getConfigValue(options))}`
+      `Preparing to build: ${chalk.bold(target)} | ${chalk.bold(platform)} | ${chalk.bold(config)}`
     );
     this.logger.divider();
 
@@ -134,9 +137,9 @@ export class ProjectBuilder {
     });
 
     const result = await buildExecutor.execute({
-      target: this.getTarget(options),
-      config: this.getConfig(options),
-      platform: this.getPlatform(options),
+      target,
+      config,
+      platform,
       projectPath: options.project,
       enginePath: options.enginePath,
       clean: options.clean,
@@ -183,26 +186,6 @@ export class ProjectBuilder {
     }
 
     throw new Error(`Build failed with exit code ${result.exitCode}`);
-  }
-
-  private getTarget(options: BuildCommandOptions): string {
-    return options.target || 'Editor';
-  }
-
-  private getConfigValue(options: BuildCommandOptions): string {
-    return options.config || 'Development';
-  }
-
-  private getPlatformValue(options: BuildCommandOptions): string {
-    return options.platform || 'Win64';
-  }
-
-  private getConfig(options: BuildCommandOptions): BuildConfiguration {
-    return this.getConfigValue(options) as BuildConfiguration;
-  }
-
-  private getPlatform(options: BuildCommandOptions): BuildPlatform {
-    return this.getPlatformValue(options) as BuildPlatform;
   }
 
   private async listAvailableTargets(projectPath?: string): Promise<void> {

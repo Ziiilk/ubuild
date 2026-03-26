@@ -12,7 +12,6 @@ import path from 'path';
 import fs from 'fs-extra';
 import { execa } from 'execa';
 import { Writable } from 'stream';
-import type { BuildConfiguration, BuildPlatform } from '../types/build';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
 import { formatError } from '../utils/error';
@@ -97,50 +96,42 @@ export class ProjectRunner {
   async run(options: RunOptions): Promise<void> {
     this.logger.title('Run Unreal Engine Project');
 
-    if (!Validator.isValidBuildTarget(this.getTarget(options))) {
+    // Validate and capture typed values
+    const target = options.target || 'Editor';
+    if (!Validator.isValidBuildTarget(target)) {
       this.logger.error(`Invalid run target: ${options.target}`);
       this.logger.info('Valid targets: Editor, Game, Client, Server');
       throw new Error('Invalid target');
     }
 
-    if (!Validator.isValidBuildConfig(this.getConfigValue(options))) {
+    const config = options.config || 'Development';
+    if (!Validator.isValidBuildConfig(config)) {
       this.logger.error(`Invalid build configuration: ${options.config}`);
       this.logger.info('Valid configurations: Debug, DebugGame, Development, Shipping, Test');
       throw new Error('Invalid config');
     }
 
-    if (!Validator.isValidBuildPlatform(this.getPlatformValue(options))) {
+    const platform = options.platform || 'Win64';
+    if (!Validator.isValidBuildPlatform(platform)) {
       this.logger.error(`Invalid platform: ${options.platform}`);
       this.logger.info('Valid platforms: Win64, Win32, Linux, Mac, Android, IOS');
       throw new Error('Invalid platform');
     }
 
+    // Create validated options with proper types
+    const validatedOptions: RunOptions = {
+      ...options,
+      target,
+      config,
+      platform,
+    };
+
     if (options.dryRun) {
-      await this.dryRun(options);
+      await this.dryRun(validatedOptions);
       return;
     }
 
-    await this.runProject(options);
-  }
-
-  private getTarget(options: RunOptions): string {
-    return options.target || 'Editor';
-  }
-
-  private getConfigValue(options: RunOptions): string {
-    return options.config || 'Development';
-  }
-
-  private getPlatformValue(options: RunOptions): string {
-    return options.platform || 'Win64';
-  }
-
-  private getConfig(options: RunOptions): BuildConfiguration {
-    return this.getConfigValue(options) as BuildConfiguration;
-  }
-
-  private getPlatform(options: RunOptions): BuildPlatform {
-    return this.getPlatformValue(options) as BuildPlatform;
+    await this.runProject(validatedOptions);
   }
 
   private async dryRun(options: RunOptions): Promise<void> {
@@ -216,9 +207,9 @@ export class ProjectRunner {
         stderr: this.stderr,
       });
       const buildResult = await buildExecutor.execute({
-        target: this.getTarget(options),
-        config: this.getConfig(options),
-        platform: this.getPlatform(options),
+        target: options.target || 'Editor',
+        config: options.config || 'Development',
+        platform: options.platform || 'Win64',
         projectPath,
         enginePath,
         verbose: false,
@@ -251,7 +242,7 @@ export class ProjectRunner {
 
     const args = options.args ? [...options.args] : [];
 
-    if (this.getTarget(options).toLowerCase().includes('editor')) {
+    if ((options.target || 'Editor').toLowerCase().includes('editor')) {
       args.unshift(projectPath);
     }
 
@@ -305,7 +296,7 @@ export class ProjectRunner {
         return null;
       }
 
-      let targetName = this.getTarget(options);
+      let targetName = options.target || 'Editor';
       const resolvedTarget = await TargetResolver.resolveTarget(projectPath, targetName);
       targetName = resolvedTarget;
 
@@ -322,7 +313,7 @@ export class ProjectRunner {
           return null;
         }
 
-        const platform = this.getPlatform(options);
+        const platform = options.platform || 'Win64';
         const editorExePath = path.join(
           enginePath,
           'Engine',
@@ -351,8 +342,8 @@ export class ProjectRunner {
       }
 
       const executableName = `${projectName}.exe`;
-      const platform = this.getPlatform(options);
-      const config = this.getConfig(options);
+      const platform = options.platform || 'Win64';
+      const config = options.config || 'Development';
 
       const possiblePaths = [
         path.join(projectDir, 'Binaries', platform, executableName),
