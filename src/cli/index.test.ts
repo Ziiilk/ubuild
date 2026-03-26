@@ -143,7 +143,7 @@ describe('CLI Entry Point', () => {
       expect(mockEvolveCommand).toHaveBeenCalled();
     });
 
-    it('registers evolve command when UBILD_EVOLVE_ENABLED is true', async () => {
+    it('registers evolve command when UBUILD_EVOLVE_ENABLED is true', async () => {
       process.argv = ['node', 'ubuild', 'list'];
       process.env.UBUILD_EVOLVE_ENABLED = 'true';
 
