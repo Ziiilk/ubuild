@@ -191,8 +191,15 @@ export class SelfDriver {
         cwd: this.projectRoot,
         reject: false,
       });
+
+      if (result.exitCode !== 0) {
+        this.log(`⚠️  Failed to get file tree: ${result.stderr || 'git ls-files failed'}`);
+        return 'src/ directory';
+      }
+
       return result.stdout || 'src/ directory';
-    } catch {
+    } catch (error) {
+      this.log(`⚠️  Error getting file tree: ${formatError(error)}`);
       return 'src/ directory';
     }
   }
