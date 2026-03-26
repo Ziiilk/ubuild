@@ -10,6 +10,7 @@
 
 import { execa } from 'execa';
 import { Logger } from '../utils/logger';
+import { formatError } from '../utils/error';
 
 /** Options for configuring the self-evolution driver. */
 export interface SelfEvolverOptions {
@@ -265,9 +266,7 @@ export class SelfDriver {
         }
       }
     } catch (error) {
-      diagnosis.testFailures.push(
-        `Test execution failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+      diagnosis.testFailures.push(`Test execution failed: ${formatError(error)}`);
     }
 
     // Run lint
@@ -290,9 +289,7 @@ export class SelfDriver {
         }
       }
     } catch (error) {
-      diagnosis.lintErrors.push(
-        `Lint execution failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+      diagnosis.lintErrors.push(`Lint execution failed: ${formatError(error)}`);
     }
 
     return diagnosis;
@@ -343,9 +340,7 @@ export class SelfDriver {
         });
       }
     } catch (error) {
-      this.log(
-        `Debug: Build check failed - ${error instanceof Error ? error.message : String(error)}`
-      );
+      this.log(`Debug: Build check failed - ${formatError(error)}`);
       suggestions.push({
         priority: 'critical',
         category: 'fix',
@@ -373,9 +368,7 @@ export class SelfDriver {
         });
       }
     } catch (error) {
-      this.log(
-        `Debug: Evolve check failed - ${error instanceof Error ? error.message : String(error)}`
-      );
+      this.log(`Debug: Evolve check failed - ${formatError(error)}`);
       suggestions.push({
         priority: 'critical',
         category: 'fix',
@@ -405,9 +398,7 @@ export class SelfDriver {
           });
         }
       } catch (error) {
-        this.log(
-          `Debug: Core command '${cmd}' check failed - ${error instanceof Error ? error.message : String(error)}`
-        );
+        this.log(`Debug: Core command '${cmd}' check failed - ${formatError(error)}`);
         suggestions.push({
           priority: 'high',
           category: 'fix',
@@ -483,7 +474,7 @@ export class SelfDriver {
 
       return result.exitCode === 0;
     } catch (error) {
-      this.log(`⚠️  OpenCode exited: ${error instanceof Error ? error.message : String(error)}`);
+      this.log(`⚠️  OpenCode exited: ${formatError(error)}`);
       return true;
     }
   }
@@ -631,7 +622,7 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one intell
         errors.push('Build failed');
       }
     } catch (error) {
-      errors.push(`Build error: ${error instanceof Error ? error.message : String(error)}`);
+      errors.push(`Build error: ${formatError(error)}`);
     }
 
     // 2. 验证测试
@@ -646,7 +637,7 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one intell
         errors.push('Tests failed');
       }
     } catch (error) {
-      errors.push(`Test error: ${error instanceof Error ? error.message : String(error)}`);
+      errors.push(`Test error: ${formatError(error)}`);
     }
 
     // 3. 验证 lint
@@ -661,7 +652,7 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one intell
         errors.push('Lint errors found');
       }
     } catch (error) {
-      errors.push(`Lint error: ${error instanceof Error ? error.message : String(error)}`);
+      errors.push(`Lint error: ${formatError(error)}`);
     }
 
     // 4. ⭐ 自我验证：evolve 命令是否工作
@@ -677,7 +668,7 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one intell
         errors.push('Evolve command broken');
       }
     } catch (error) {
-      errors.push(`Evolve check failed: ${error instanceof Error ? error.message : String(error)}`);
+      errors.push(`Evolve check failed: ${formatError(error)}`);
     }
 
     // 5. ⭐ 核心命令验证
@@ -696,9 +687,7 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one intell
         }
       } catch (error) {
         coreCommandsWork = false;
-        errors.push(
-          `Command '${cmd}' error: ${error instanceof Error ? error.message : String(error)}`
-        );
+        errors.push(`Command '${cmd}' error: ${formatError(error)}`);
       }
     }
 
@@ -726,9 +715,7 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one intell
       });
       return status.stdout.trim().length > 0;
     } catch (error) {
-      this.log(
-        `Debug: Git status check failed - ${error instanceof Error ? error.message : String(error)}`
-      );
+      this.log(`Debug: Git status check failed - ${formatError(error)}`);
       return false;
     }
   }
@@ -757,7 +744,7 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one intell
 
       this.log(`📝 Committed: ${message}`);
     } catch (error) {
-      this.log(`⚠️  Commit failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.log(`⚠️  Commit failed: ${formatError(error)}`);
     }
   }
 
@@ -769,7 +756,7 @@ Goal: ${hasCriticalIssues ? 'Restore system to working state' : 'Make one intell
       await execa('git', ['checkout', '.'], { cwd: this.projectRoot });
       this.log('🔄 Reverted changes');
     } catch (error) {
-      this.log(`⚠️  Revert failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.log(`⚠️  Revert failed: ${formatError(error)}`);
     }
   }
 

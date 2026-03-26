@@ -23,6 +23,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { Logger } from '../utils/logger';
+import { formatError } from '../utils/error';
 import { listCommand } from '../commands/list';
 import { engineCommand } from '../commands/engine';
 import { buildCommand } from '../commands/build';
@@ -73,16 +74,14 @@ async function main(): Promise<void> {
       evolveCommand(program);
     } catch (error) {
       // Evolve command is optional - ignore if module not available
-      Logger.debug(
-        `Evolve command not available: ${error instanceof Error ? error.message : String(error)}`
-      );
+      Logger.debug(`Evolve command not available: ${formatError(error)}`);
     }
   }
 
   try {
     await program.parseAsync(process.argv);
   } catch (error) {
-    Logger.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    Logger.error(`Error: ${formatError(error)}`);
     process.exit(1);
   }
 }
