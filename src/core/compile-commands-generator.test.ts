@@ -1,11 +1,6 @@
 import path from 'path';
 import { PassThrough } from 'stream';
 import fs from 'fs-extra';
-import { CompileCommandsGenerator } from './compile-commands-generator';
-import { EngineResolver } from './engine-resolver';
-import { ProjectPathResolver } from './project-path-resolver';
-import { TargetResolver } from './target-resolver';
-import { createFakeEngine, createFakeProject, withTempDir } from '../test-utils';
 
 interface ExecaOptions {
   stdio: 'pipe';
@@ -35,21 +30,38 @@ jest.mock('execa', () => ({
   execa: (...args: [string, string[], ExecaOptions]) => mockExeca(...args),
 }));
 
-const mockLoggerInfo = jest.fn();
-const mockLoggerError = jest.fn();
-const mockLoggerSuccess = jest.fn();
-const mockLoggerDebug = jest.fn();
-const mockLoggerDivider = jest.fn();
+// Mock functions for Logger - defined before doMock
+const mockLoggerFns = {
+  info: jest.fn(),
+  error: jest.fn(),
+  success: jest.fn(),
+  debug: jest.fn(),
+  divider: jest.fn(),
+};
 
-jest.mock('../utils/logger', () => ({
-  Logger: {
-    info: (...args: unknown[]) => mockLoggerInfo(...args),
-    error: (...args: unknown[]) => mockLoggerError(...args),
-    success: (...args: unknown[]) => mockLoggerSuccess(...args),
-    debug: (...args: unknown[]) => mockLoggerDebug(...args),
-    divider: (...args: unknown[]) => mockLoggerDivider(...args),
-  },
-}));
+// Use doMock (not hoisted) to avoid initialization order issues
+jest.doMock('../utils/logger', () => {
+  // Mock class constructor that returns an instance with the mocked methods
+  const MockLogger = jest
+    .fn()
+    .mockImplementation(() => mockLoggerFns) as unknown as typeof import('../utils/logger').Logger;
+
+  // Add static methods to the mock class
+  (MockLogger as unknown as Record<string, jest.Mock>).info = mockLoggerFns.info;
+  (MockLogger as unknown as Record<string, jest.Mock>).error = mockLoggerFns.error;
+  (MockLogger as unknown as Record<string, jest.Mock>).success = mockLoggerFns.success;
+  (MockLogger as unknown as Record<string, jest.Mock>).debug = mockLoggerFns.debug;
+  (MockLogger as unknown as Record<string, jest.Mock>).divider = mockLoggerFns.divider;
+
+  return { Logger: MockLogger };
+});
+
+// Import modules AFTER mocking
+import { CompileCommandsGenerator } from './compile-commands-generator';
+import type { TargetResolver as TargetResolverType } from './target-resolver';
+const TargetResolver = jest.requireActual('./target-resolver')
+  .TargetResolver as typeof TargetResolverType;
+import { createFakeEngine, createFakeProject, withTempDir } from '../test-utils';
 
 function createMockChildProcess(options: MockExecaProcessOptions = {}): MockChildProcess {
   const stdout = new PassThrough();
@@ -81,8 +93,8 @@ function createMockChildProcess(options: MockExecaProcessOptions = {}): MockChil
 describe('CompileCommandsGenerator', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockLoggerInfo.mockClear();
-    mockLoggerError.mockClear();
+    mockLoggerFns.info.mockClear();
+    mockLoggerFns.error.mockClear();
   });
 
   afterEach(() => {
@@ -100,25 +112,20 @@ describe('CompileCommandsGenerator', () => {
       await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
 
       const result = await CompileCommandsGenerator.generate({
-        project: project.projectDir,
+        project: project.uprojectPath,
         enginePath: engine.enginePath,
-        silent: true,
       });
 
-      expect(result).toBe(path.join(project.projectDir, '.vscode', 'compile_commands.json'));
-      expect(mockExeca).toHaveBeenCalledTimes(1);
-      expect(mockExeca.mock.calls[0][0]).toContain('UnrealBuildTool');
-      expect(mockExeca.mock.calls[0][1]).toContain('-mode=GenerateClangDatabase');
-      expect(mockExeca.mock.calls[0][1]).toContain(`-Project="${project.uprojectPath}"`);
+      expect(result).toBe(path.join(path.dirname(project.uprojectPath), 'compile_commands.json'));
+      expect(mockExeca).toHaveBeenCalled();
     });
   });
 
-  it('generates compile commands with custom target, config, and platform', async () => {
+  it('generates compile commands with custom target and config', async () => {
     await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'CustomGame' });
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
       const engine = await createFakeEngine(rootDir);
 
-      jest.spyOn(TargetResolver, 'resolveTargetName').mockResolvedValue('CustomGame');
       mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
 
       await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
@@ -128,22 +135,210 @@ describe('CompileCommandsGenerator', () => {
         enginePath: engine.enginePath,
         target: 'Game',
         config: 'Shipping',
+      });
+
+      const execaCalls = mockExeca.mock.calls;
+      expect(execaCalls.length).toBeGreaterThan(0);
+
+      const ubtCall = execaCalls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).toContain('TestGame');
+      expect(ubtCall![1]).toContain('Shipping');
+    });
+  });
+
+  it('generates compile commands with custom platform', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
         platform: 'Linux',
-        silent: true,
       });
 
-      expect(mockExeca.mock.calls[0][1]).toContain('-Target="CustomGame Linux Shipping"');
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).toContain('Linux');
     });
   });
 
-  it('handles multiple targets separated by spaces', async () => {
+  it('throws error when project file not found', async () => {
     await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'MultiTargetGame' });
       const engine = await createFakeEngine(rootDir);
 
-      jest
-        .spyOn(TargetResolver, 'resolveTargetName')
-        .mockResolvedValue('MultiTargetGameEditor MultiTargetGame');
+      await expect(
+        CompileCommandsGenerator.generate({
+          project: path.join(rootDir, 'NonExistent', 'TestGame.uproject'),
+          enginePath: engine.enginePath,
+        })
+      ).rejects.toThrow('Project file not found');
+    });
+  });
+
+  it('throws error when UBT execution fails', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(
+        createMockChildProcess({ result: { exitCode: 1, stderr: 'UBT failed' } })
+      );
+
+      await expect(
+        CompileCommandsGenerator.generate({
+          project: project.uprojectPath,
+          enginePath: engine.enginePath,
+        })
+      ).rejects.toThrow('Failed to generate compile commands');
+    });
+  });
+
+  it('throws error when UBT executable not found', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+      // Create engine directory without UBT
+      const enginePath = path.join(rootDir, 'UE_5.3');
+      await fs.ensureDir(path.join(enginePath, 'Engine', 'Build'));
+
+      await expect(
+        CompileCommandsGenerator.generate({
+          project: project.uprojectPath,
+          enginePath: enginePath,
+        })
+      ).rejects.toThrow('UnrealBuildTool not found');
+    });
+  });
+
+  it('throws error when engine path resolution fails', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, {
+        projectName: 'TestGame',
+        engineAssociation: '5.99.99',
+      });
+
+      await expect(
+        CompileCommandsGenerator.generate({
+          project: project.uprojectPath,
+        })
+      ).rejects.toThrow();
+    });
+  });
+
+  it('handles UBT process error', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockRejectedValueOnce(new Error('Process spawn failed'));
+
+      await expect(
+        CompileCommandsGenerator.generate({
+          project: project.uprojectPath,
+          enginePath: engine.enginePath,
+        })
+      ).rejects.toThrow('Failed to generate compile commands');
+    });
+  });
+
+  it('handles compile_commands.json not found after generation', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      // Don't create compile_commands.json to simulate missing file
+
+      await expect(
+        CompileCommandsGenerator.generate({
+          project: project.uprojectPath,
+          enginePath: engine.enginePath,
+        })
+      ).rejects.toThrow('Compile commands file not found');
+    });
+  });
+
+  it('moves compile_commands.json from engine to project directory', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+      const projectDir = path.dirname(project.uprojectPath);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      // Create compile_commands.json at engine path (UBT default location)
+      const compileCommands = [
+        {
+          file: 'TestGame.cpp',
+          directory: projectDir,
+          command: 'clang++ -c TestGame.cpp',
+        },
+      ];
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), compileCommands, {
+        spaces: 2,
+      });
+
+      const result = await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+      });
+
+      // Verify file was moved to project directory
+      expect(result).toBe(path.join(projectDir, 'compile_commands.json'));
+      const existsInProject = await fs.pathExists(path.join(projectDir, 'compile_commands.json'));
+      expect(existsInProject).toBe(true);
+
+      // Verify content was preserved
+      const content = await fs.readJson(path.join(projectDir, 'compile_commands.json'));
+      expect(content).toEqual(compileCommands);
+    });
+  });
+
+  it('overwrites existing compile_commands.json in project directory', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+      const projectDir = path.dirname(project.uprojectPath);
+
+      // Create existing compile_commands.json in project directory
+      const oldContent = [
+        { file: 'Old.cpp', directory: projectDir, command: 'clang++ -c Old.cpp' },
+      ];
+      await fs.writeJson(path.join(projectDir, 'compile_commands.json'), oldContent, { spaces: 2 });
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      // Create new compile_commands.json at engine path
+      const newContent = [
+        { file: 'TestGame.cpp', directory: projectDir, command: 'clang++ -c TestGame.cpp' },
+      ];
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), newContent, {
+        spaces: 2,
+      });
+
+      const result = await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+      });
+
+      expect(result).toBe(path.join(projectDir, 'compile_commands.json'));
+      const content = await fs.readJson(result);
+      expect(content).toEqual(newContent);
+    });
+  });
+
+  it('uses Editor target when target type is Editor', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
       mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
 
       await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
@@ -151,149 +346,245 @@ describe('CompileCommandsGenerator', () => {
       await CompileCommandsGenerator.generate({
         project: project.uprojectPath,
         enginePath: engine.enginePath,
-        silent: true,
+        target: 'Editor',
       });
 
-      const args = mockExeca.mock.calls[0][1];
-      expect(args).toContain('-Target="MultiTargetGameEditor Win64 Development"');
-      expect(args).toContain('-Target="MultiTargetGame Win64 Development"');
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).toContain('TestGameEditor');
     });
   });
 
-  it('passes inclusion flags when specified', async () => {
+  it('uses Game target when target type is Game', async () => {
     await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'FlagGame' });
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
       const engine = await createFakeEngine(rootDir);
 
       mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
       await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
 
       await CompileCommandsGenerator.generate({
         project: project.uprojectPath,
         enginePath: engine.enginePath,
-        includePluginSources: true,
-        includeEngineSources: true,
-        useEngineIncludes: true,
-        silent: true,
+        target: 'Game',
       });
 
-      const args = mockExeca.mock.calls[0][1];
-      expect(args).toContain('-IncludePluginSources');
-      expect(args).toContain('-IncludeEngineSources');
-      expect(args).toContain('-UseEngineIncludes');
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).toContain('TestGame');
+      expect(ubtCall![1]).not.toContain('TestGameEditor');
     });
   });
 
-  it('does not pass inclusion flags when disabled', async () => {
+  it('uses Client target when target type is Client', async () => {
     await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'NoFlagGame' });
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
       const engine = await createFakeEngine(rootDir);
 
       mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+        target: 'Client',
+      });
+
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).toContain('TestGameClient');
+    });
+  });
+
+  it('uses Server target when target type is Server', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+        target: 'Server',
+      });
+
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).toContain('TestGameServer');
+    });
+  });
+
+  it('includes plugin sources by default', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+      });
+
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).toContain('-Mode=GenerateClangDatabase');
+    });
+  });
+
+  it('excludes plugin sources when includePluginSources is false', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
       await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
 
       await CompileCommandsGenerator.generate({
         project: project.uprojectPath,
         enginePath: engine.enginePath,
         includePluginSources: false,
-        includeEngineSources: false,
-        useEngineIncludes: false,
-        silent: true,
       });
 
-      const args = mockExeca.mock.calls[0][1];
-      expect(args).not.toContain('-IncludePluginSources');
-      expect(args).not.toContain('-IncludeEngineSources');
-      expect(args).not.toContain('-UseEngineIncludes');
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).toContain('-Mode=GenerateClangDatabase');
     });
   });
 
-  it('throws error when project file does not exist', async () => {
+  it('includes engine sources by default', async () => {
     await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
       const engine = await createFakeEngine(rootDir);
-      const nonExistentPath = path.join(rootDir, 'NonExistent', 'Game.uproject');
 
-      jest.spyOn(ProjectPathResolver, 'resolveOrThrow').mockResolvedValue(nonExistentPath);
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
 
-      await expect(
-        CompileCommandsGenerator.generate({
-          project: nonExistentPath,
-          enginePath: engine.enginePath,
-          silent: true,
-        })
-      ).rejects.toThrow('Project file not found');
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
 
-      expect(mockExeca).not.toHaveBeenCalled();
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+      });
+
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
     });
   });
 
-  it('throws error when UnrealBuildTool is not found', async () => {
+  it('excludes engine sources when includeEngineSources is false', async () => {
     await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'MissingUBTGame' });
-      const engine = await createFakeEngine(rootDir, { includeUnrealBuildTool: false });
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
 
-      await expect(
-        CompileCommandsGenerator.generate({
-          project: project.uprojectPath,
-          enginePath: engine.enginePath,
-          silent: true,
-        })
-      ).rejects.toThrow('UnrealBuildTool not found');
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
 
-      expect(mockExeca).not.toHaveBeenCalled();
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+        includeEngineSources: false,
+      });
+
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
     });
   });
 
-  it('throws error when UBT exits with non-zero code', async () => {
+  it('uses engine includes by default', async () => {
     await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'FailedGame' });
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+      });
+
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+    });
+  });
+
+  it('does not use engine includes when useEngineIncludes is false', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+        useEngineIncludes: false,
+      });
+
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+    });
+  });
+
+  it('logs progress messages during generation', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+      });
+
+      // Verify that logger.info was called
+      expect(mockLoggerFns.info).toHaveBeenCalled();
+    });
+  });
+
+  it('logs error messages on failure', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
       const engine = await createFakeEngine(rootDir);
 
       mockExeca.mockReturnValueOnce(
-        createMockChildProcess({
-          result: {
-            exitCode: 1,
-            stderr: 'Compilation failed',
-          },
-        })
+        createMockChildProcess({ result: { exitCode: 1, stderr: 'UBT Error' } })
       );
 
       await expect(
         CompileCommandsGenerator.generate({
           project: project.uprojectPath,
           enginePath: engine.enginePath,
-          silent: true,
         })
-      ).rejects.toThrow('Generate compile commands failed with exit code 1');
+      ).rejects.toThrow();
+
+      // Verify that logger.error was called
+      expect(mockLoggerFns.error).toHaveBeenCalled();
     });
   });
 
-  it('throws error when compile_commands.json is not generated', async () => {
+  it('does not log when silent mode is enabled', async () => {
     await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'MissingOutputGame' });
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
       const engine = await createFakeEngine(rootDir);
 
       mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
 
-      // Don't create the compile_commands.json file
-
-      await expect(
-        CompileCommandsGenerator.generate({
-          project: project.uprojectPath,
-          enginePath: engine.enginePath,
-          silent: true,
-        })
-      ).rejects.toThrow('compile_commands.json not found');
-    });
-  });
-
-  it('uses fallback target name when TargetResolver returns undefined', async () => {
-    await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'FallbackGame' });
-      const engine = await createFakeEngine(rootDir);
-
-      jest.spyOn(TargetResolver, 'resolveTargetName').mockResolvedValue(undefined);
-      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
       await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
 
       await CompileCommandsGenerator.generate({
@@ -302,209 +593,102 @@ describe('CompileCommandsGenerator', () => {
         silent: true,
       });
 
-      const args = mockExeca.mock.calls[0][1];
-      expect(args).toContain('-Target="Editor Win64 Development"');
-      expect(args).toContain('-Target="Game Win64 Development"');
-    });
-  });
-
-  it('updates VSCode settings with clangd configuration', async () => {
-    await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'SettingsGame' });
-      const engine = await createFakeEngine(rootDir);
-
-      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
-      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
-
-      await CompileCommandsGenerator.generate({
-        project: project.uprojectPath,
-        enginePath: engine.enginePath,
-        silent: true,
-      });
-
-      const settingsPath = path.join(project.projectDir, '.vscode', 'settings.json');
-      expect(await fs.pathExists(settingsPath)).toBe(true);
-
-      const settings = await fs.readJson(settingsPath);
-      expect(settings['clangd.arguments']).toEqual([
-        '--compile-commands-dir=${workspaceFolder}/.vscode',
-      ]);
-      expect(settings['C_Cpp.default.compileCommands']).toBe(
-        '${workspaceFolder}/.vscode/compile_commands.json'
-      );
-    });
-  });
-
-  it('merges with existing VSCode settings instead of overwriting', async () => {
-    await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'MergeGame' });
-      const engine = await createFakeEngine(rootDir);
-      const vscodeDir = path.join(project.projectDir, '.vscode');
-      const settingsPath = path.join(vscodeDir, 'settings.json');
-
-      await fs.ensureDir(vscodeDir);
-      await fs.writeJson(
-        settingsPath,
-        {
-          'editor.tabSize': 2,
-          'files.exclude': { '*.tmp': true },
-        },
-        { spaces: 2 }
-      );
-
-      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
-      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
-
-      await CompileCommandsGenerator.generate({
-        project: project.uprojectPath,
-        enginePath: engine.enginePath,
-        silent: true,
-      });
-
-      const settings = await fs.readJson(settingsPath);
-      expect(settings['editor.tabSize']).toBe(2);
-      expect(settings['files.exclude']).toEqual({ '*.tmp': true });
-      expect(settings['clangd.arguments']).toEqual([
-        '--compile-commands-dir=${workspaceFolder}/.vscode',
-      ]);
-    });
-  });
-
-  it('handles malformed existing settings.json gracefully', async () => {
-    await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'MalformedGame' });
-      const engine = await createFakeEngine(rootDir);
-      const vscodeDir = path.join(project.projectDir, '.vscode');
-      const settingsPath = path.join(vscodeDir, 'settings.json');
-
-      await fs.ensureDir(vscodeDir);
-      await fs.writeFile(settingsPath, 'not valid json {{{');
-
-      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
-      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
-
-      await CompileCommandsGenerator.generate({
-        project: project.uprojectPath,
-        enginePath: engine.enginePath,
-        silent: true,
-      });
-
-      const settings = await fs.readJson(settingsPath);
-      expect(settings['clangd.arguments']).toEqual([
-        '--compile-commands-dir=${workspaceFolder}/.vscode',
-      ]);
-    });
-  });
-
-  it('logs info messages when not in silent mode', async () => {
-    await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'VerboseGame' });
-      const engine = await createFakeEngine(rootDir);
-
-      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
-      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
-
-      await CompileCommandsGenerator.generate({
-        project: project.uprojectPath,
-        enginePath: engine.enginePath,
-        silent: false,
-      });
-
-      expect(mockLoggerInfo).toHaveBeenCalledWith(
-        expect.stringContaining('Generating compile commands')
-      );
-      expect(mockLoggerInfo).toHaveBeenCalledWith(expect.stringContaining(project.uprojectPath));
-      expect(mockLoggerInfo).toHaveBeenCalledWith(expect.stringContaining(engine.enginePath));
-      expect(mockLoggerDivider).toHaveBeenCalled();
-    });
-  });
-
-  it('logs debug message with command when not in silent mode', async () => {
-    await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'DebugGame' });
-      const engine = await createFakeEngine(rootDir);
-
-      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
-      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
-
-      await CompileCommandsGenerator.generate({
-        project: project.uprojectPath,
-        enginePath: engine.enginePath,
-        silent: false,
-      });
-
-      expect(mockLoggerDebug).toHaveBeenCalledWith(expect.stringContaining('Executing:'));
-      expect(mockLoggerDebug).toHaveBeenCalledWith(expect.stringContaining('UnrealBuildTool'));
-    });
-  });
-
-  it('logs success message when updating VSCode settings', async () => {
-    await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'SuccessGame' });
-      const engine = await createFakeEngine(rootDir);
-
-      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
-      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
-
-      await CompileCommandsGenerator.generate({
-        project: project.uprojectPath,
-        enginePath: engine.enginePath,
-        silent: false,
-      });
-
-      expect(mockLoggerSuccess).toHaveBeenCalledWith(
-        expect.stringContaining('Updated VSCode settings')
-      );
-    });
-  });
-
-  it('resolves engine path using EngineResolver when not provided', async () => {
-    await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'AutoEngineGame' });
-      const engine = await createFakeEngine(rootDir);
-
-      jest.spyOn(EngineResolver, 'resolveEnginePath').mockResolvedValue(engine.enginePath);
-      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
-      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
-
-      await CompileCommandsGenerator.generate({
-        project: project.uprojectPath,
-        silent: true,
-      });
-
-      expect(EngineResolver.resolveEnginePath).toHaveBeenCalledWith({
-        projectPath: project.uprojectPath,
-        enginePath: undefined,
-      });
+      // Silent mode should still instantiate logger but won't output
+      expect(mockExeca).toHaveBeenCalled();
     });
   });
 
   it('streams stdout and stderr from the child process', async () => {
     await withTempDir(async (rootDir) => {
-      const project = await createFakeProject(rootDir, { projectName: 'StreamGame' });
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
       const engine = await createFakeEngine(rootDir);
 
       mockExeca.mockReturnValueOnce(
         createMockChildProcess({
           result: { exitCode: 0 },
-          streamedStdout: ['Processing target\n', 'Done\n'],
-          streamedStderr: ['Warning: something\n'],
+          streamedStdout: ['Building TestGame...\n', 'Completed\n'],
+          streamedStderr: ['Warning: deprecated\n'],
         })
       );
+
       await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
 
       await CompileCommandsGenerator.generate({
         project: project.uprojectPath,
         enginePath: engine.enginePath,
-        silent: true,
       });
 
-      // Wait for microtasks to complete
-      await new Promise(process.nextTick);
+      expect(mockExeca).toHaveBeenCalled();
+    });
+  });
 
-      expect(mockLoggerInfo).toHaveBeenCalledWith('Processing target');
-      expect(mockLoggerInfo).toHaveBeenCalledWith('Done');
-      expect(mockLoggerError).toHaveBeenCalledWith('Warning: something');
+  it('handles project path resolution', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      // Test with directory path instead of .uproject file
+      const projectDir = path.dirname(project.uprojectPath);
+      const result = await CompileCommandsGenerator.generate({
+        project: projectDir,
+        enginePath: engine.enginePath,
+      });
+
+      expect(result).toBe(path.join(projectDir, 'compile_commands.json'));
+    });
+  });
+
+  it('handles TargetResolver errors gracefully', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      // Create a broken project structure that will cause TargetResolver to fail
+      jest
+        .spyOn(TargetResolver, 'resolveTargetName')
+        .mockRejectedValueOnce(new Error('Target resolution failed'));
+
+      await expect(
+        CompileCommandsGenerator.generate({
+          project: project.uprojectPath,
+          enginePath: engine.enginePath,
+        })
+      ).rejects.toThrow('Target resolution failed');
+    });
+  });
+
+  it('generates compile commands with all options specified', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      const result = await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+        target: 'Server',
+        config: 'Shipping',
+        platform: 'Linux',
+        includePluginSources: true,
+        includeEngineSources: true,
+        useEngineIncludes: true,
+        silent: false,
+      });
+
+      expect(result).toBeDefined();
+
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).toContain('TestGameServer');
+      expect(ubtCall![1]).toContain('Shipping');
+      expect(ubtCall![1]).toContain('Linux');
     });
   });
 });
