@@ -57,7 +57,13 @@ export class SelfDriver {
       this.log('\n\n⚠️  Interrupted by SIGTERM');
     };
 
-    process.setMaxListeners(20);
+    // Increase max listeners once to prevent memory leak warnings with multiple handlers
+    // This is safe because we're properly cleaning up handlers in cleanup()
+    const currentMax = process.getMaxListeners();
+    if (currentMax < 20) {
+      process.setMaxListeners(20);
+    }
+
     process.on('SIGINT', this.sigintHandler);
     process.on('SIGTERM', this.sigtermHandler);
   }
