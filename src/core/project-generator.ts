@@ -222,8 +222,8 @@ export class ProjectGenerator {
 
     const result = await childProcess;
 
-    if (result.exitCode !== 0) {
-      throw new Error(`Project generation failed with exit code ${result.exitCode}`);
+    if (!result || result.exitCode !== 0) {
+      throw new Error(`Project generation failed with exit code ${result?.exitCode ?? 'unknown'}`);
     }
 
     Logger.success('Project files generated successfully');

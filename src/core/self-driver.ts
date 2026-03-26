@@ -192,8 +192,8 @@ export class SelfDriver {
         reject: false,
       });
 
-      if (result.exitCode !== 0) {
-        this.log(`⚠️  Failed to get file tree: ${result.stderr || 'git ls-files failed'}`);
+      if (!result || result.exitCode !== 0) {
+        this.log(`⚠️  Failed to get file tree: ${result?.stderr || 'git ls-files failed'}`);
         return 'src/ directory';
       }
 
@@ -271,8 +271,8 @@ If verification fails, do NOT commit - the system will revert automatically.`;
         timeout: 600000, // 10 minutes timeout to prevent indefinite hangs
       });
 
-      if (result.exitCode !== 0) {
-        this.log(`⚠️  OpenCode exited with code ${result.exitCode}`);
+      if (!result || result.exitCode !== 0) {
+        this.log(`⚠️  OpenCode exited with code ${result?.exitCode ?? 'unknown'}`);
         return false;
       }
 
@@ -312,7 +312,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
           timeout: 60000,
         });
 
-        if (result.exitCode !== 0) {
+        if (!result || result.exitCode !== 0) {
           this.log(`  ❌ ${check.name} failed`);
           return false;
         }

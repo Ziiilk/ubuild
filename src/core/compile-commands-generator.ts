@@ -137,8 +137,10 @@ export class CompileCommandsGenerator {
 
     const result = await childProcess;
 
-    if (result.exitCode !== 0) {
-      throw new Error(`Generate compile commands failed with exit code ${result.exitCode}`);
+    if (!result || result.exitCode !== 0) {
+      throw new Error(
+        `Generate compile commands failed with exit code ${result?.exitCode ?? 'unknown'}`
+      );
     }
 
     const vscodeDir = path.join(projectDir, '.vscode');
