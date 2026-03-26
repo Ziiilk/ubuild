@@ -1421,6 +1421,180 @@ describe('SelfDriver signal handlers', () => {
   });
 });
 
+describe('SelfDriver run() interruption flow', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    jest.useFakeTimers();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+    process.cwd = originalCwd;
+  });
+
+  it('returns result with iteration count when interrupted', async () => {
+    driver = new SelfDriver({ interval: 100 });
+
+    // Mock diagnose to return quickly
+    const diagnoseSpy = jest
+      .spyOn(driver as unknown as { diagnose: () => Promise<Diagnosis> }, 'diagnose')
+      .mockResolvedValue({
+        testFailures: [],
+        lintErrors: [],
+        timestamp: new Date().toISOString(),
+      });
+
+    // Mock analyzeEvolutionSuggestions to return empty suggestions
+    const analyzeSpy = jest
+      .spyOn(
+        driver as unknown as {
+          analyzeEvolutionSuggestions: (d: Diagnosis) => Promise<EvolutionSuggestion[]>;
+        },
+        'analyzeEvolutionSuggestions'
+      )
+      .mockResolvedValue([]);
+
+    // Mock logDiagnosis to do nothing
+    const logDiagnosisSpy = jest
+      .spyOn(driver as unknown as { logDiagnosis: () => void }, 'logDiagnosis')
+      .mockImplementation(() => {});
+
+    // Mock evolveWithOpenCode to return true (success but no changes)
+    const evolveSpy = jest
+      .spyOn(
+        driver as unknown as {
+          evolveWithOpenCode: () => Promise<boolean>;
+        },
+        'evolveWithOpenCode'
+      )
+      .mockResolvedValue(true);
+
+    // Mock verify to return success
+    const verifySpy = jest
+      .spyOn(driver as unknown as { verify: () => Promise<VerificationResult> }, 'verify')
+      .mockResolvedValue({
+        success: true,
+        buildSucceeds: true,
+        testsPass: true,
+        lintClean: true,
+        evolveFunctional: true,
+        coreCommandsWork: true,
+        errors: [],
+      });
+
+    // Mock hasChanges to return false (no changes made)
+    const hasChangesSpy = jest
+      .spyOn(driver as unknown as { hasChanges: () => Promise<boolean> }, 'hasChanges')
+      .mockResolvedValue(false);
+
+    // Mock sleep to complete immediately
+    const sleepSpy = jest
+      .spyOn(driver as unknown as { sleep: () => Promise<void> }, 'sleep')
+      .mockResolvedValue(undefined);
+
+    // Start run()
+    const runPromise = driver.run();
+
+    // Wait for first iteration to start
+    await Promise.resolve();
+
+    // Trigger interruption
+    process.emit('SIGINT' as NodeJS.Signals);
+
+    // Advance timers to let any pending async operations complete
+    jest.advanceTimersByTime(200);
+
+    const result = await runPromise;
+
+    // Verify the result structure
+    expect(typeof result.iterations).toBe('number');
+    expect(typeof result.success).toBe('boolean');
+    expect(Array.isArray(result.improvements)).toBe(true);
+    expect(Array.isArray(result.errors)).toBe(true);
+
+    // Clean up spies
+    diagnoseSpy.mockRestore();
+    analyzeSpy.mockRestore();
+    logDiagnosisSpy.mockRestore();
+    evolveSpy.mockRestore();
+    verifySpy.mockRestore();
+    hasChangesSpy.mockRestore();
+    sleepSpy.mockRestore();
+  });
+
+  it('accumulates iterations across multiple iterations before interruption', async () => {
+    let callCount = 0;
+    driver = new SelfDriver({ interval: 50 });
+
+    // Mock diagnose to track calls
+    const diagnoseSpy = jest
+      .spyOn(driver as unknown as { diagnose: () => Promise<Diagnosis> }, 'diagnose')
+      .mockImplementation(async () => {
+        callCount++;
+        // Interrupt after 2 iterations
+        if (callCount >= 2) {
+          process.emit('SIGINT' as NodeJS.Signals);
+        }
+        return {
+          testFailures: [],
+          lintErrors: [],
+          timestamp: new Date().toISOString(),
+        };
+      });
+
+    // Mock other methods
+    jest
+      .spyOn(
+        driver as unknown as {
+          analyzeEvolutionSuggestions: () => Promise<EvolutionSuggestion[]>;
+        },
+        'analyzeEvolutionSuggestions'
+      )
+      .mockResolvedValue([]);
+
+    jest
+      .spyOn(driver as unknown as { logDiagnosis: () => void }, 'logDiagnosis')
+      .mockImplementation(() => {});
+
+    jest
+      .spyOn(
+        driver as unknown as { evolveWithOpenCode: () => Promise<boolean> },
+        'evolveWithOpenCode'
+      )
+      .mockResolvedValue(true);
+
+    jest
+      .spyOn(driver as unknown as { verify: () => Promise<VerificationResult> }, 'verify')
+      .mockResolvedValue({
+        success: true,
+        buildSucceeds: true,
+        testsPass: true,
+        lintClean: true,
+        evolveFunctional: true,
+        coreCommandsWork: true,
+        errors: [],
+      });
+
+    jest
+      .spyOn(driver as unknown as { hasChanges: () => Promise<boolean> }, 'hasChanges')
+      .mockResolvedValue(false);
+
+    jest
+      .spyOn(driver as unknown as { sleep: () => Promise<void> }, 'sleep')
+      .mockResolvedValue(undefined);
+
+    const result = await driver.run();
+
+    // Should have run at least 2 iterations
+    expect(result.iterations).toBeGreaterThanOrEqual(2);
+    expect(result.success).toBe(false); // No improvements made
+
+    diagnoseSpy.mockRestore();
+  });
+});
+
 describe('SelfDriver buildPrompt categorized suggestions', () => {
   beforeEach(() => {
     driver = new SelfDriver();
