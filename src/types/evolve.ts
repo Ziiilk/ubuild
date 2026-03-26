@@ -37,7 +37,9 @@ export const EVOLUTION_VERIFY_COMMANDS: string[] = [
  * const options: SelfEvolverOptions = {
  *   once: true,
  *   dryRun: false,
- *   logger: (msg) => console.log(msg)
+ *   logger: (msg) => console.log(msg),
+ *   verifyTimeoutMs: 120000,
+ *   opencodeTimeoutMs: 900000
  * };
  * ```
  */
@@ -48,4 +50,8 @@ export interface SelfEvolverOptions {
   once?: boolean;
   /** Show what would be done without actually executing */
   dryRun?: boolean;
+  /** Timeout for verification checks in milliseconds (default: 60000) */
+  verifyTimeoutMs?: number;
+  /** Timeout for OpenCode execution in milliseconds (default: 600000) */
+  opencodeTimeoutMs?: number;
 }

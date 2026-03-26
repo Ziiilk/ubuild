@@ -41,6 +41,8 @@ export class SelfDriver {
   private interrupted = false;
   private once: boolean;
   private dryRun: boolean;
+  private verifyTimeoutMs: number;
+  private opencodeTimeoutMs: number;
   private sigintHandler: (() => void) | null = null;
   private sigtermHandler: (() => void) | null = null;
   private originalMaxListeners: number | null = null;
@@ -55,6 +57,8 @@ export class SelfDriver {
     this.projectRoot = process.cwd();
     this.once = options.once || false;
     this.dryRun = options.dryRun || false;
+    this.verifyTimeoutMs = options.verifyTimeoutMs ?? VERIFY_TIMEOUT_MS;
+    this.opencodeTimeoutMs = options.opencodeTimeoutMs ?? OPENCODE_TIMEOUT_MS;
     this.setupSignalHandlers();
   }
 
@@ -320,7 +324,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
         cwd: this.projectRoot,
         stdio: 'inherit',
         reject: false,
-        timeout: OPENCODE_TIMEOUT_MS, // 10 minutes timeout to prevent indefinite hangs
+        timeout: this.opencodeTimeoutMs, // 10 minutes timeout to prevent indefinite hangs
       });
 
       if (!result || result.exitCode !== 0) {
@@ -360,7 +364,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
         const result = await execa(check.file, check.args, {
           cwd: this.projectRoot,
           reject: false,
-          timeout: VERIFY_TIMEOUT_MS,
+          timeout: this.verifyTimeoutMs,
         });
 
         if (!result || result.exitCode !== 0) {

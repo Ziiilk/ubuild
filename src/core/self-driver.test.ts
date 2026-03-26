@@ -147,6 +147,43 @@ describe('SelfDriver', () => {
       driver = new SelfDriver(options);
       expect(driver).toBeDefined();
     });
+
+    it('creates driver with custom verifyTimeoutMs', () => {
+      const options: SelfEvolverOptions = {
+        verifyTimeoutMs: 120000,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with custom opencodeTimeoutMs', () => {
+      const options: SelfEvolverOptions = {
+        opencodeTimeoutMs: 900000,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with both timeout options', () => {
+      const options: SelfEvolverOptions = {
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 900000,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with all options', () => {
+      const options: SelfEvolverOptions = {
+        logger: jest.fn(),
+        once: true,
+        dryRun: false,
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 900000,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
   });
 
   describe('verify', () => {

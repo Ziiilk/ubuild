@@ -13,11 +13,15 @@ describe('SelfEvolverOptions interface', () => {
       logger: mockLogger,
       once: true,
       dryRun: false,
+      verifyTimeoutMs: 120000,
+      opencodeTimeoutMs: 900000,
     };
 
     expect(options.logger).toBeDefined();
     expect(options.once).toBe(true);
     expect(options.dryRun).toBe(false);
+    expect(options.verifyTimeoutMs).toBe(120000);
+    expect(options.opencodeTimeoutMs).toBe(900000);
   });
 
   it('accepts empty options object', () => {
@@ -40,6 +44,16 @@ describe('SelfEvolverOptions interface', () => {
       dryRun: true,
     };
     expect(optionsWithDryRun.dryRun).toBe(true);
+
+    const optionsWithVerifyTimeout: SelfEvolverOptions = {
+      verifyTimeoutMs: 120000,
+    };
+    expect(optionsWithVerifyTimeout.verifyTimeoutMs).toBe(120000);
+
+    const optionsWithOpencodeTimeout: SelfEvolverOptions = {
+      opencodeTimeoutMs: 900000,
+    };
+    expect(optionsWithOpencodeTimeout.opencodeTimeoutMs).toBe(900000);
   });
 
   it('logger function can be called', () => {
