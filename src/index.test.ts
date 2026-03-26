@@ -257,6 +257,26 @@ describe('Public API exports', () => {
 
       await expect(runSelfEvolution()).rejects.toThrow('Evolution failed');
     });
+
+    it('can be called with API key option', async () => {
+      mockRunSelfEvolution.mockResolvedValue(undefined);
+
+      const options = {
+        interval: 10000,
+        apiKey: 'test-api-key',
+        model: 'claude-3',
+      };
+
+      await runSelfEvolution(options);
+      expect(mockRunSelfEvolution).toHaveBeenCalledWith(options);
+    });
+
+    it('handles empty options object', async () => {
+      mockRunSelfEvolution.mockResolvedValue(undefined);
+
+      await runSelfEvolution({});
+      expect(mockRunSelfEvolution).toHaveBeenCalledWith({});
+    });
   });
 
   describe('exports are properly wired to mocked implementations', () => {
