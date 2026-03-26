@@ -54,4 +54,6 @@ export interface SelfEvolverOptions {
   verifyTimeoutMs?: number;
   /** Timeout for OpenCode execution in milliseconds (default: 600000) */
   opencodeTimeoutMs?: number;
+  /** Sleep duration between iterations in milliseconds (default: 5000) */
+  sleepMs?: number;
 }

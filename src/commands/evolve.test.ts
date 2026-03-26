@@ -84,6 +84,7 @@ describe('evolveCommand', () => {
         logger: expect.any(Function),
         once: undefined,
         dryRun: undefined,
+        sleepMs: undefined,
       });
     });
 
@@ -121,6 +122,7 @@ describe('evolveCommand', () => {
           logger: expect.any(Function),
           once: true,
           dryRun: undefined,
+          sleepMs: undefined,
         });
       });
     });
@@ -162,6 +164,50 @@ describe('evolveCommand', () => {
           logger: expect.any(Function),
           once: true,
           dryRun: true,
+          sleepMs: undefined,
+        });
+      });
+    });
+
+    describe('--sleep option', () => {
+      it('registers the --sleep option', () => {
+        evolveCommand(program);
+
+        const commands = program.commands;
+        const evolveCmd = commands.find((cmd) => cmd.name() === 'evolve');
+
+        expect(evolveCmd).toBeDefined();
+        const sleepOption = evolveCmd?.options.find((opt) => opt.long === '--sleep');
+        expect(sleepOption).toBeDefined();
+      });
+
+      it('passes sleepMs to runSelfEvolution when --sleep is used', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync(['node', 'test', 'evolve', '--sleep', '10000']);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: undefined,
+          dryRun: undefined,
+          sleepMs: 10000,
+        });
+      });
+
+      it('can combine --sleep with --once', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync(['node', 'test', 'evolve', '--sleep', '5000', '--once']);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: true,
+          dryRun: undefined,
+          sleepMs: 5000,
         });
       });
     });

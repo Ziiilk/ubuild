@@ -184,6 +184,27 @@ describe('SelfDriver', () => {
       driver = new SelfDriver(options);
       expect(driver).toBeDefined();
     });
+
+    it('creates driver with custom sleepMs', () => {
+      const options: SelfEvolverOptions = {
+        sleepMs: 10000,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with all options including sleepMs', () => {
+      const options: SelfEvolverOptions = {
+        logger: jest.fn(),
+        once: true,
+        dryRun: false,
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 900000,
+        sleepMs: 10000,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
   });
 
   describe('verify', () => {
@@ -961,6 +982,18 @@ describe('runSelfEvolution', () => {
   it('runs self-evolution with all options', async () => {
     const mockLogger = jest.fn();
     expect(() => runSelfEvolution({ logger: mockLogger, once: true, dryRun: true })).not.toThrow();
+  });
+
+  it('runs self-evolution with sleepMs option', async () => {
+    const mockLogger = jest.fn();
+    expect(() => runSelfEvolution({ logger: mockLogger, sleepMs: 10000 })).not.toThrow();
+  });
+
+  it('runs self-evolution with all options including sleepMs', async () => {
+    const mockLogger = jest.fn();
+    expect(() =>
+      runSelfEvolution({ logger: mockLogger, once: true, dryRun: true, sleepMs: 10000 })
+    ).not.toThrow();
   });
 });
 

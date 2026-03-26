@@ -36,6 +36,7 @@ export class SelfDriver {
   private dryRun: boolean;
   private verifyTimeoutMs: number;
   private opencodeTimeoutMs: number;
+  private sleepMs: number;
   private sigintHandler: (() => void) | null = null;
   private sigtermHandler: (() => void) | null = null;
   private originalMaxListeners: number | null = null;
@@ -54,6 +55,7 @@ export class SelfDriver {
     this.dryRun = options.dryRun || false;
     this.verifyTimeoutMs = options.verifyTimeoutMs ?? VERIFY_TIMEOUT_MS;
     this.opencodeTimeoutMs = options.opencodeTimeoutMs ?? OPENCODE_TIMEOUT_MS;
+    this.sleepMs = options.sleepMs ?? DEFAULT_SLEEP_MS;
     this.setupSignalHandlers();
   }
 
@@ -166,7 +168,7 @@ export class SelfDriver {
         this.log('\n  Mode: Single iteration (--once)');
       } else {
         this.log('\n  Mode: Continuous (runs until Ctrl+C)');
-        this.log(`  Would loop every ${DEFAULT_SLEEP_MS / 1000} seconds`);
+        this.log(`  Would loop every ${this.sleepMs / 1000} seconds`);
       }
       this.log('\n✨ Dry run complete - no changes made');
       this.cleanup();
@@ -187,7 +189,7 @@ export class SelfDriver {
 
       if (!executed) {
         this.log('⚠️  Evolution execution issue, retrying next iteration...');
-        await this.sleep(DEFAULT_SLEEP_MS);
+        await this.sleep(this.sleepMs);
         continue;
       }
 
@@ -217,8 +219,8 @@ export class SelfDriver {
         return;
       }
 
-      this.log(`\n💤 Waiting ${DEFAULT_SLEEP_MS / 1000}s before next iteration...`);
-      await this.sleep(DEFAULT_SLEEP_MS);
+      this.log(`\n💤 Waiting ${this.sleepMs / 1000}s before next iteration...`);
+      await this.sleep(this.sleepMs);
     }
 
     this.log('\n✨ Evolution stopped');
