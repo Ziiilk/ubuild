@@ -243,24 +243,54 @@ export class SelfDriver {
   }
 
   /**
-   * Gets the source file tree for context.
+   * Gets the file tree for context, including source files, config files, and documentation.
    */
   private async getFileTree(): Promise<string> {
     try {
-      const result = await execa('git', ['ls-files', 'src/'], {
+      // Get source files
+      const srcResult = await execa('git', ['ls-files', 'src/'], {
         cwd: this.projectRoot,
         reject: false,
       });
 
-      if (!result || result.exitCode !== 0) {
-        this.log(`⚠️  Failed to get file tree: ${result?.stderr || 'git ls-files failed'}`);
-        return 'src/ directory';
+      // Get config files
+      const configResult = await execa(
+        'git',
+        ['ls-files', '*.json', '*.js', '*.md', '*.yml', '*.yaml'],
+        {
+          cwd: this.projectRoot,
+          reject: false,
+        }
+      );
+
+      // Get bin directory
+      const binResult = await execa('git', ['ls-files', 'bin/'], {
+        cwd: this.projectRoot,
+        reject: false,
+      });
+
+      const parts: string[] = [];
+
+      if (configResult.stdout) {
+        parts.push('## Configuration Files\n' + configResult.stdout);
       }
 
-      return result.stdout || 'src/ directory';
+      if (binResult.stdout) {
+        parts.push('## Bin Files\n' + binResult.stdout);
+      }
+
+      if (srcResult.stdout) {
+        parts.push('## Source Files\n' + srcResult.stdout);
+      }
+
+      if (parts.length === 0) {
+        return 'Project files (unable to list)';
+      }
+
+      return parts.join('\n\n');
     } catch (error) {
       this.log(`⚠️  Error getting file tree: ${formatError(error)}`);
-      return 'src/ directory';
+      return 'Project files (error occurred)';
     }
   }
 

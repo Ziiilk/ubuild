@@ -525,26 +525,18 @@ describe('SelfDriver', () => {
       driver = new SelfDriver();
     });
 
-    it('returns file list from git', async () => {
-      mockExeca.mockImplementation(async () => {
-        return mockExecaResult(0, 'src/core/self-driver.ts\nsrc/commands/evolve.ts', '');
-      });
-
-      const getFileTree = (
-        driver as unknown as {
-          getFileTree: () => Promise<string>;
-        }
-      ).getFileTree;
-      const result = await getFileTree.call(driver);
-
-      expect(result).toContain('self-driver.ts');
-      expect(result).toContain('evolve.ts');
-    });
-
-    it('returns default message when git ls-files returns non-zero exit code', async () => {
+    it('returns file list from git with all sections', async () => {
       mockExeca.mockImplementation(async (command: string, args?: string[]) => {
         if (command === 'git' && args?.includes('ls-files')) {
-          return mockExecaResult(128, '', 'fatal: not a git repository');
+          if (args.includes('src/')) {
+            return mockExecaResult(0, 'src/core/self-driver.ts\nsrc/commands/evolve.ts', '');
+          }
+          if (args.includes('bin/')) {
+            return mockExecaResult(0, 'bin/ubuild.js', '');
+          }
+          if (args.includes('*.json')) {
+            return mockExecaResult(0, 'package.json\ntsconfig.json', '');
+          }
         }
         return mockExecaResult(0, '', '');
       });
@@ -556,10 +548,34 @@ describe('SelfDriver', () => {
       ).getFileTree;
       const result = await getFileTree.call(driver);
 
-      expect(result).toBe('src/ directory');
+      expect(result).toContain('## Configuration Files');
+      expect(result).toContain('## Bin Files');
+      expect(result).toContain('## Source Files');
+      expect(result).toContain('self-driver.ts');
+      expect(result).toContain('evolve.ts');
+      expect(result).toContain('package.json');
+      expect(result).toContain('bin/ubuild.js');
     });
 
-    it('returns default message when git fails', async () => {
+    it('returns message when no files are found', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const getFileTree = (
+        driver as unknown as {
+          getFileTree: () => Promise<string>;
+        }
+      ).getFileTree;
+      const result = await getFileTree.call(driver);
+
+      expect(result).toBe('Project files (unable to list)');
+    });
+
+    it('returns error message when git fails', async () => {
       mockExeca.mockImplementation(async () => {
         throw new Error('Git error');
       });
@@ -571,7 +587,7 @@ describe('SelfDriver', () => {
       ).getFileTree;
       const result = await getFileTree.call(driver);
 
-      expect(result).toBe('src/ directory');
+      expect(result).toBe('Project files (error occurred)');
     });
   });
 
