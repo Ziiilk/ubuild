@@ -156,7 +156,7 @@ describe('CLI Entry Point', () => {
     it('registers evolve command in production mode', async () => {
       process.argv = ['node', 'ubuild', 'list'];
       process.env.NODE_ENV = 'production';
-      delete process.env.UBUILD_EVOLVE_ENABLED;
+      process.env.UBUILD_EVOLVE_ENABLED = undefined;
 
       await import('./index');
       await new Promise((resolve) => setTimeout(resolve, 50));
