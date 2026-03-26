@@ -19,13 +19,6 @@ import type { SelfEvolverOptions } from '../types/evolve';
 
 export type { SelfEvolverOptions };
 
-/**
- * Self-driving evolution engine for ubuild.
- *
- * Continuously analyzes the codebase and applies changes
- * through an automated loop. Runs indefinitely until
- * interrupted by the user (Ctrl+C).
- */
 /** Default sleep duration between iterations in milliseconds */
 const DEFAULT_SLEEP_MS = 5000;
 /** Default timeout for verification checks in milliseconds */
@@ -173,7 +166,7 @@ export class SelfDriver {
         this.log('\n  Mode: Single iteration (--once)');
       } else {
         this.log('\n  Mode: Continuous (runs until Ctrl+C)');
-        this.log('  Would loop every 5 seconds');
+        this.log(`  Would loop every ${DEFAULT_SLEEP_MS / 1000} seconds`);
       }
       this.log('\n✨ Dry run complete - no changes made');
       this.cleanup();
