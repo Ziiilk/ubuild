@@ -248,71 +248,170 @@ export class EngineResolver {
    * @returns Promise resolving to array of engine installations found
    */
   private static async queryRegistryKey(registryKey: string): Promise<EngineInstallation[]> {
-    const installations: EngineInstallation[] = [];
-
     const { stdout } = await execa('reg', ['query', registryKey, '/s']);
-
     const lines = stdout.split('\n');
+    const installations: EngineInstallation[] = [];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (!line) continue;
+      if (!line || line.includes(registryKey)) continue;
 
-      const fullMatch = line.match(/{([^}]+)}\s+REG_SZ\s+(.+)$/);
-      if (fullMatch) {
-        const guid = `{${fullMatch[1]}}`;
-        const enginePath = fullMatch[2].trim();
-
-        installations.push({
-          path: enginePath,
-          associationId: guid,
-          displayName: `UE Engine ${guid}`,
-          version: undefined,
-          source: 'registry',
-        });
-        continue;
-      }
-
-      if (line.startsWith('{')) {
-        const guidMatch = line.match(/^({[^}]+})/);
-        if (guidMatch) {
-          const guid = guidMatch[1];
-          let enginePath: string | undefined;
-
-          const regSzMatch = line.match(/REG_SZ\s+(.+)$/);
-          if (regSzMatch) {
-            enginePath = regSzMatch[1].trim();
-          } else {
-            for (let j = i + 1; j < lines.length; j++) {
-              const nextLine = lines[j].trim();
-              if (nextLine.includes('REG_SZ')) {
-                const pathMatch = nextLine.match(/REG_SZ\s+(.+)$/);
-                if (pathMatch) {
-                  enginePath = pathMatch[1].trim();
-                  break;
-                }
-              } else if (nextLine.startsWith('{') || nextLine.includes(registryKey)) {
-                break;
-              }
-            }
-          }
-
-          if (enginePath) {
-            installations.push({
-              path: enginePath,
-              associationId: guid,
-              displayName: `UE Engine ${guid}`,
-              version: undefined,
-              source: 'registry',
-            });
-          } else {
-            Logger.debug(`Found GUID ${guid} but could not extract engine path`);
-          }
-        }
+      const installation = this.parseRegistryLine(line, lines, i, registryKey);
+      if (installation) {
+        installations.push(installation);
       }
     }
 
     return installations;
+  }
+
+  /**
+   * Parses a single registry line and extracts engine installation if present.
+   * Handles both single-line and multi-line formats.
+   * @param line - Current line being parsed
+   * @param lines - All lines for forward-scanning multi-line entries
+   * @param currentIndex - Index of current line in lines array
+   * @param registryKey - Registry key for boundary detection
+   * @returns EngineInstallation if found, undefined otherwise
+   */
+  private static parseRegistryLine(
+    line: string,
+    lines: string[],
+    currentIndex: number,
+    registryKey: string
+  ): EngineInstallation | undefined {
+    // Try single-line format first: {GUID} REG_SZ path
+    const singleLineResult = this.parseSingleLineEntry(line);
+    if (singleLineResult) {
+      return singleLineResult;
+    }
+
+    // Try multi-line format: {GUID} on one line, REG_SZ path on next
+    return this.parseMultiLineEntry(line, lines, currentIndex, registryKey);
+  }
+
+  /**
+   * Parses single-line registry entries in format: {GUID} REG_SZ path
+   * @param line - Registry line to parse
+   * @returns EngineInstallation if matched, undefined otherwise
+   */
+  private static parseSingleLineEntry(line: string): EngineInstallation | undefined {
+    const fullMatch = line.match(/{([^}]+)}\s+REG_SZ\s+(.+)$/);
+    if (!fullMatch) {
+      return undefined;
+    }
+
+    const guid = `{${fullMatch[1]}}`;
+    const enginePath = fullMatch[2].trim();
+
+    return {
+      path: enginePath,
+      associationId: guid,
+      displayName: `UE Engine ${guid}`,
+      version: undefined,
+      source: 'registry',
+    };
+  }
+
+  /**
+   * Parses multi-line registry entries where GUID and path are on separate lines.
+   * @param line - Current line (should start with { for GUID entries)
+   * @param lines - All lines for forward-scanning
+   * @param currentIndex - Index of current line
+   * @param registryKey - Registry key for boundary detection
+   * @returns EngineInstallation if found, undefined otherwise
+   */
+  private static parseMultiLineEntry(
+    line: string,
+    lines: string[],
+    currentIndex: number,
+    registryKey: string
+  ): EngineInstallation | undefined {
+    if (!line.startsWith('{')) {
+      return undefined;
+    }
+
+    const guidMatch = line.match(/^({[^}]+})/);
+    if (!guidMatch) {
+      return undefined;
+    }
+
+    const guid = guidMatch[1];
+    const enginePath = this.extractEnginePathFromLineOrSubsequent(
+      line,
+      lines,
+      currentIndex,
+      registryKey
+    );
+
+    if (!enginePath) {
+      Logger.debug(`Found GUID ${guid} but could not extract engine path`);
+      return undefined;
+    }
+
+    return {
+      path: enginePath,
+      associationId: guid,
+      displayName: `UE Engine ${guid}`,
+      version: undefined,
+      source: 'registry',
+    };
+  }
+
+  /**
+   * Extracts engine path from current line or scans subsequent lines.
+   * @param line - Current line to check first
+   * @param lines - All lines for forward-scanning
+   * @param currentIndex - Index of current line
+   * @param registryKey - Registry key for boundary detection
+   * @returns Engine path if found, undefined otherwise
+   */
+  private static extractEnginePathFromLineOrSubsequent(
+    line: string,
+    lines: string[],
+    currentIndex: number,
+    registryKey: string
+  ): string | undefined {
+    // Check current line first for REG_SZ
+    const regSzMatch = line.match(/REG_SZ\s+(.+)$/);
+    if (regSzMatch) {
+      return regSzMatch[1].trim();
+    }
+
+    // Scan subsequent lines for REG_SZ entry
+    return this.findEnginePathInSubsequentLines(lines, currentIndex, registryKey);
+  }
+
+  /**
+   * Scans subsequent lines to find REG_SZ engine path entry.
+   * Stops at next GUID or registry key header.
+   * @param lines - All lines to scan
+   * @param startIndex - Index to start scanning from (exclusive)
+   * @param registryKey - Registry key for boundary detection
+   * @returns Engine path if found, undefined otherwise
+   */
+  private static findEnginePathInSubsequentLines(
+    lines: string[],
+    startIndex: number,
+    registryKey: string
+  ): string | undefined {
+    for (let j = startIndex + 1; j < lines.length; j++) {
+      const nextLine = lines[j].trim();
+
+      if (nextLine.includes('REG_SZ')) {
+        const pathMatch = nextLine.match(/REG_SZ\s+(.+)$/);
+        if (pathMatch) {
+          return pathMatch[1].trim();
+        }
+      }
+
+      // Stop scanning at boundaries
+      if (nextLine.startsWith('{') || nextLine.includes(registryKey)) {
+        break;
+      }
+    }
+
+    return undefined;
   }
 
   /**
