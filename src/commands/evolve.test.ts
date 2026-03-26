@@ -74,6 +74,7 @@ describe('evolveCommand', () => {
       expect(mockRunSelfEvolution).toHaveBeenCalledWith({
         logger: expect.any(Function),
         once: undefined,
+        dryRun: undefined,
       });
     });
 
@@ -110,6 +111,48 @@ describe('evolveCommand', () => {
         expect(mockRunSelfEvolution).toHaveBeenCalledWith({
           logger: expect.any(Function),
           once: true,
+          dryRun: undefined,
+        });
+      });
+    });
+
+    describe('--dry-run option', () => {
+      it('registers the --dry-run option', () => {
+        evolveCommand(program);
+
+        const commands = program.commands;
+        const evolveCmd = commands.find((cmd) => cmd.name() === 'evolve');
+
+        expect(evolveCmd).toBeDefined();
+        const dryRunOption = evolveCmd?.options.find((opt) => opt.long === '--dry-run');
+        expect(dryRunOption).toBeDefined();
+      });
+
+      it('passes dryRun: true to runSelfEvolution when --dry-run is used', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync(['node', 'test', 'evolve', '--dry-run']);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: undefined,
+          dryRun: true,
+        });
+      });
+
+      it('can combine --dry-run with --once', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync(['node', 'test', 'evolve', '--dry-run', '--once']);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: true,
+          dryRun: true,
         });
       });
     });

@@ -25,6 +25,7 @@ export function evolveCommand(program: Command): void {
     .command('evolve')
     .description('Self-evolve ubuild using OpenCode (runs forever until Ctrl+C)')
     .option('--once', 'Run only one iteration and exit (default: run forever)')
+    .option('--dry-run', 'Show what would be done without actually executing')
     .action(async (options) => {
       Logger.title('ubuild Self-Evolution');
       Logger.info('Using OpenCode (default model)');
@@ -39,6 +40,7 @@ export function evolveCommand(program: Command): void {
         await runSelfEvolution({
           logger: (msg: string) => Logger.info(msg),
           once: options.once,
+          dryRun: options.dryRun,
         });
       } catch (error) {
         Logger.error(`Error: ${formatError(error)}`);

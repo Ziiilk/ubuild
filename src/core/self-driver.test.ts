@@ -122,6 +122,31 @@ describe('SelfDriver', () => {
       driver = new SelfDriver(options);
       expect(driver).toBeDefined();
     });
+
+    it('creates driver with dryRun option set to true', () => {
+      const options: SelfEvolverOptions = {
+        dryRun: true,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with dryRun option set to false', () => {
+      const options: SelfEvolverOptions = {
+        dryRun: false,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with both once and dryRun options', () => {
+      const options: SelfEvolverOptions = {
+        once: true,
+        dryRun: true,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
   });
 
   describe('verify', () => {
@@ -508,6 +533,56 @@ describe('SelfDriver', () => {
       }).not.toThrow();
     });
   });
+
+  describe('dry-run behavior', () => {
+    it('logs dry run information and exits early', async () => {
+      const mockLogger = jest.fn();
+      const options: SelfEvolverOptions = {
+        logger: mockLogger,
+        dryRun: true,
+      };
+      driver = new SelfDriver(options);
+
+      const run = (driver as unknown as { run: () => Promise<void> }).run;
+      await run.call(driver);
+
+      expect(mockLogger).toHaveBeenCalledWith('🔍 Dry run mode - showing what would be done');
+      expect(mockLogger).toHaveBeenCalledWith(`📁 Project: ${mockProjectRoot}`);
+      expect(mockLogger).toHaveBeenCalledWith('\n📝 Would perform the following actions:');
+      expect(mockLogger).toHaveBeenCalledWith('✨ Dry run complete - no changes made');
+    });
+
+    it('shows single iteration mode in dry run with --once', async () => {
+      const mockLogger = jest.fn();
+      const options: SelfEvolverOptions = {
+        logger: mockLogger,
+        dryRun: true,
+        once: true,
+      };
+      driver = new SelfDriver(options);
+
+      const run = (driver as unknown as { run: () => Promise<void> }).run;
+      await run.call(driver);
+
+      expect(mockLogger).toHaveBeenCalledWith('  Mode: Single iteration (--once)');
+    });
+
+    it('shows continuous mode in dry run without --once', async () => {
+      const mockLogger = jest.fn();
+      const options: SelfEvolverOptions = {
+        logger: mockLogger,
+        dryRun: true,
+        once: false,
+      };
+      driver = new SelfDriver(options);
+
+      const run = (driver as unknown as { run: () => Promise<void> }).run;
+      await run.call(driver);
+
+      expect(mockLogger).toHaveBeenCalledWith('  Mode: Continuous (runs until Ctrl+C)');
+      expect(mockLogger).toHaveBeenCalledWith('  Would loop every 5 seconds');
+    });
+  });
 });
 
 describe('runSelfEvolution', () => {
@@ -544,5 +619,20 @@ describe('runSelfEvolution', () => {
   it('runs self-evolution with once option set to false', async () => {
     const mockLogger = jest.fn();
     expect(() => runSelfEvolution({ logger: mockLogger, once: false })).not.toThrow();
+  });
+
+  it('runs self-evolution with dryRun option set to true', async () => {
+    const mockLogger = jest.fn();
+    expect(() => runSelfEvolution({ logger: mockLogger, dryRun: true })).not.toThrow();
+  });
+
+  it('runs self-evolution with dryRun option set to false', async () => {
+    const mockLogger = jest.fn();
+    expect(() => runSelfEvolution({ logger: mockLogger, dryRun: false })).not.toThrow();
+  });
+
+  it('runs self-evolution with all options', async () => {
+    const mockLogger = jest.fn();
+    expect(() => runSelfEvolution({ logger: mockLogger, once: true, dryRun: true })).not.toThrow();
   });
 });

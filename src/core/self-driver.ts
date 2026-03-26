@@ -20,6 +20,8 @@ export interface SelfEvolverOptions {
   logger?: (msg: string) => void;
   /** Run only one iteration and exit (default: false - run forever) */
   once?: boolean;
+  /** Show what would be done without actually executing */
+  dryRun?: boolean;
 }
 
 /**
@@ -34,6 +36,7 @@ export class SelfDriver {
   private projectRoot: string;
   private interrupted = false;
   private once: boolean;
+  private dryRun: boolean;
   private sigintHandler: (() => void) | null = null;
   private sigtermHandler: (() => void) | null = null;
 
@@ -45,6 +48,7 @@ export class SelfDriver {
     this.log = options.logger || ((msg: string) => Logger.info(msg));
     this.projectRoot = process.cwd();
     this.once = options.once || false;
+    this.dryRun = options.dryRun || false;
     this.setupSignalHandlers();
   }
 
@@ -91,6 +95,26 @@ export class SelfDriver {
    * Runs the self-evolution loop - continues indefinitely until interrupted by user.
    */
   async run(): Promise<void> {
+    if (this.dryRun) {
+      this.log('🔍 Dry run mode - showing what would be done');
+      this.log(`📁 Project: ${this.projectRoot}`);
+      this.log('\n📝 Would perform the following actions:');
+      this.log('  1. Read EVOLVE.md constitution file');
+      this.log('  2. Execute OpenCode with the evolution prompt');
+      this.log('  3. Verify changes (build, test, lint, commands)');
+      this.log('  4. Check if changes are committed');
+      this.log('  5. Revert if verification fails or changes not committed');
+      if (this.once) {
+        this.log('\n  Mode: Single iteration (--once)');
+      } else {
+        this.log('\n  Mode: Continuous (runs until Ctrl+C)');
+        this.log('  Would loop every 5 seconds');
+      }
+      this.log('\n✨ Dry run complete - no changes made');
+      this.cleanup();
+      return;
+    }
+
     this.log('🔄 Starting self-evolution...');
     this.log(`📁 Project: ${this.projectRoot}`);
     this.log('💡 Press Ctrl+C to stop\n');
