@@ -163,7 +163,7 @@ export function initCommand(program: Command): void {
       try {
         await executeInit(options);
       } catch (error) {
-        console.error(error instanceof Error ? error.message : String(error));
+        Logger.error(error instanceof Error ? error.message : String(error));
         process.exit(1);
       }
     });

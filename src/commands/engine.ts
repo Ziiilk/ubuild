@@ -193,7 +193,7 @@ export function engineCommand(program: Command): void {
           verbose: options.verbose,
         });
       } catch (error) {
-        console.error(error instanceof Error ? error.message : String(error));
+        Logger.error(error instanceof Error ? error.message : String(error));
         process.exit(1);
       }
     });
