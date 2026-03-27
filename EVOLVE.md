@@ -130,7 +130,7 @@ Before committing, verify ALL pass:
 
 ```bash
 npm run build          # TypeScript compilation
-npm test               # All 1158+ tests must pass
+npm test               # All 1217+ tests must pass
 npm run lint           # No ESLint errors
 ```
 

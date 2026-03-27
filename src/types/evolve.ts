@@ -13,7 +13,7 @@
  * These commands are checked with `--help` to ensure they work correctly.
  * When adding new commands, add them here to include them in verification.
  */
-export const EVOLUTION_VERIFY_COMMANDS: string[] = [
+export const EVOLUTION_VERIFY_COMMANDS = [
   'list',
   'engine',
   'build',
@@ -25,7 +25,7 @@ export const EVOLUTION_VERIFY_COMMANDS: string[] = [
   'version',
   'gencodebase',
   'evolve',
-];
+] as const;
 
 /**
  * Options for configuring the self-evolution driver.
