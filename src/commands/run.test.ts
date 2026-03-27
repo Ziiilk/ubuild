@@ -272,9 +272,9 @@ describe('runCommand', () => {
     runCommand(program);
 
     const runCmd = program.commands.find((cmd) => cmd.name() === 'run');
-    expect(runCmd).toBeDefined();
+    if (!runCmd) throw new Error('run command not found');
 
-    const options = runCmd!.options.map((opt) => opt.long);
+    const options = runCmd.options.map((opt) => opt.long);
     expect(options).toContain('--target');
     expect(options).toContain('--config');
     expect(options).toContain('--platform');
@@ -292,7 +292,7 @@ describe('runCommand', () => {
     runCommand(program);
 
     const runCmd = program.commands.find((cmd) => cmd.name() === 'run');
-    expect(runCmd).toBeDefined();
+    if (!runCmd) throw new Error('run command not found');
 
     const mockRun = jest
       .spyOn(ProjectRunner.prototype, 'run')
@@ -302,7 +302,7 @@ describe('runCommand', () => {
       throw new Error('process.exit called');
     }) as (code?: string | number | null | undefined) => never);
 
-    await expect(runCmd!.parseAsync(['node', 'test', '--dry-run'])).rejects.toThrow(
+    await expect(runCmd.parseAsync(['node', 'test', '--dry-run'])).rejects.toThrow(
       'process.exit called'
     );
 
@@ -317,7 +317,7 @@ describe('runCommand', () => {
     runCommand(program);
 
     const runCmd = program.commands.find((cmd) => cmd.name() === 'run');
-    expect(runCmd).toBeDefined();
+    if (!runCmd) throw new Error('run command not found');
 
     const mockRun = jest.spyOn(ProjectRunner.prototype, 'run').mockRejectedValue('String error');
 
@@ -325,7 +325,7 @@ describe('runCommand', () => {
       throw new Error('process.exit called');
     }) as (code?: string | number | null | undefined) => never);
 
-    await expect(runCmd!.parseAsync(['node', 'test', '--dry-run'])).rejects.toThrow(
+    await expect(runCmd.parseAsync(['node', 'test', '--dry-run'])).rejects.toThrow(
       'process.exit called'
     );
 
@@ -340,11 +340,11 @@ describe('runCommand', () => {
     runCommand(program);
 
     const runCmd = program.commands.find((cmd) => cmd.name() === 'run');
-    expect(runCmd).toBeDefined();
+    if (!runCmd) throw new Error('run command not found');
 
     const mockRun = jest.spyOn(ProjectRunner.prototype, 'run').mockResolvedValue(undefined);
 
-    await runCmd!.parseAsync([
+    await runCmd.parseAsync([
       'node',
       'test',
       '--target',
@@ -380,11 +380,11 @@ describe('runCommand', () => {
     runCommand(program);
 
     const runCmd = program.commands.find((cmd) => cmd.name() === 'run');
-    expect(runCmd).toBeDefined();
+    if (!runCmd) throw new Error('run command not found');
 
     const mockRun = jest.spyOn(ProjectRunner.prototype, 'run').mockResolvedValue(undefined);
 
-    await runCmd!.parseAsync(['node', 'test']);
+    await runCmd.parseAsync(['node', 'test']);
 
     expect(mockRun).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -402,11 +402,11 @@ describe('runCommand', () => {
     runCommand(program);
 
     const runCmd = program.commands.find((cmd) => cmd.name() === 'run');
-    expect(runCmd).toBeDefined();
+    if (!runCmd) throw new Error('run command not found');
 
     const mockRun = jest.spyOn(ProjectRunner.prototype, 'run').mockResolvedValue(undefined);
 
-    await runCmd!.parseAsync(['node', 'test', '--no-build']);
+    await runCmd.parseAsync(['node', 'test', '--no-build']);
 
     expect(mockRun).toHaveBeenCalledWith(
       expect.objectContaining({
