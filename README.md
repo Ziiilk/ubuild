@@ -7,12 +7,13 @@ Unreal Engine project management CLI tool for Agent integration.
 - **Project Detection** (`ubuild list`): Detect and analyze Unreal Engine projects
 - **Engine Information** (`ubuild engine`): Resolve engine associations and versions
 - **Build Execution** (`ubuild build`): Build projects with various configurations
-- **Project Generation** (`ubuild generate`): Generate IDE project files (Visual Studio, VSCode, etc.)
+- **Project Generation** (`ubuild generate`): Generate IDE project files (Visual Studio, VSCode, etc)
 - **Project Initialization** (`ubuild init`): Create new Unreal Engine projects (C++ or Blueprint)
 - **Run Project** (`ubuild run`): Run Unreal Engine Editor or Game executable
 - **Update Tool** (`ubuild update`): Update ubuild to the latest version
 - **Generate Compile Commands** (`ubuild gencodebase`): Generate compile_commands.json for IDE code completion
 - **Clean Build Artifacts** (`ubuild clean`): Remove Binaries, Intermediate, and Saved directories
+- **Self-Evolution** (`ubuild evolve`): Continuously improve ubuild codebase using AI (requires OpenCode)
 
 ## Installation
 
@@ -68,6 +69,11 @@ ubuild clean --binaries-only
 # Display version information
 ubuild version
 ubuild version --json
+
+# Self-evolve ubuild codebase (requires OpenCode)
+ubuild evolve
+ubuild evolve --once
+ubuild evolve --dry-run
 ```
 
 ### Programmatic API
@@ -228,6 +234,22 @@ Display ubuild version information.
 Options:
 
 - `-j, --json`: Output result as JSON
+
+### `ubuild evolve`
+
+Self-evolve ubuild codebase using OpenCode. Runs a continuous improvement loop that analyzes the codebase, applies changes, and verifies them. Requires OpenCode CLI to be installed (`npm install -g opencode`).
+
+Options:
+
+- `--once`: Run only one iteration and exit (default: run forever)
+- `--dry-run`: Show what would be done without actually executing
+- `--sleep <ms>`: Sleep duration between iterations in milliseconds (default: 5000)
+- `--use-ts-node`: Use ts-node for verification instead of compiled dist
+- `--verify-timeout <ms>`: Timeout for verification checks in milliseconds (default: 60000)
+- `--opencode-timeout <ms>`: Timeout for OpenCode execution in milliseconds (default: 600000)
+- `--max-retries <n>`: Maximum consecutive retry attempts on failure (default: 5, use -1 for unlimited)
+
+**Note:** Press `Ctrl+C` to stop the evolution loop.
 
 ## Engine Detection
 
