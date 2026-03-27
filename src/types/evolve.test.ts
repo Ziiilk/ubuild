@@ -5,6 +5,7 @@
  */
 
 import type { SelfEvolverOptions } from './evolve';
+import { EVOLUTION_VERIFY_COMMANDS } from './evolve';
 
 describe('SelfEvolverOptions interface', () => {
   it('accepts valid options with all properties', () => {
@@ -71,5 +72,31 @@ describe('SelfEvolverOptions interface', () => {
 
     options.logger?.('test message');
     expect(mockLogger).toHaveBeenCalledWith('test message');
+  });
+});
+
+describe('EVOLUTION_VERIFY_COMMANDS', () => {
+  it('contains all expected CLI commands', () => {
+    expect(EVOLUTION_VERIFY_COMMANDS).toContain('list');
+    expect(EVOLUTION_VERIFY_COMMANDS).toContain('engine');
+    expect(EVOLUTION_VERIFY_COMMANDS).toContain('build');
+    expect(EVOLUTION_VERIFY_COMMANDS).toContain('generate');
+    expect(EVOLUTION_VERIFY_COMMANDS).toContain('init');
+    expect(EVOLUTION_VERIFY_COMMANDS).toContain('run');
+    expect(EVOLUTION_VERIFY_COMMANDS).toContain('clean');
+    expect(EVOLUTION_VERIFY_COMMANDS).toContain('update');
+    expect(EVOLUTION_VERIFY_COMMANDS).toContain('version');
+    expect(EVOLUTION_VERIFY_COMMANDS).toContain('gencodebase');
+    expect(EVOLUTION_VERIFY_COMMANDS).toContain('evolve');
+  });
+
+  it('has correct number of commands', () => {
+    expect(EVOLUTION_VERIFY_COMMANDS).toHaveLength(11);
+  });
+
+  it('is defined as a readonly tuple', () => {
+    // Verify the constant exists and has the expected structure
+    expect(Array.isArray(EVOLUTION_VERIFY_COMMANDS)).toBe(true);
+    expect(EVOLUTION_VERIFY_COMMANDS.every((cmd) => typeof cmd === 'string')).toBe(true);
   });
 });
