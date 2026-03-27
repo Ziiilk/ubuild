@@ -17,6 +17,9 @@ describe('SelfEvolverOptions interface', () => {
       verifyTimeoutMs: 120000,
       opencodeTimeoutMs: 900000,
       sleepMs: 10000,
+      useTsNode: true,
+      maxRetries: 3,
+      projectRoot: '/custom/project/path',
     };
 
     expect(options.logger).toBeDefined();
@@ -25,6 +28,9 @@ describe('SelfEvolverOptions interface', () => {
     expect(options.verifyTimeoutMs).toBe(120000);
     expect(options.opencodeTimeoutMs).toBe(900000);
     expect(options.sleepMs).toBe(10000);
+    expect(options.useTsNode).toBe(true);
+    expect(options.maxRetries).toBe(3);
+    expect(options.projectRoot).toBe('/custom/project/path');
   });
 
   it('accepts empty options object', () => {
@@ -62,6 +68,26 @@ describe('SelfEvolverOptions interface', () => {
       sleepMs: 10000,
     };
     expect(optionsWithSleepMs.sleepMs).toBe(10000);
+
+    const optionsWithUseTsNode: SelfEvolverOptions = {
+      useTsNode: true,
+    };
+    expect(optionsWithUseTsNode.useTsNode).toBe(true);
+
+    const optionsWithMaxRetries: SelfEvolverOptions = {
+      maxRetries: 10,
+    };
+    expect(optionsWithMaxRetries.maxRetries).toBe(10);
+
+    const optionsWithUnlimitedRetries: SelfEvolverOptions = {
+      maxRetries: -1,
+    };
+    expect(optionsWithUnlimitedRetries.maxRetries).toBe(-1);
+
+    const optionsWithProjectRoot: SelfEvolverOptions = {
+      projectRoot: '/custom/project/path',
+    };
+    expect(optionsWithProjectRoot.projectRoot).toBe('/custom/project/path');
   });
 
   it('logger function can be called', () => {
