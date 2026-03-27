@@ -79,59 +79,54 @@ export async function executeUpdate(options: UpdateCommandOptions = {}): Promise
 
     logger.info('Checking for latest version...');
 
-    try {
-      const { stdout: npmViewOutput } = await execa('npm', ['view', '@zitool/ubuild', 'version']);
-      const latestVersion = npmViewOutput.trim();
+    const { stdout: npmViewOutput } = await execa('npm', ['view', '@zitool/ubuild', 'version']);
+    const latestVersion = npmViewOutput.trim();
 
-      if (!latestVersion) {
-        logger.error('Unable to fetch latest version from npm');
-        throw new Error('Unable to fetch latest version from npm');
-      }
-
-      logger.info(`Latest version: ${chalk.bold(latestVersion)}`);
-
-      if (latestVersion === currentVersion) {
-        logger.success('You are already using the latest version!');
-        return;
-      }
-
-      const needsUpdate = compareVersions(latestVersion, currentVersion) > 0;
-
-      if (!needsUpdate) {
-        logger.success('You are already using the latest version!');
-        return;
-      }
-
-      logger.warning(`Update available: ${currentVersion} → ${latestVersion}`);
-      logger.info('Updating ubuild...');
-
-      const isGlobal = await isGlobalInstall(logger);
-
-      if (isGlobal) {
-        logger.info('Detected global installation, updating globally...');
-        await execa('npm', ['install', '-g', '@zitool/ubuild']);
-      } else {
-        logger.info('Detected local installation, updating locally...');
-        await execa('npm', ['install', '@zitool/ubuild@latest']);
-      }
-
-      const { stdout: newVersionOutput } = await execa('npm', [
-        'list',
-        '@zitool/ubuild',
-        '--depth=0',
-      ]);
-      const newVersionMatch = newVersionOutput.match(/@zitool\/ubuild@([0-9.]+)/);
-      const newVersion = newVersionMatch ? newVersionMatch[1] : latestVersion;
-
-      logger.success(`Successfully updated to version ${chalk.bold(newVersion)}!`);
-      logger.info('You may need to restart your terminal for changes to take effect.');
-    } catch (error) {
-      logger.error(`Failed to check npm: ${formatError(error)}`);
-      logger.info('You can manually update using: npm install -g @zitool/ubuild');
-      throw error;
+    if (!latestVersion) {
+      logger.error('Unable to fetch latest version from npm');
+      throw new Error('Unable to fetch latest version from npm');
     }
+
+    logger.info(`Latest version: ${chalk.bold(latestVersion)}`);
+
+    if (latestVersion === currentVersion) {
+      logger.success('You are already using the latest version!');
+      return;
+    }
+
+    const needsUpdate = compareVersions(latestVersion, currentVersion) > 0;
+
+    if (!needsUpdate) {
+      logger.success('You are already using the latest version!');
+      return;
+    }
+
+    logger.warning(`Update available: ${currentVersion} → ${latestVersion}`);
+    logger.info('Updating ubuild...');
+
+    const isGlobal = await isGlobalInstall(logger);
+
+    if (isGlobal) {
+      logger.info('Detected global installation, updating globally...');
+      await execa('npm', ['install', '-g', '@zitool/ubuild']);
+    } else {
+      logger.info('Detected local installation, updating locally...');
+      await execa('npm', ['install', '@zitool/ubuild@latest']);
+    }
+
+    const { stdout: newVersionOutput } = await execa('npm', [
+      'list',
+      '@zitool/ubuild',
+      '--depth=0',
+    ]);
+    const newVersionMatch = newVersionOutput.match(/@zitool\/ubuild@([0-9.]+)/);
+    const newVersion = newVersionMatch ? newVersionMatch[1] : latestVersion;
+
+    logger.success(`Successfully updated to version ${chalk.bold(newVersion)}!`);
+    logger.info('You may need to restart your terminal for changes to take effect.');
   } catch (error) {
     logger.error(`Update failed: ${formatError(error)}`);
+    logger.info('You can manually update using: npm install -g @zitool/ubuild');
     throw error;
   }
 }
