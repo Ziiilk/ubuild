@@ -1911,6 +1911,61 @@ describe('verification failure handling', () => {
     // Should call revert
     expect(revertCalled).toBe(true);
   });
+
+  it('stops evolution when verification fails and revert also fails', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode succeeds
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // Build fails - verification fails
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(1, 'Build failed', '');
+      }
+
+      // Revert fails - git reset fails
+      if (command === 'git' && args?.includes('reset') && !args?.includes('--hard')) {
+        return mockExecaResult(1, '', 'reset failed');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should log verification failure
+    expect(mockLogger).toHaveBeenCalledWith('❌ Verification failed, reverting...');
+    // Should log revert failure and stop
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Revert failed - manual intervention may be required')
+    );
+    // Should have cleaned up (stopping evolution)
+    expect(driver.getStatus().cleanedUp).toBe(true);
+  });
 });
 
 describe('uncommitted changes after verification', () => {
@@ -1996,6 +2051,85 @@ describe('uncommitted changes after verification', () => {
 
     // Should revert
     expect(revertCalled).toBe(true);
+  });
+
+  it('stops evolution when post-verification revert of uncommitted changes fails', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    let statusCallCount = 0;
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      // Git checks pass initially
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+
+      // Git rev-parse HEAD - same hash before and after (no commit made)
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+        return mockExecaResult(0, 'abc123def456789012345678901234567890abcd', '');
+      }
+
+      // Git status - first call clean (pre-flight), second call dirty (post-evolution)
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        statusCallCount++;
+        if (statusCallCount === 1) {
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, 'M src/modified.ts', '');
+      }
+
+      // OpenCode succeeds
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // All verification checks pass
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('npm test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (fullCommand.includes('npm run lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('evolve --help') || fullCommand.includes('list --help')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      // Revert fails - git reset fails
+      if (command === 'git' && args?.includes('reset') && !args?.includes('--hard')) {
+        return mockExecaResult(1, '', 'reset failed');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should detect uncommitted changes
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Verification passed but AI did not commit changes')
+    );
+    // Should log revert failure
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Revert failed - manual intervention may be required')
+    );
+    // Should have cleaned up (stopping evolution)
+    expect(driver.getStatus().cleanedUp).toBe(true);
   });
 });
 
