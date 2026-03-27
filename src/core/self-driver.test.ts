@@ -822,7 +822,8 @@ describe('SelfDriver', () => {
       expect(mockLogger).toHaveBeenCalledWith('OpenCode stderr: Some debug output from OpenCode');
     });
 
-    it('constructs prompt with constitution, file tree, and task instructions', async () => {
+    it('constructs prompt with constitution, file tree, and task instructions (useTsNode=true)', async () => {
+      driver = new SelfDriver({ useTsNode: true });
       let capturedPrompt = '';
       const constitution = '# Test Constitution';
 
@@ -834,7 +835,6 @@ describe('SelfDriver', () => {
           return mockExecaResult(0, '1.0.0', '');
         }
         if (command === 'opencode' && args?.includes('run')) {
-          // Capture the prompt argument
           capturedPrompt = args?.[1] ?? '';
           return mockExecaResult(0, '', '');
         }
@@ -861,10 +861,44 @@ describe('SelfDriver', () => {
       expect(capturedPrompt).toContain('4. FEATURE');
       expect(capturedPrompt).toContain('5. SKIP');
       expect(capturedPrompt).toContain('## After Changes');
+      // useTsNode=true should use npx ts-node commands
       expect(capturedPrompt).toContain('npx ts-node src/cli/index.ts list --help');
       expect(capturedPrompt).toContain('npx ts-node src/cli/index.ts evolve --help');
+      expect(capturedPrompt).not.toContain('node dist/cli/index.js');
       expect(capturedPrompt).toContain('git add -A');
       expect(capturedPrompt).toContain('git commit -m');
+    });
+
+    it('constructs prompt with dist-based verification when useTsNode=false', async () => {
+      driver = new SelfDriver({ useTsNode: false });
+      let capturedPrompt = '';
+      const constitution = '# Test Constitution';
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts\nsrc/commands/evolve.ts', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (command === 'opencode' && args?.includes('run')) {
+          capturedPrompt = args?.[1] ?? '';
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      await evolveWithOpenCode.call(driver, constitution);
+
+      // useTsNode=false should use node dist commands
+      expect(capturedPrompt).toContain('node dist/cli/index.js list --help');
+      expect(capturedPrompt).toContain('node dist/cli/index.js evolve --help');
+      expect(capturedPrompt).not.toContain('npx ts-node');
     });
   });
 
