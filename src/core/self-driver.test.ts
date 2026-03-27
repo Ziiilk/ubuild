@@ -441,8 +441,9 @@ describe('SelfDriver', () => {
     it('reverts changes successfully', async () => {
       mockExeca.mockImplementation(async () => mockExecaResult(0, '', ''));
 
-      const revert = (driver as unknown as { revert: () => Promise<void> }).revert;
-      await expect(revert.call(driver)).resolves.not.toThrow();
+      const revert = (driver as unknown as { revert: () => Promise<boolean> }).revert;
+      const result = await revert.call(driver);
+      expect(result).toBe(true);
     });
 
     it('handles revert failure gracefully', async () => {
@@ -453,8 +454,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const revert = (driver as unknown as { revert: () => Promise<void> }).revert;
-      await expect(revert.call(driver)).resolves.not.toThrow();
+      const revert = (driver as unknown as { revert: () => Promise<boolean> }).revert;
+      const result = await revert.call(driver);
+      expect(result).toBe(false);
     });
   });
 
