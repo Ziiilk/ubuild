@@ -514,10 +514,12 @@ If verification fails, do NOT commit - the system will revert automatically.`;
   }
 
   /**
-   * Reverts changes.
+   * Reverts changes (both staged and unstaged).
    */
   private async revert(): Promise<void> {
     try {
+      // First reset any staged changes, then revert working tree
+      await execa('git', ['reset', 'HEAD'], { cwd: this.projectRoot });
       await execa('git', ['checkout', '.'], { cwd: this.projectRoot });
       this.log('🔄 Reverted changes');
     } catch (error) {
