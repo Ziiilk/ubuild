@@ -2463,6 +2463,42 @@ describe('handlePostVerificationState', () => {
     expect(mockLogger).toHaveBeenCalledWith(
       expect.stringContaining('Reverting uncommitted changes')
     );
+
+    // Verify that consecutiveFailures is NOT incremented (verification passed)
+    const status = driver.getStatus();
+    expect(status.consecutiveFailures).toBe(0);
+  });
+
+  it('logs info message about reset failure counter when reverting uncommitted changes', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    await handlePostVerificationState.call(driver, false, false, false);
+
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Reset failure counter'));
   });
 });
 

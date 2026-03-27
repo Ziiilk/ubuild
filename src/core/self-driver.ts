@@ -657,9 +657,14 @@ If verification fails, do NOT commit - the system will revert automatically.`;
     this.log('⚠️  Verification passed but AI did not commit changes');
     this.log('🔄 Reverting uncommitted changes...');
     const revertSuccess = await this.revert();
-    if (!this.handleRevertFailure(revertSuccess, 'Uncommitted changes after verification')) {
+    if (!revertSuccess) {
+      this.log('❌ Revert failed - manual intervention may be required');
+      this.cleanup();
       return false;
     }
+    // Reset failure counter - verification passed, this is not a real failure
+    this.consecutiveFailures = 0;
+    this.log('ℹ️  Reset failure counter (verification passed, commit missed)');
     return true;
   }
 
