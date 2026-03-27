@@ -299,22 +299,26 @@ export class SelfDriver {
   /**
    * Gets the file tree for context, including source files, config files, and documentation.
    * Includes both tracked and untracked files to provide complete context for evolution.
+   * Uses a single git ls-files call with multiple pathspecs for efficiency.
    */
   private async getFileTree(): Promise<string> {
     try {
-      // Get config files (both tracked and untracked)
-      const configResult = await execa(
+      // Single git ls-files call with all pathspecs for efficiency
+      const result = await execa(
         'git',
         [
           'ls-files',
           '--others',
           '--exclude-standard',
           '--cached',
+          '--',
           '*.json',
           '*.js',
           '*.md',
           '*.yml',
           '*.yaml',
+          'bin/',
+          'src/',
         ],
         {
           cwd: this.projectRoot,
@@ -322,38 +326,44 @@ export class SelfDriver {
         }
       );
 
-      // Get bin files (both tracked and untracked)
-      const binResult = await execa(
-        'git',
-        ['ls-files', '--others', '--exclude-standard', '--cached', 'bin/'],
-        {
-          cwd: this.projectRoot,
-          reject: false,
-        }
-      );
+      if (!result.stdout.trim()) {
+        return 'Project files (unable to list)';
+      }
 
-      // Get source files (both tracked and untracked)
-      const srcResult = await execa(
-        'git',
-        ['ls-files', '--others', '--exclude-standard', '--cached', 'src/'],
-        {
-          cwd: this.projectRoot,
-          reject: false,
+      // Categorize files by type
+      const files = result.stdout.split('\n').filter((f) => f.trim());
+      const configFiles: string[] = [];
+      const binFiles: string[] = [];
+      const srcFiles: string[] = [];
+
+      for (const file of files) {
+        if (file.startsWith('src/')) {
+          srcFiles.push(file);
+        } else if (file.startsWith('bin/')) {
+          binFiles.push(file);
+        } else if (
+          file.endsWith('.json') ||
+          file.endsWith('.js') ||
+          file.endsWith('.md') ||
+          file.endsWith('.yml') ||
+          file.endsWith('.yaml')
+        ) {
+          configFiles.push(file);
         }
-      );
+      }
 
       const parts: string[] = [];
 
-      if (configResult.stdout.trim()) {
-        parts.push('## Configuration Files\n' + configResult.stdout.trim());
+      if (configFiles.length > 0) {
+        parts.push('## Configuration Files\n' + configFiles.join('\n'));
       }
 
-      if (binResult.stdout.trim()) {
-        parts.push('## Bin Files\n' + binResult.stdout.trim());
+      if (binFiles.length > 0) {
+        parts.push('## Bin Files\n' + binFiles.join('\n'));
       }
 
-      if (srcResult.stdout.trim()) {
-        parts.push('## Source Files\n' + srcResult.stdout.trim());
+      if (srcFiles.length > 0) {
+        parts.push('## Source Files\n' + srcFiles.join('\n'));
       }
 
       if (parts.length === 0) {

@@ -658,15 +658,12 @@ describe('SelfDriver', () => {
     it('returns file list from git with all sections', async () => {
       mockExeca.mockImplementation(async (command: string, args?: string[]) => {
         if (command === 'git' && args?.includes('ls-files')) {
-          if (args.includes('src/')) {
-            return mockExecaResult(0, 'src/core/self-driver.ts\nsrc/commands/evolve.ts', '');
-          }
-          if (args.includes('bin/')) {
-            return mockExecaResult(0, 'bin/ubuild.js', '');
-          }
-          if (args.includes('*.json')) {
-            return mockExecaResult(0, 'package.json\ntsconfig.json', '');
-          }
+          // Single call returns all files together
+          return mockExecaResult(
+            0,
+            'package.json\ntsconfig.json\nbin/ubuild.js\nsrc/core/self-driver.ts\nsrc/commands/evolve.ts',
+            ''
+          );
         }
         return mockExecaResult(0, '', '');
       });
