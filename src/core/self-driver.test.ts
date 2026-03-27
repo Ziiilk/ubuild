@@ -872,6 +872,154 @@ describe('SelfDriver', () => {
     });
   });
 
+  describe('getHeadCommitHash', () => {
+    beforeEach(() => {
+      driver = new SelfDriver();
+    });
+
+    it('returns commit hash when git rev-parse HEAD succeeds', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+          return mockExecaResult(0, 'abc123def456', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const getHeadCommitHash = (driver as unknown as { getHeadCommitHash: () => Promise<string> })
+        .getHeadCommitHash;
+      const result = await getHeadCommitHash.call(driver);
+
+      expect(result).toBe('abc123def456');
+    });
+
+    it('returns empty string when git rev-parse HEAD fails', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+          return mockExecaResult(128, '', 'fatal: not a git repository');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const getHeadCommitHash = (driver as unknown as { getHeadCommitHash: () => Promise<string> })
+        .getHeadCommitHash;
+      const result = await getHeadCommitHash.call(driver);
+
+      expect(result).toBe('');
+    });
+
+    it('returns empty string when git command throws', async () => {
+      mockExeca.mockImplementation(async (command: string) => {
+        if (command === 'git') {
+          throw new Error('Command not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const getHeadCommitHash = (driver as unknown as { getHeadCommitHash: () => Promise<string> })
+        .getHeadCommitHash;
+      const result = await getHeadCommitHash.call(driver);
+
+      expect(result).toBe('');
+    });
+  });
+
+  describe('runPreFlightChecks', () => {
+    beforeEach(() => {
+      driver = new SelfDriver({ once: true });
+    });
+
+    it('returns true when all checks pass', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(0, '.git', '');
+        }
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const runPreFlightChecks = (
+        driver as unknown as { runPreFlightChecks: () => Promise<boolean> }
+      ).runPreFlightChecks;
+      const result = await runPreFlightChecks.call(driver);
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false when not in git repository', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ once: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(128, '', 'fatal: not a git repository');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const runPreFlightChecks = (
+        driver as unknown as { runPreFlightChecks: () => Promise<boolean> }
+      ).runPreFlightChecks;
+      const result = await runPreFlightChecks.call(driver);
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith('❌ Error: Not a git repository');
+    });
+
+    it('returns false when working tree has uncommitted changes', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ once: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(0, '.git', '');
+        }
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+          return mockExecaResult(0, 'M src/file.ts', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const runPreFlightChecks = (
+        driver as unknown as { runPreFlightChecks: () => Promise<boolean> }
+      ).runPreFlightChecks;
+      const result = await runPreFlightChecks.call(driver);
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith('❌ Error: Working tree has uncommitted changes');
+    });
+
+    it('returns false when opencode is not installed', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ once: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(0, '.git', '');
+        }
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(127, '', 'command not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const runPreFlightChecks = (
+        driver as unknown as { runPreFlightChecks: () => Promise<boolean> }
+      ).runPreFlightChecks;
+      const result = await runPreFlightChecks.call(driver);
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith('❌ Error: OpenCode is not installed or not in PATH');
+    });
+  });
+
   describe('git repository validation in run', () => {
     it('exits early when not in a git repository', async () => {
       const mockLogger = jest.fn();

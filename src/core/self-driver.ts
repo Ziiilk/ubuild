@@ -161,35 +161,43 @@ export class SelfDriver {
   }
 
   /**
-   * Runs the self-evolution loop - continues indefinitely until interrupted by user.
+   * Runs pre-flight checks before starting evolution.
+   * @returns true if all checks pass, false otherwise
    */
-  async run(): Promise<void> {
-    // Pre-flight check: must be in a git repository
+  private async runPreFlightChecks(): Promise<boolean> {
     const isGitRepo = await this.isGitRepository();
     if (!isGitRepo) {
       this.log('❌ Error: Not a git repository');
       this.log('   Self-evolution requires a git repository to track and revert changes.');
       this.log(`   Current directory: ${this.projectRoot}`);
-      this.cleanup();
-      return;
+      return false;
     }
 
-    // Pre-flight check: working tree must be clean to prevent data loss
     const isClean = await this.isWorkingTreeClean();
     if (!isClean) {
       this.log('❌ Error: Working tree has uncommitted changes');
       this.log('   Self-evolution may revert changes using `git checkout .`');
       this.log('   Commit or stash your changes before running evolve.');
-      this.cleanup();
-      return;
+      return false;
     }
 
-    // Pre-flight check: opencode must be installed
     const isOpenCodeInstalled = await this.isOpenCodeInstalled();
     if (!isOpenCodeInstalled) {
       this.log('❌ Error: OpenCode is not installed or not in PATH');
       this.log('   Self-evolution requires OpenCode CLI to run.');
       this.log('   Install it with: npm install -g opencode');
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Runs the self-evolution loop - continues indefinitely until interrupted by user.
+   */
+  async run(): Promise<void> {
+    const preFlightPassed = await this.runPreFlightChecks();
+    if (!preFlightPassed) {
       this.cleanup();
       return;
     }
