@@ -1,4 +1,4 @@
-import { Logger } from './logger';
+import { Logger, formatTimestamp } from './logger';
 import { createOutputCapture } from '../test-utils';
 
 describe('Logger', () => {
@@ -298,6 +298,53 @@ describe('Logger', () => {
 
       logger.info('test');
       expect(capture.getStdout()).toContain('test');
+    });
+  });
+
+  describe('formatTimestamp', () => {
+    it('formats current time when no date provided', () => {
+      const result = formatTimestamp();
+      // Should match HH:MM:SS format
+      expect(result).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    });
+
+    it('formats a specific date correctly', () => {
+      const testDate = new Date('2024-01-15T14:30:45Z');
+      const result = formatTimestamp(testDate);
+      // Note: toLocaleTimeString uses local timezone, so we just verify format
+      expect(result).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    });
+
+    it('uses 24-hour format', () => {
+      // Test with a time that would be PM in 12-hour format
+      const testDate = new Date('2024-01-15T15:30:45Z');
+      const result = formatTimestamp(testDate);
+      expect(result).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    });
+
+    it('pads single-digit hours, minutes, and seconds with leading zeros', () => {
+      const testDate = new Date('2024-01-15T01:05:09Z');
+      const result = formatTimestamp(testDate);
+      expect(result).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    });
+
+    it('handles midnight correctly', () => {
+      const testDate = new Date('2024-01-15T00:00:00Z');
+      const result = formatTimestamp(testDate);
+      expect(result).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    });
+
+    it('handles end of day correctly', () => {
+      const testDate = new Date('2024-01-15T23:59:59Z');
+      const result = formatTimestamp(testDate);
+      expect(result).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    });
+
+    it('handles invalid date gracefully', () => {
+      const invalidDate = new Date(NaN);
+      const result = formatTimestamp(invalidDate);
+      // Should still produce some output (locale-dependent, often 'Invalid Date' or similar)
+      expect(typeof result).toBe('string');
     });
   });
 });

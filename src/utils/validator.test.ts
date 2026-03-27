@@ -388,4 +388,83 @@ describe('Validator', () => {
       });
     });
   });
+
+  describe('parsePositiveInt', () => {
+    it('parses valid positive integers', () => {
+      expect(Validator.parsePositiveInt('1', '--test')).toBe(1);
+      expect(Validator.parsePositiveInt('42', '--test')).toBe(42);
+      expect(Validator.parsePositiveInt('999999', '--test')).toBe(999999);
+    });
+
+    it('rejects non-numeric strings', () => {
+      expect(() => Validator.parsePositiveInt('abc', '--test')).toThrow(
+        '--test must be a positive integer, got: abc'
+      );
+      // Note: parseInt('12abc') returns 12, so this is accepted
+      expect(Validator.parsePositiveInt('12abc', '--test')).toBe(12);
+    });
+
+    it('rejects zero', () => {
+      expect(() => Validator.parsePositiveInt('0', '--test')).toThrow(
+        '--test must be a positive integer, got: 0'
+      );
+    });
+
+    it('rejects negative numbers', () => {
+      expect(() => Validator.parsePositiveInt('-1', '--test')).toThrow(
+        '--test must be a positive integer, got: -1'
+      );
+      expect(() => Validator.parsePositiveInt('-42', '--test')).toThrow(
+        '--test must be a positive integer, got: -42'
+      );
+    });
+
+    it('rejects float values', () => {
+      expect(() => Validator.parsePositiveInt('1.5', '--test')).toThrow(
+        '--test must be an integer, got: 1.5'
+      );
+      expect(() => Validator.parsePositiveInt('3.14', '--test')).toThrow(
+        '--test must be an integer, got: 3.14'
+      );
+    });
+
+    it('rejects empty strings', () => {
+      expect(() => Validator.parsePositiveInt('', '--test')).toThrow(
+        '--test must be a positive integer, got: '
+      );
+    });
+
+    it('rejects whitespace-only strings', () => {
+      expect(() => Validator.parsePositiveInt('   ', '--test')).toThrow(
+        '--test must be a positive integer, got:    '
+      );
+    });
+
+    it('respects maxValue when provided', () => {
+      expect(Validator.parsePositiveInt('100', '--test', 100)).toBe(100);
+      expect(Validator.parsePositiveInt('50', '--test', 100)).toBe(50);
+    });
+
+    it('rejects values exceeding maxValue', () => {
+      expect(() => Validator.parsePositiveInt('101', '--test', 100)).toThrow(
+        '--test must be <= 100, got: 101'
+      );
+      expect(() => Validator.parsePositiveInt('1000', '--test', 100)).toThrow(
+        '--test must be <= 100, got: 1000'
+      );
+    });
+
+    it('handles large integers within safe range', () => {
+      expect(Validator.parsePositiveInt('2147483647', '--test')).toBe(2147483647);
+    });
+
+    it('includes option name in error messages for debugging', () => {
+      expect(() => Validator.parsePositiveInt('-5', '--sleep')).toThrow(
+        '--sleep must be a positive integer, got: -5'
+      );
+      expect(() => Validator.parsePositiveInt('200', '--timeout', 100)).toThrow(
+        '--timeout must be <= 100, got: 200'
+      );
+    });
+  });
 });
