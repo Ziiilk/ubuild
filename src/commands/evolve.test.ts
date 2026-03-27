@@ -13,6 +13,7 @@ jest.mock('../utils/logger', () => ({
     warning: (...args: unknown[]) => mockLoggerWarning(...args),
     error: (...args: unknown[]) => mockLoggerError(...args),
   },
+  formatTimestamp: jest.fn(() => '00:00:00'),
 }));
 
 // Mock runSelfEvolution
@@ -635,7 +636,7 @@ describe('evolveCommand', () => {
   });
 
   describe('logger callback', () => {
-    it('passes logger function that uses Logger.info', async () => {
+    it('passes logger function that uses Logger.info with timestamp', async () => {
       mockRunSelfEvolution.mockImplementation((options) => {
         // Call the logger to test it works
         if (options.logger) {
@@ -648,7 +649,7 @@ describe('evolveCommand', () => {
 
       await program.parseAsync(['node', 'test', 'evolve']);
 
-      expect(mockLoggerInfo).toHaveBeenCalledWith('Test log message');
+      expect(mockLoggerInfo).toHaveBeenCalledWith('[00:00:00] Test log message');
     });
 
     it('logger function can be called multiple times', async () => {
@@ -665,9 +666,9 @@ describe('evolveCommand', () => {
 
       await program.parseAsync(['node', 'test', 'evolve']);
 
-      expect(mockLoggerInfo).toHaveBeenCalledWith('Message 1');
-      expect(mockLoggerInfo).toHaveBeenCalledWith('Message 2');
-      expect(mockLoggerInfo).toHaveBeenCalledWith('Message 3');
+      expect(mockLoggerInfo).toHaveBeenCalledWith('[00:00:00] Message 1');
+      expect(mockLoggerInfo).toHaveBeenCalledWith('[00:00:00] Message 2');
+      expect(mockLoggerInfo).toHaveBeenCalledWith('[00:00:00] Message 3');
     });
   });
 

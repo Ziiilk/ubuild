@@ -8,7 +8,7 @@
  */
 
 import { Command } from 'commander';
-import { Logger } from '../utils/logger';
+import { Logger, formatTimestamp } from '../utils/logger';
 import { runSelfEvolution } from '../core/self-driver';
 import { Validator } from '../utils/validator';
 import * as fs from 'fs-extra';
@@ -95,7 +95,7 @@ export function evolveCommand(program: Command): void {
 
       try {
         await runSelfEvolution({
-          logger: Logger.info,
+          logger: (msg: string) => Logger.info(`[${formatTimestamp()}] ${msg}`),
           once: options.once,
           dryRun: options.dryRun,
           sleepMs: options.sleep,
