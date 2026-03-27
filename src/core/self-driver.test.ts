@@ -1015,6 +1015,25 @@ describe('SelfDriver', () => {
 
       expect(result).toBe('Project files (unable to list - git exit code unknown)');
     });
+
+    it('returns unable-to-list message when files exist but none match categories', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          // Return files that don't match any category (no .json, .js, .md, .yml, .yaml, bin/, src/)
+          return mockExecaResult(0, 'some-random-file.txt\nanother-file.xml', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const getFileTree = (
+        driver as unknown as {
+          getFileTree: () => Promise<string>;
+        }
+      ).getFileTree;
+      const result = await getFileTree.call(driver);
+
+      expect(result).toBe('Project files (unable to list)');
+    });
   });
 
   describe('signal handling', () => {
@@ -2459,6 +2478,69 @@ describe('handlePostVerificationState', () => {
     );
   });
 
+  it('handles hash error when revert fails for dirty working tree', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    // Make all git commands fail to simulate revert failure
+    mockExeca.mockImplementation(async (command: string) => {
+      if (command === 'git') {
+        return mockExecaResult(1, '', 'fatal: error');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, false, false, true);
+
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Revert failed - manual intervention may be required')
+    );
+  });
+
+  it('handles uncommitted changes when revert fails', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    // Make all git commands fail to simulate revert failure
+    mockExeca.mockImplementation(async (command: string) => {
+      if (command === 'git') {
+        return mockExecaResult(1, '', 'fatal: error');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, false, false, false);
+
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Verification passed but AI did not commit changes')
+    );
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Revert failed - manual intervention may be required')
+    );
+  });
+
   it('handles uncommitted changes after verification passes', async () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ once: true, logger: mockLogger });
@@ -2533,6 +2615,58 @@ describe('handlePostVerificationState', () => {
     await handlePostVerificationState.call(driver, false, false, false);
 
     expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Reset failure counter'));
+  });
+
+  it('returns false when revert fails for hash error dirty tree', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    // Simulate revert failure - git reset succeeds but checkout fails
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout')) {
+        return mockExecaResult(1, '', 'fatal: checkout failed');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, false, false, true);
+
+    // Should return false when revert fails
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Revert failed - manual intervention may be required')
+    );
+  });
+
+  it('returns false and cleans up when revert fails in handleRevertFailure', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    const handleRevertFailure = (
+      driver as unknown as {
+        handleRevertFailure: (revertSuccess: boolean, reason: string) => boolean;
+      }
+    ).handleRevertFailure;
+
+    const result = handleRevertFailure.call(driver, false, 'Test revert failure');
+
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith(
+      '❌ Revert failed - manual intervention may be required'
+    );
   });
 });
 
