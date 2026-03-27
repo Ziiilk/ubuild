@@ -2424,6 +2424,46 @@ describe('handlePostVerificationState', () => {
       expect.stringContaining('Working tree is not clean, reverting to be safe')
     );
   });
+
+  it('handles uncommitted changes after verification passes', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    // Test the case where verification passed but AI did not commit changes
+    // isClean=false, hashError=false means working tree is dirty and we can verify commits
+    const result = await handlePostVerificationState.call(driver, false, false, false);
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Verification passed but AI did not commit changes')
+    );
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Reverting uncommitted changes')
+    );
+  });
 });
 
 describe('revert failure scenarios', () => {
