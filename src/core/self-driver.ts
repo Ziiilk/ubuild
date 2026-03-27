@@ -273,9 +273,18 @@ export class SelfDriver {
         // Verification passed, check if AI has committed by comparing commit hashes
         const isClean = await this.isWorkingTreeClean();
         const afterCommitHash = await this.getHeadCommitHash();
-        const hashChanged = beforeCommitHash !== afterCommitHash;
 
-        const shouldContinue = await this.handlePostVerificationState(isClean, hashChanged);
+        // Track hash comparison state - null means we couldn't determine the hash
+        const beforeHashError = beforeCommitHash === null;
+        const afterHashError = afterCommitHash === null;
+        const hashChanged =
+          !beforeHashError && !afterHashError && beforeCommitHash !== afterCommitHash;
+
+        const shouldContinue = await this.handlePostVerificationState(
+          isClean,
+          hashChanged,
+          beforeHashError || afterHashError
+        );
         if (!shouldContinue) {
           return;
         }
@@ -563,12 +572,31 @@ If verification fails, do NOT commit - the system will revert automatically.`;
    * Handles post-verification state by checking working tree cleanliness and commit status.
    * @param isClean - Whether the working tree is clean
    * @param hashChanged - Whether the commit hash changed (indicating AI committed)
+   * @param hashError - Whether there was an error getting commit hashes
    * @returns true if evolution should continue, false if it should stop
    */
   private async handlePostVerificationState(
     isClean: boolean,
-    hashChanged: boolean
+    hashChanged: boolean,
+    hashError: boolean
   ): Promise<boolean> {
+    // If we couldn't determine commit hashes, log a warning but continue
+    if (hashError) {
+      this.log('⚠️  Could not determine commit hash status (git error)');
+      if (isClean) {
+        this.log('ℹ️  Working tree is clean, assuming no changes made');
+        this.consecutiveFailures = 0;
+        return true;
+      }
+      // Not clean but can't verify commit - revert to be safe
+      this.log('⚠️  Working tree is not clean, reverting to be safe...');
+      const revertSuccess = await this.revert();
+      if (!this.handleRevertFailure(revertSuccess, 'Uncommitted changes (hash error)')) {
+        return false;
+      }
+      return true;
+    }
+
     if (isClean && hashChanged) {
       this.log('✅ Changes committed by AI');
       this.consecutiveFailures = 0; // Reset on success
@@ -601,11 +629,15 @@ If verification fails, do NOT commit - the system will revert automatically.`;
 
   /**
    * Gets the current HEAD commit hash.
-   * @returns The commit hash string, or empty string if not in a git repo or on error
+   * @returns The commit hash string, or null if not in a git repo or on error
    */
-  private async getHeadCommitHash(): Promise<string> {
+  private async getHeadCommitHash(): Promise<string | null> {
     const result = await this.safeExeca('git', ['rev-parse', 'HEAD']);
-    return result?.stdout.trim() ?? '';
+    if (!result || result.exitCode !== 0) {
+      return null;
+    }
+    const hash = result.stdout.trim();
+    return hash.length > 0 ? hash : null;
   }
 
   /**

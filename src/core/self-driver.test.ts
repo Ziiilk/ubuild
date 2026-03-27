@@ -914,14 +914,15 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const getHeadCommitHash = (driver as unknown as { getHeadCommitHash: () => Promise<string> })
-        .getHeadCommitHash;
+      const getHeadCommitHash = (
+        driver as unknown as { getHeadCommitHash: () => Promise<string | null> }
+      ).getHeadCommitHash;
       const result = await getHeadCommitHash.call(driver);
 
       expect(result).toBe('abc123def456');
     });
 
-    it('returns empty string when git rev-parse HEAD fails', async () => {
+    it('returns null when git rev-parse HEAD fails', async () => {
       mockExeca.mockImplementation(async (command: string, args?: string[]) => {
         if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
           return mockExecaResult(128, '', 'fatal: not a git repository');
@@ -929,14 +930,15 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const getHeadCommitHash = (driver as unknown as { getHeadCommitHash: () => Promise<string> })
-        .getHeadCommitHash;
+      const getHeadCommitHash = (
+        driver as unknown as { getHeadCommitHash: () => Promise<string | null> }
+      ).getHeadCommitHash;
       const result = await getHeadCommitHash.call(driver);
 
-      expect(result).toBe('');
+      expect(result).toBeNull();
     });
 
-    it('returns empty string when git command throws', async () => {
+    it('returns null when git command throws', async () => {
       mockExeca.mockImplementation(async (command: string) => {
         if (command === 'git') {
           throw new Error('Command not found');
@@ -944,11 +946,28 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const getHeadCommitHash = (driver as unknown as { getHeadCommitHash: () => Promise<string> })
-        .getHeadCommitHash;
+      const getHeadCommitHash = (
+        driver as unknown as { getHeadCommitHash: () => Promise<string | null> }
+      ).getHeadCommitHash;
       const result = await getHeadCommitHash.call(driver);
 
-      expect(result).toBe('');
+      expect(result).toBeNull();
+    });
+
+    it('returns null when git rev-parse HEAD returns empty output', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+          return mockExecaResult(0, '', ''); // Empty stdout
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const getHeadCommitHash = (
+        driver as unknown as { getHeadCommitHash: () => Promise<string | null> }
+      ).getHeadCommitHash;
+      const result = await getHeadCommitHash.call(driver);
+
+      expect(result).toBeNull();
     });
   });
 
@@ -1621,6 +1640,11 @@ describe('uncommitted changes after verification', () => {
         return mockExecaResult(0, '.git', '');
       }
 
+      // Git rev-parse HEAD - returns same commit hash before and after evolution (no commit made)
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+        return mockExecaResult(0, 'abc123def456789012345678901234567890abcd', '');
+      }
+
       // Git status - first call is clean (pre-flight), second call shows uncommitted changes
       if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
         statusCallCount++;
@@ -1658,9 +1682,15 @@ describe('uncommitted changes after verification', () => {
         return mockExecaResult(0, 'Usage: [command] [options]', '');
       }
 
-      // Revert is called
+      // Revert commands - git reset, git checkout, git clean
+      if (command === 'git' && args?.includes('reset') && !args?.includes('--hard')) {
+        return mockExecaResult(0, '', '');
+      }
       if (command === 'git' && args?.includes('checkout') && args?.includes('.')) {
         revertCalled = true;
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean') && args?.includes('-fd')) {
         return mockExecaResult(0, '', '');
       }
 
@@ -2052,24 +2082,108 @@ describe('handlePostVerificationState', () => {
     }
   });
 
-  it('handles SKIP scenario when isClean && !hashChanged', async () => {
+  it('handles SKIP scenario when isClean && !hashChanged && !hashError', async () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ once: true, logger: mockLogger });
 
     // Access private method via type assertion
     const handlePostVerificationState = (
       driver as unknown as {
-        handlePostVerificationState: (isClean: boolean, hashChanged: boolean) => Promise<boolean>;
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
       }
     ).handlePostVerificationState;
 
     // Test the SKIP scenario: working tree is clean but hash didn't change
     // This means AI made no changes this iteration
-    const result = await handlePostVerificationState.call(driver, true, false);
+    const result = await handlePostVerificationState.call(driver, true, false, false);
 
     expect(result).toBe(true); // Should continue evolution
     expect(mockLogger).toHaveBeenCalledWith(
       expect.stringContaining('AI made no changes this iteration (SKIP)')
+    );
+  });
+
+  it('handles COMMITTED scenario when isClean && hashChanged', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, true, true, false);
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Changes committed by AI'));
+  });
+
+  it('handles hash error when working tree is clean', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, true, false, true);
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Could not determine commit hash status')
+    );
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Working tree is clean, assuming no changes made')
+    );
+  });
+
+  it('handles hash error when working tree is not clean (reverts)', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, false, false, true);
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Working tree is not clean, reverting to be safe')
     );
   });
 });
