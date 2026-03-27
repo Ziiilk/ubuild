@@ -267,6 +267,8 @@ export class ProjectRunner {
         const duration = (Date.now() - startTime) / 1000;
         if (code === 0) {
           this.logger.success(`Process completed successfully in ${duration.toFixed(1)}s`);
+        } else if (code === null) {
+          this.logger.error(`Process terminated abnormally after ${duration.toFixed(1)}s`);
         } else {
           this.logger.error(`Process exited with code ${code} after ${duration.toFixed(1)}s`);
         }

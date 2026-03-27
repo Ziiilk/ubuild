@@ -829,6 +829,45 @@ describe('ProjectRunner', () => {
       });
     });
 
+    it('handles process exit with null code (abnormal termination)', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+        const engine = await createFakeEngine(rootDir);
+        const capture = createOutputCapture();
+
+        mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+        mockExeca.mockImplementation(() => {
+          const child = createFakeExecaChild({ exitCode: 0 });
+          const originalOn = child.on.bind(child);
+          // Override the exit handler to simulate null exit code (abnormal termination)
+          // In real scenarios, Node.js child_process can emit null for exit code
+          child.on = ((event: string, listener: (code: number | null) => void) => {
+            if (event === 'exit') {
+              // Call the listener with null to simulate abnormal termination
+              listener(null);
+            }
+            return originalOn(event as 'exit', listener as (code: number) => void);
+          }) as typeof child.on;
+          return child;
+        });
+
+        const runner = new ProjectRunner({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await runner.run({
+          project: project.projectDir,
+          enginePath: engine.enginePath,
+          target: 'Editor',
+          config: 'Development',
+          platform: 'Win64',
+        });
+
+        expect(capture.getStderr()).toContain('Process terminated abnormally');
+      });
+    });
+
     it('uses default values when options are not provided', async () => {
       await withTempDir(async (rootDir) => {
         const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
