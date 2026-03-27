@@ -715,7 +715,7 @@ describe('SelfDriver', () => {
       ).getFileTree;
       const result = await getFileTree.call(driver);
 
-      expect(result).toBe('Project files (error occurred)');
+      expect(result).toBe('Project files (unable to list - git exit code unknown)');
     });
   });
 

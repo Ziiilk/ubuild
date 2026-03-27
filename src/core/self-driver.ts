@@ -69,6 +69,28 @@ export class SelfDriver {
   }
 
   /**
+   * Safely executes a command with execa, catching errors and returning null on failure.
+   * Logs errors with context for debugging.
+   */
+  private async safeExeca(
+    command: string,
+    args: string[],
+    options?: { cwd?: string; reject?: boolean; timeout?: number }
+  ): Promise<{ exitCode: number; stdout: string; stderr: string } | null> {
+    try {
+      const result = await execa(command, args, {
+        cwd: this.projectRoot,
+        reject: false,
+        ...options,
+      });
+      return result;
+    } catch (error) {
+      this.log(`⚠️  ${command} failed: ${formatError(error)}`);
+      return null;
+    }
+  }
+
+  /**
    * Sets up signal handlers for graceful interruption (Ctrl+C, SIGTERM).
    */
   private setupSignalHandlers(): void {
@@ -133,33 +155,16 @@ export class SelfDriver {
    * Checks if current directory is a git repository.
    */
   private async isGitRepository(): Promise<boolean> {
-    try {
-      const result = await execa('git', ['rev-parse', '--git-dir'], {
-        cwd: this.projectRoot,
-        reject: false,
-      });
-      return result.exitCode === 0;
-    } catch (error) {
-      this.log(`⚠️  Git check failed: ${formatError(error)}`);
-      return false;
-    }
+    const result = await this.safeExeca('git', ['rev-parse', '--git-dir']);
+    return result?.exitCode === 0;
   }
 
   /**
    * Checks if OpenCode CLI is installed and available in PATH.
    */
   private async isOpenCodeInstalled(): Promise<boolean> {
-    try {
-      const result = await execa('opencode', ['--version'], {
-        cwd: this.projectRoot,
-        reject: false,
-      });
-      return result.exitCode === 0;
-    } catch (error) {
-      // Log debug info for troubleshooting OpenCode detection issues
-      this.log(`⚠️  OpenCode detection failed: ${formatError(error)}`);
-      return false;
-    }
+    const result = await this.safeExeca('opencode', ['--version']);
+    return result?.exitCode === 0;
   }
 
   /**
@@ -309,80 +314,68 @@ export class SelfDriver {
    * Uses a single git ls-files call with multiple pathspecs for efficiency.
    */
   private async getFileTree(): Promise<string> {
-    try {
-      // Single git ls-files call with all pathspecs for efficiency
-      const result = await execa(
-        'git',
-        [
-          'ls-files',
-          '--others',
-          '--exclude-standard',
-          '--cached',
-          '--',
-          '*.json',
-          '*.js',
-          '*.md',
-          '*.yml',
-          '*.yaml',
-          'bin/',
-          'src/',
-        ],
-        {
-          cwd: this.projectRoot,
-          reject: false,
-        }
-      );
+    // Single git ls-files call with all pathspecs for efficiency
+    const result = await this.safeExeca('git', [
+      'ls-files',
+      '--others',
+      '--exclude-standard',
+      '--cached',
+      '--',
+      '*.json',
+      '*.js',
+      '*.md',
+      '*.yml',
+      '*.yaml',
+      'bin/',
+      'src/',
+    ]);
 
-      if (!result.stdout.trim()) {
-        const exitCode = result.exitCode ?? 'unknown';
-        return `Project files (unable to list - git exit code ${exitCode})`;
-      }
-
-      // Categorize files by type
-      const files = result.stdout.split('\n').filter((f) => f.trim());
-      const configFiles: string[] = [];
-      const binFiles: string[] = [];
-      const srcFiles: string[] = [];
-
-      for (const file of files) {
-        if (file.startsWith('src/')) {
-          srcFiles.push(file);
-        } else if (file.startsWith('bin/')) {
-          binFiles.push(file);
-        } else if (
-          file.endsWith('.json') ||
-          file.endsWith('.js') ||
-          file.endsWith('.md') ||
-          file.endsWith('.yml') ||
-          file.endsWith('.yaml')
-        ) {
-          configFiles.push(file);
-        }
-      }
-
-      const parts: string[] = [];
-
-      if (configFiles.length > 0) {
-        parts.push('## Configuration Files\n' + configFiles.join('\n'));
-      }
-
-      if (binFiles.length > 0) {
-        parts.push('## Bin Files\n' + binFiles.join('\n'));
-      }
-
-      if (srcFiles.length > 0) {
-        parts.push('## Source Files\n' + srcFiles.join('\n'));
-      }
-
-      if (parts.length === 0) {
-        return 'Project files (unable to list)';
-      }
-
-      return parts.join('\n\n');
-    } catch (error) {
-      this.log(`⚠️  Error getting file tree: ${formatError(error)}`);
-      return 'Project files (error occurred)';
+    if (!result || !result.stdout.trim()) {
+      const exitCode = result?.exitCode ?? 'unknown';
+      return `Project files (unable to list - git exit code ${exitCode})`;
     }
+
+    // Categorize files by type
+    const files = result.stdout.split('\n').filter((f) => f.trim());
+    const configFiles: string[] = [];
+    const binFiles: string[] = [];
+    const srcFiles: string[] = [];
+
+    for (const file of files) {
+      if (file.startsWith('src/')) {
+        srcFiles.push(file);
+      } else if (file.startsWith('bin/')) {
+        binFiles.push(file);
+      } else if (
+        file.endsWith('.json') ||
+        file.endsWith('.js') ||
+        file.endsWith('.md') ||
+        file.endsWith('.yml') ||
+        file.endsWith('.yaml')
+      ) {
+        configFiles.push(file);
+      }
+    }
+
+    const parts: string[] = [];
+
+    if (configFiles.length > 0) {
+      parts.push('## Configuration Files\n' + configFiles.join('\n'));
+    }
+
+    if (binFiles.length > 0) {
+      parts.push('## Bin Files\n' + binFiles.join('\n'));
+    }
+
+    if (srcFiles.length > 0) {
+      parts.push('## Source Files\n' + srcFiles.join('\n'));
+    }
+
+    if (parts.length === 0) {
+      return 'Project files (unable to list)';
+    }
+
+    return parts.join('\n\n');
   }
 
   /**
@@ -499,34 +492,27 @@ If verification fails, do NOT commit - the system will revert automatically.`;
     ];
 
     for (const check of checks) {
-      try {
-        this.log(`  Checking ${check.name}...`);
-        const result = await execa(check.file, check.args, {
-          cwd: this.projectRoot,
-          reject: false,
-          timeout: this.verifyTimeoutMs,
-        });
+      this.log(`  Checking ${check.name}...`);
+      const result = await this.safeExeca(check.file, check.args, {
+        timeout: this.verifyTimeoutMs,
+      });
 
-        if (!result || result.exitCode !== 0) {
-          this.log(`  ❌ ${check.name} failed`);
-          // Show error output for debugging
-          if (result?.stderr) {
-            const stderrPreview = result.stderr.slice(0, 2000);
-            this.log(`     Error: ${stderrPreview}`);
-          }
-          if (result?.stdout) {
-            const stdoutPreview = result.stdout.slice(0, 2000);
-            if (stdoutPreview) {
-              this.log(`     Output: ${stdoutPreview}`);
-            }
-          }
-          return false;
+      if (!result || result.exitCode !== 0) {
+        this.log(`  ❌ ${check.name} failed`);
+        // Show error output for debugging
+        if (result?.stderr) {
+          const stderrPreview = result.stderr.slice(0, 2000);
+          this.log(`     Error: ${stderrPreview}`);
         }
-        this.log(`  ✅ ${check.name} passed`);
-      } catch (error) {
-        this.log(`  ❌ ${check.name} error: ${formatError(error)}`);
+        if (result?.stdout) {
+          const stdoutPreview = result.stdout.slice(0, 2000);
+          if (stdoutPreview) {
+            this.log(`     Output: ${stdoutPreview}`);
+          }
+        }
         return false;
       }
+      this.log(`  ✅ ${check.name} passed`);
     }
 
     return true;
@@ -606,16 +592,8 @@ If verification fails, do NOT commit - the system will revert automatically.`;
    * Checks if working tree is clean (all changes committed).
    */
   private async isWorkingTreeClean(): Promise<boolean> {
-    try {
-      const status = await execa('git', ['status', '--porcelain'], {
-        cwd: this.projectRoot,
-        reject: false,
-      });
-      return status.stdout.trim().length === 0;
-    } catch (error) {
-      this.log(`⚠️  Git status check failed: ${formatError(error)}`);
-      return false;
-    }
+    const result = await this.safeExeca('git', ['status', '--porcelain']);
+    return result ? result.stdout.trim().length === 0 : false;
   }
 
   /**
@@ -623,16 +601,8 @@ If verification fails, do NOT commit - the system will revert automatically.`;
    * @returns The commit hash string, or empty string if not in a git repo or on error
    */
   private async getHeadCommitHash(): Promise<string> {
-    try {
-      const result = await execa('git', ['rev-parse', 'HEAD'], {
-        cwd: this.projectRoot,
-        reject: false,
-      });
-      return result.stdout.trim();
-    } catch (error) {
-      this.log(`⚠️  Git commit hash check failed: ${formatError(error)}`);
-      return '';
-    }
+    const result = await this.safeExeca('git', ['rev-parse', 'HEAD']);
+    return result?.stdout.trim() ?? '';
   }
 
   /**
@@ -640,18 +610,28 @@ If verification fails, do NOT commit - the system will revert automatically.`;
    * @returns true if revert succeeded, false otherwise
    */
   private async revert(): Promise<boolean> {
-    try {
-      // First reset any staged changes, then revert working tree
-      await execa('git', ['reset', 'HEAD'], { cwd: this.projectRoot });
-      await execa('git', ['checkout', '.'], { cwd: this.projectRoot });
-      // Remove untracked files and directories to prevent accumulation across iterations
-      await execa('git', ['clean', '-fd'], { cwd: this.projectRoot });
-      this.log('🔄 Reverted changes');
-      return true;
-    } catch (error) {
-      this.log(`⚠️  Revert failed: ${formatError(error)}`);
+    // First reset any staged changes, then revert working tree
+    const resetResult = await this.safeExeca('git', ['reset', 'HEAD']);
+    if (!resetResult || resetResult.exitCode !== 0) {
+      this.log('⚠️  Git reset failed');
       return false;
     }
+
+    const checkoutResult = await this.safeExeca('git', ['checkout', '.']);
+    if (!checkoutResult || checkoutResult.exitCode !== 0) {
+      this.log('⚠️  Git checkout failed');
+      return false;
+    }
+
+    // Remove untracked files and directories to prevent accumulation across iterations
+    const cleanResult = await this.safeExeca('git', ['clean', '-fd']);
+    if (!cleanResult || cleanResult.exitCode !== 0) {
+      this.log('⚠️  Git clean failed');
+      return false;
+    }
+
+    this.log('🔄 Reverted changes');
+    return true;
   }
 
   /**
