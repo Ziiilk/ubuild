@@ -614,7 +614,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
    */
   private async revert(): Promise<boolean> {
     // First reset any staged changes, then revert working tree
-    const resetResult = await this.safeExeca('git', ['reset', 'HEAD']);
+    const resetResult = await this.safeExeca('git', ['reset']);
     if (!resetResult || resetResult.exitCode !== 0) {
       this.log('⚠️  Git reset failed');
       return false;
