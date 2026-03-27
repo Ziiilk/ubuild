@@ -161,7 +161,7 @@ describe('ProjectRunner', () => {
         })
       ).rejects.toThrow('Invalid target');
 
-      expect(capture.getStderr()).toContain('Invalid run target');
+      expect(capture.getStderr()).toContain('Invalid build target');
     });
 
     it('throws error for invalid config', async () => {
@@ -197,7 +197,7 @@ describe('ProjectRunner', () => {
         })
       ).rejects.toThrow('Invalid platform');
 
-      expect(capture.getStderr()).toContain('Invalid platform: InvalidPlatform');
+      expect(capture.getStderr()).toContain('Invalid build platform: InvalidPlatform');
     });
   });
 

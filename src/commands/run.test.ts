@@ -140,7 +140,7 @@ describe('runProject', () => {
 
     expect(mockBuildExecute).not.toHaveBeenCalled();
     expect(mockExeca).not.toHaveBeenCalled();
-    expect(capture.getStderr()).toContain('Invalid platform: PS5');
+    expect(capture.getStderr()).toContain('Invalid build platform: PS5');
     expect(capture.getStdout()).toContain(
       'Valid platforms: Win64, Win32, Linux, Mac, Android, IOS'
     );

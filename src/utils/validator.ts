@@ -213,6 +213,59 @@ export class Validator {
   }
 
   /**
+   * Validates build options (target, config, platform) with defaults and error logging.
+   * Consolidates the validation pattern used across ProjectBuilder and ProjectRunner.
+   *
+   * @param options - Raw build options to validate
+   * @param options.target - Build target (defaults to 'Editor')
+   * @param options.config - Build configuration (defaults to 'Development')
+   * @param options.platform - Build platform (defaults to 'Win64')
+   * @param logger - Optional logger for error output
+   * @returns Validated options with defaults applied
+   * @throws Error if any validation fails
+   *
+   * @example
+   * ```typescript
+   * const validated = Validator.validateBuildOptions({
+   *   target: 'Game',
+   *   config: 'Shipping',
+   * }, logger);
+   * // validated.target = 'Game', validated.config = 'Shipping', validated.platform = 'Win64'
+   * ```
+   */
+  static validateBuildOptions(
+    options: { target?: string; config?: string; platform?: string },
+    logger?: { error: (msg: string) => void; info: (msg: string) => void }
+  ): { target: string; config: string; platform: string } {
+    // Validate provided values BEFORE applying defaults
+    // Empty string is explicitly invalid, undefined gets default
+    if (options.target !== undefined && !this.isValidBuildTarget(options.target)) {
+      logger?.error(`Invalid build target: ${options.target}`);
+      logger?.info('Valid generic targets: Editor, Game, Client, Server');
+      throw new Error('Invalid target');
+    }
+
+    if (options.config !== undefined && !this.isValidBuildConfig(options.config)) {
+      logger?.error(`Invalid build configuration: ${options.config}`);
+      logger?.info('Valid configurations: Debug, DebugGame, Development, Shipping, Test');
+      throw new Error('Invalid config');
+    }
+
+    if (options.platform !== undefined && !this.isValidBuildPlatform(options.platform)) {
+      logger?.error(`Invalid build platform: ${options.platform}`);
+      logger?.info('Valid platforms: Win64, Win32, Linux, Mac, Android, IOS');
+      throw new Error('Invalid platform');
+    }
+
+    // Apply defaults only for undefined values
+    const target = options.target ?? 'Editor';
+    const config = options.config ?? 'Development';
+    const platform = options.platform ?? 'Win64';
+
+    return { target, config, platform };
+  }
+
+  /**
    * Checks if a directory is safe for project initialization.
    * @param directory - The directory to check
    * @param force - Whether to override safety checks

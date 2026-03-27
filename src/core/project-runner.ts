@@ -96,27 +96,8 @@ export class ProjectRunner {
   async run(options: RunOptions): Promise<void> {
     this.logger.title('Run Unreal Engine Project');
 
-    // Validate and capture typed values
-    const target = options.target || 'Editor';
-    if (!Validator.isValidBuildTarget(target)) {
-      this.logger.error(`Invalid run target: ${options.target}`);
-      this.logger.info('Valid targets: Editor, Game, Client, Server');
-      throw new Error('Invalid target');
-    }
-
-    const config = options.config || 'Development';
-    if (!Validator.isValidBuildConfig(config)) {
-      this.logger.error(`Invalid build configuration: ${options.config}`);
-      this.logger.info('Valid configurations: Debug, DebugGame, Development, Shipping, Test');
-      throw new Error('Invalid config');
-    }
-
-    const platform = options.platform || 'Win64';
-    if (!Validator.isValidBuildPlatform(platform)) {
-      this.logger.error(`Invalid platform: ${options.platform}`);
-      this.logger.info('Valid platforms: Win64, Win32, Linux, Mac, Android, IOS');
-      throw new Error('Invalid platform');
-    }
+    // Validate and apply defaults for run options
+    const { target, config, platform } = Validator.validateBuildOptions(options, this.logger);
 
     // Create validated options with proper types
     const validatedOptions: RunOptions = {

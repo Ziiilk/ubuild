@@ -96,28 +96,8 @@ export class ProjectBuilder {
       return;
     }
 
-    // Validate and capture typed values
-    const target = options.target || 'Editor';
-    if (!Validator.isValidBuildTarget(target)) {
-      this.logger.error(`Invalid build target: ${options.target}`);
-      this.logger.info('Valid generic targets: Editor, Game, Client, Server');
-      this.logger.info('Use --list-targets to see available project-specific targets');
-      throw new Error('Invalid target');
-    }
-
-    const config = options.config || 'Development';
-    if (!Validator.isValidBuildConfig(config)) {
-      this.logger.error(`Invalid build configuration: ${options.config}`);
-      this.logger.info('Valid configurations: Debug, DebugGame, Development, Shipping, Test');
-      throw new Error('Invalid config');
-    }
-
-    const platform = options.platform || 'Win64';
-    if (!Validator.isValidBuildPlatform(platform)) {
-      this.logger.error(`Invalid build platform: ${options.platform}`);
-      this.logger.info('Valid platforms: Win64, Win32, Linux, Mac, Android, IOS');
-      throw new Error('Invalid platform');
-    }
+    // Validate and apply defaults for build options
+    const { target, config, platform } = Validator.validateBuildOptions(options, this.logger);
 
     if (options.dryRun) {
       await this.dryRunBuild({ ...options, target, config, platform });

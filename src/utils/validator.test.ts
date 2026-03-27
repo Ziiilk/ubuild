@@ -559,4 +559,103 @@ describe('Validator', () => {
       );
     });
   });
+
+  describe('validateBuildOptions', () => {
+    it('applies default values when options are not provided', () => {
+      const result = Validator.validateBuildOptions({});
+      expect(result.target).toBe('Editor');
+      expect(result.config).toBe('Development');
+      expect(result.platform).toBe('Win64');
+    });
+
+    it('returns provided values when all are valid', () => {
+      const result = Validator.validateBuildOptions({
+        target: 'Game',
+        config: 'Shipping',
+        platform: 'Linux',
+      });
+      expect(result.target).toBe('Game');
+      expect(result.config).toBe('Shipping');
+      expect(result.platform).toBe('Linux');
+    });
+
+    it('applies defaults for partially provided options', () => {
+      const result = Validator.validateBuildOptions({ target: 'Server' });
+      expect(result.target).toBe('Server');
+      expect(result.config).toBe('Development');
+      expect(result.platform).toBe('Win64');
+    });
+
+    it('throws error for invalid target', () => {
+      expect(() => Validator.validateBuildOptions({ target: '' })).toThrow('Invalid target');
+    });
+
+    it('throws error for invalid config', () => {
+      expect(() => Validator.validateBuildOptions({ config: 'Release' })).toThrow('Invalid config');
+    });
+
+    it('throws error for invalid platform', () => {
+      expect(() => Validator.validateBuildOptions({ platform: 'Windows' })).toThrow(
+        'Invalid platform'
+      );
+    });
+
+    it('calls logger.error and logger.info when target validation fails', () => {
+      const mockLogger = {
+        error: jest.fn(),
+        info: jest.fn(),
+      };
+
+      expect(() => Validator.validateBuildOptions({ target: '' }, mockLogger)).toThrow(
+        'Invalid target'
+      );
+      expect(mockLogger.error).toHaveBeenCalledWith('Invalid build target: ');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Valid generic targets: Editor, Game, Client, Server'
+      );
+    });
+
+    it('calls logger methods when config validation fails', () => {
+      const mockLogger = {
+        error: jest.fn(),
+        info: jest.fn(),
+      };
+
+      expect(() => Validator.validateBuildOptions({ config: 'Release' }, mockLogger)).toThrow(
+        'Invalid config'
+      );
+      expect(mockLogger.error).toHaveBeenCalledWith('Invalid build configuration: Release');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Valid configurations: Debug, DebugGame, Development, Shipping, Test'
+      );
+    });
+
+    it('calls logger methods when platform validation fails', () => {
+      const mockLogger = {
+        error: jest.fn(),
+        info: jest.fn(),
+      };
+
+      expect(() => Validator.validateBuildOptions({ platform: 'Windows' }, mockLogger)).toThrow(
+        'Invalid platform'
+      );
+      expect(mockLogger.error).toHaveBeenCalledWith('Invalid build platform: Windows');
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Valid platforms: Win64, Win32, Linux, Mac, Android, IOS'
+      );
+    });
+
+    it('works without a logger', () => {
+      expect(() => Validator.validateBuildOptions({ target: '' })).toThrow('Invalid target');
+      expect(() => Validator.validateBuildOptions({ config: 'Release' })).toThrow('Invalid config');
+      expect(() => Validator.validateBuildOptions({ platform: 'Windows' })).toThrow(
+        'Invalid platform'
+      );
+    });
+
+    it('accepts custom target names', () => {
+      const result = Validator.validateBuildOptions({ target: 'MyCustomTarget' });
+      expect(result.target).toBe('MyCustomTarget');
+    });
+  });
 });
