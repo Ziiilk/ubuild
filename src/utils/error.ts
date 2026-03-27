@@ -1,11 +1,13 @@
 /**
- * Error handling utilities for ubuild
+ * Error handling utilities for ubuild.
  *
  * Provides standardized error formatting and normalization functions
  * to ensure consistent error messages across the codebase.
  *
  * @module utils/error
  */
+
+import { Logger } from './logger';
 
 /**
  * Formats an unknown error value into a human-readable string.
@@ -135,9 +137,6 @@ export function isError(value: unknown): value is Error {
  * ```
  */
 export function handleCommandError(error: unknown, prefix = 'Unexpected error'): never {
-  // Use require to avoid circular dependency with Logger
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { Logger } = require('./logger');
   Logger.error(`${prefix}: ${formatError(error)}`);
   Logger.error('Exiting with error code 1');
   process.exit(1);
