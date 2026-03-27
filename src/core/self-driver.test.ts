@@ -2012,3 +2012,213 @@ describe('verification timeout behavior', () => {
     expect(opencodeCallCount).toBe(2);
   });
 });
+
+describe('handlePostVerificationState', () => {
+  beforeEach(() => {
+    driver = new SelfDriver({ once: true });
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+  });
+
+  it('handles SKIP scenario when isClean && !hashChanged', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    // Access private method via type assertion
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (isClean: boolean, hashChanged: boolean) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    // Test the SKIP scenario: working tree is clean but hash didn't change
+    // This means AI made no changes this iteration
+    const result = await handlePostVerificationState.call(driver, true, false);
+
+    expect(result).toBe(true); // Should continue evolution
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('AI made no changes this iteration (SKIP)')
+    );
+  });
+});
+
+describe('revert failure scenarios', () => {
+  beforeEach(() => {
+    driver = new SelfDriver();
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+  });
+
+  it('handles git reset failure', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(1, '', 'fatal: Cannot reset');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const revert = (driver as unknown as { revert: () => Promise<boolean> }).revert;
+    const result = await revert.call(driver);
+
+    expect(result).toBe(false); // Should return false on failure
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Git reset failed'));
+  });
+
+  it('handles git clean failure', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(1, '', 'fatal: Cannot clean');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const revert = (driver as unknown as { revert: () => Promise<boolean> }).revert;
+    const result = await revert.call(driver);
+
+    expect(result).toBe(false); // Should return false on failure
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Git clean failed'));
+  });
+});
+
+describe('verify with useTsNode=false', () => {
+  beforeEach(() => {
+    driver = new SelfDriver({ useTsNode: false });
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+  });
+
+  it('uses dist mode for verification when useTsNode=false', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ useTsNode: false, logger: mockLogger });
+
+    let distCommandCalled = false;
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      // Check if dist mode is being used (node dist/cli/index.js)
+      if (command === 'node' && args?.includes('dist/cli/index.js')) {
+        distCommandCalled = true;
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      // npm commands should pass
+      if (command === 'npm') {
+        return mockExecaResult(0, '', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+    const result = await verify.call(driver);
+
+    expect(result).toBe(true);
+    expect(distCommandCalled).toBe(true); // Should use dist mode, not ts-node
+  });
+});
+
+describe('interrupted loop exit', () => {
+  const drivers: SelfDriver[] = [];
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode succeeds
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // Verification checks pass
+      if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'npm' && args?.includes('test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (command === 'npm' && args?.includes('run') && args?.includes('lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'node' && args?.includes('dist/cli/index.js') && args?.includes('evolve')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+      if (command === 'node' && args?.includes('dist/cli/index.js') && args?.includes('list')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+  });
+
+  afterEach(() => {
+    drivers.forEach((d) => d.cleanup());
+    drivers.length = 0;
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('exits loop gracefully when interrupted by SIGINT', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: false, logger: mockLogger, sleepMs: 50 });
+    drivers.push(driver);
+
+    // Access private run method
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+
+    // Start the run loop in the background
+    const runPromise = run.call(driver);
+
+    // Wait a bit for the loop to start
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Simulate SIGINT to interrupt the loop
+    process.emit('SIGINT' as NodeJS.Signals);
+
+    // Wait for the run to complete
+    await runPromise;
+
+    // Should log that evolution stopped
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Evolution stopped'));
+  });
+});
