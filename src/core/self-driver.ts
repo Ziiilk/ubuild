@@ -101,6 +101,7 @@ export class SelfDriver {
     if (this.cleanedUp) return; // Prevent double-cleanup
     this.cleanedUp = true;
     this.sleepCancelled = true;
+    this.log('🧹 Cleaning up signal handlers and timers...');
 
     if (this.sigintHandler) {
       process.removeListener('SIGINT', this.sigintHandler);
@@ -125,6 +126,7 @@ export class SelfDriver {
       this.sleepResolve();
       this.sleepResolve = null;
     }
+    this.log('✅ Cleanup completed');
   }
 
   /**
@@ -464,7 +466,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
 
       // Log stderr if present for debugging
       if (result.stderr && result.stderr.trim()) {
-        const stderrPreview = result.stderr.slice(0, 1000);
+        const stderrPreview = result.stderr.slice(0, 5000);
         this.log(`OpenCode stderr: ${stderrPreview}`);
       }
 
@@ -520,11 +522,11 @@ If verification fails, do NOT commit - the system will revert automatically.`;
           this.log(`  ❌ ${check.name} failed`);
           // Show error output for debugging
           if (result?.stderr) {
-            const stderrPreview = result.stderr.slice(0, 500);
+            const stderrPreview = result.stderr.slice(0, 2000);
             this.log(`     Error: ${stderrPreview}`);
           }
           if (result?.stdout) {
-            const stdoutPreview = result.stdout.slice(0, 500);
+            const stdoutPreview = result.stdout.slice(0, 2000);
             if (stdoutPreview) {
               this.log(`     Output: ${stdoutPreview}`);
             }

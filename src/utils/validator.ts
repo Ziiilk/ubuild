@@ -41,6 +41,28 @@ import {
  */
 export class Validator {
   /**
+   * Parses and validates a positive integer option value.
+   * @param value - The raw string value to parse
+   * @param optionName - The name of the option for error messages
+   * @param maxValue - Optional maximum allowed value
+   * @returns The parsed positive integer
+   * @throws Error if value is not a valid positive integer or exceeds maximum
+   */
+  static parsePositiveInt(value: string, optionName: string, maxValue?: number): number {
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      throw new Error(`${optionName} must be a positive integer, got: ${value}`);
+    }
+    if (parsed !== parseFloat(value)) {
+      throw new Error(`${optionName} must be an integer, got: ${value}`);
+    }
+    if (maxValue !== undefined && parsed > maxValue) {
+      throw new Error(`${optionName} must be <= ${maxValue}, got: ${value}`);
+    }
+    return parsed;
+  }
+
+  /**
    * Validates a project name format (alphanumeric, underscores, hyphens).
    * @param name - The project name to validate
    * @returns True if the name is valid

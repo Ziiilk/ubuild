@@ -11,6 +11,7 @@ import { Command } from 'commander';
 import { Logger } from '../utils/logger';
 import { formatError } from '../utils/error';
 import { runSelfEvolution } from '../core/self-driver';
+import { Validator } from '../utils/validator';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 
@@ -29,28 +30,6 @@ export { runSelfEvolution } from '../core/self-driver';
 export type { SelfEvolverOptions } from '../types/evolve';
 
 /**
- * Parses and validates a positive integer option value.
- * @param value - The raw string value from CLI
- * @param optionName - The name of the option for error messages
- * @param maxValue - Optional maximum allowed value
- * @returns The parsed positive integer
- * @throws Error if value is not a valid positive integer or exceeds maximum
- */
-function parsePositiveInt(value: string, optionName: string, maxValue?: number): number {
-  const parsed = parseInt(value, 10);
-  if (isNaN(parsed) || parsed <= 0) {
-    throw new Error(`${optionName} must be a positive integer, got: ${value}`);
-  }
-  if (parsed !== parseFloat(value)) {
-    throw new Error(`${optionName} must be an integer, got: ${value}`);
-  }
-  if (maxValue !== undefined && parsed > maxValue) {
-    throw new Error(`${optionName} must be <= ${maxValue}, got: ${value}`);
-  }
-  return parsed;
-}
-
-/**
  * Register the 'evolve' command for self-evolution using OpenCode.
  *
  * This command runs a self-improvement loop that continuously analyzes
@@ -67,18 +46,18 @@ export function evolveCommand(program: Command): void {
     .option(
       '--sleep <ms>',
       'Sleep duration between iterations in milliseconds (default: 5000)',
-      (value) => parsePositiveInt(value, '--sleep', 3600000) // Max 1 hour
+      (value) => Validator.parsePositiveInt(value, '--sleep', 3600000) // Max 1 hour
     )
     .option('--use-ts-node', 'Use ts-node for verification instead of compiled dist')
     .option(
       '--verify-timeout <ms>',
       'Timeout for verification checks in milliseconds (default: 60000)',
-      (value) => parsePositiveInt(value, '--verify-timeout', 600000) // Max 10 minutes
+      (value) => Validator.parsePositiveInt(value, '--verify-timeout', 600000) // Max 10 minutes
     )
     .option(
       '--opencode-timeout <ms>',
       'Timeout for OpenCode execution in milliseconds (default: 600000)',
-      (value) => parsePositiveInt(value, '--opencode-timeout', 3600000) // Max 1 hour
+      (value) => Validator.parsePositiveInt(value, '--opencode-timeout', 3600000) // Max 1 hour
     )
     .option(
       '--max-retries <n>',
