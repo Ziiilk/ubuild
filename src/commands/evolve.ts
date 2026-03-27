@@ -76,24 +76,24 @@ export function evolveCommand(program: Command): void {
       }
     )
     .action(async (options) => {
-      Logger.title('ubuild Self-Evolution');
-      Logger.info('Using OpenCode (default model)');
-
-      if (options.once) {
-        Logger.info('Mode: Single iteration (--once)\n');
-      } else {
-        Logger.info('Runs forever until Ctrl+C\n');
-      }
-
-      // Pre-flight check: EVOLVE.md should exist (warn only)
-      const projectRoot = process.cwd();
-      const constitutionPath = path.join(projectRoot, 'EVOLVE.md');
-      if (!(await fs.pathExists(constitutionPath))) {
-        Logger.warning('Warning: EVOLVE.md not found in project root');
-        Logger.warning('  Evolution will proceed without constitution guidance');
-      }
-
       try {
+        Logger.title('ubuild Self-Evolution');
+        Logger.info('Using OpenCode (default model)');
+
+        if (options.once) {
+          Logger.info('Mode: Single iteration (--once)\n');
+        } else {
+          Logger.info('Runs forever until Ctrl+C\n');
+        }
+
+        // Pre-flight check: EVOLVE.md should exist (warn only)
+        const projectRoot = process.cwd();
+        const constitutionPath = path.join(projectRoot, 'EVOLVE.md');
+        if (!(await fs.pathExists(constitutionPath))) {
+          Logger.warning('Warning: EVOLVE.md not found in project root');
+          Logger.warning('  Evolution will proceed without constitution guidance');
+        }
+
         await runSelfEvolution({
           logger: (msg: string) => Logger.info(`[${formatTimestamp()}] ${msg}`),
           once: options.once,
@@ -105,9 +105,9 @@ export function evolveCommand(program: Command): void {
           maxRetries: options.maxRetries,
         });
       } catch (error) {
-        // Re-throw as Error to ensure consistent error handling
-        const err = error instanceof Error ? error : new Error(String(error));
-        throw err;
+        Logger.error(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+        Logger.error('Exiting with error code 1');
+        process.exit(1);
       }
     });
 }

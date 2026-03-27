@@ -8,8 +8,8 @@
  */
 
 import { Command } from 'commander';
-import { ProjectBuilder } from '../core/project-builder';
 import { Logger } from '../utils/logger';
+import { ProjectBuilder } from '../core/project-builder';
 
 /**
  * Project builder class for executing builds.
@@ -62,8 +62,8 @@ export function buildCommand(program: Command): void {
         const builder = new ProjectBuilder();
         await builder.build(options);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        Logger.error(`Build failed: ${errorMessage}`);
+        Logger.error(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+        Logger.error('Exiting with error code 1');
         process.exit(1);
       }
     });

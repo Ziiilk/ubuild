@@ -621,17 +621,35 @@ describe('evolveCommand', () => {
     it('throws error on exception', async () => {
       mockRunSelfEvolution.mockRejectedValue(new Error('Network error'));
 
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as (code?: string | number | null | undefined) => never);
+
       evolveCommand(program);
 
-      await expect(program.parseAsync(['node', 'test', 'evolve'])).rejects.toThrow('Network error');
+      await expect(program.parseAsync(['node', 'test', 'evolve'])).rejects.toThrow(
+        'process.exit called'
+      );
+
+      expect(mockExit).toHaveBeenCalledWith(1);
+      mockExit.mockRestore();
     });
 
     it('handles non-Error exceptions', async () => {
       mockRunSelfEvolution.mockRejectedValue('String error');
 
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as (code?: string | number | null | undefined) => never);
+
       evolveCommand(program);
 
-      await expect(program.parseAsync(['node', 'test', 'evolve'])).rejects.toThrow('String error');
+      await expect(program.parseAsync(['node', 'test', 'evolve'])).rejects.toThrow(
+        'process.exit called'
+      );
+
+      expect(mockExit).toHaveBeenCalledWith(1);
+      mockExit.mockRestore();
     });
   });
 

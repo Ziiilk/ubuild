@@ -8,6 +8,7 @@
  */
 
 import { Command } from 'commander';
+import { Logger } from '../utils/logger';
 import { ProjectRunner } from '../core/project-runner';
 
 /**
@@ -62,9 +63,9 @@ export function runCommand(program: Command): void {
         const runner = new ProjectRunner();
         await runner.run(options);
       } catch (error) {
-        // Re-throw as Error to ensure consistent error handling
-        const err = error instanceof Error ? error : new Error(String(error));
-        throw err;
+        Logger.error(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+        Logger.error('Exiting with error code 1');
+        process.exit(1);
       }
     });
 }

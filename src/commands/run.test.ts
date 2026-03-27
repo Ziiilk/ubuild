@@ -298,7 +298,16 @@ describe('runCommand', () => {
       .spyOn(ProjectRunner.prototype, 'run')
       .mockRejectedValue(new Error('Run failed'));
 
-    await expect(runCmd!.parseAsync(['node', 'test', '--dry-run'])).rejects.toThrow('Run failed');
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    await expect(runCmd!.parseAsync(['node', 'test', '--dry-run'])).rejects.toThrow(
+      'process.exit called'
+    );
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
 
     mockRun.mockRestore();
   });
@@ -312,7 +321,16 @@ describe('runCommand', () => {
 
     const mockRun = jest.spyOn(ProjectRunner.prototype, 'run').mockRejectedValue('String error');
 
-    await expect(runCmd!.parseAsync(['node', 'test', '--dry-run'])).rejects.toThrow('String error');
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    await expect(runCmd!.parseAsync(['node', 'test', '--dry-run'])).rejects.toThrow(
+      'process.exit called'
+    );
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
 
     mockRun.mockRestore();
   });
