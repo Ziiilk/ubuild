@@ -396,12 +396,10 @@ export class SelfDriver {
   }
 
   /**
-   * Invokes OpenCode to apply improvements.
+   * Builds the evolution prompt for OpenCode with constitution and file tree.
    */
-  private async evolveWithOpenCode(constitution: string): Promise<boolean> {
-    const fileTree = await this.getFileTree();
-
-    const prompt = `${constitution}
+  private buildEvolutionPrompt(constitution: string, fileTree: string): string {
+    return `${constitution}
 
 ## Current Codebase
 
@@ -423,20 +421,7 @@ Execute your decision. Make minimal, focused changes.
 ## After Changes
 
 1. **Verify** all pass:
-   - npm run build
-   - npm test
-   - npm run lint
-   - npx ts-node src/cli/index.ts list --help
-   - npx ts-node src/cli/index.ts engine --help
-   - npx ts-node src/cli/index.ts build --help
-   - npx ts-node src/cli/index.ts generate --help
-   - npx ts-node src/cli/index.ts init --help
-   - npx ts-node src/cli/index.ts run --help
-   - npx ts-node src/cli/index.ts clean --help
-   - npx ts-node src/cli/index.ts update --help
-   - npx ts-node src/cli/index.ts version --help
-   - npx ts-node src/cli/index.ts gencodebase --help
-   - npx ts-node src/cli/index.ts evolve --help
+${EVOLUTION_VERIFY_COMMANDS.map((cmd) => `   - npx ts-node src/cli/index.ts ${cmd} --help`).join('\n')}
 
 2. **Commit** if verification passes:
    \`\`\`bash
@@ -444,20 +429,26 @@ Execute your decision. Make minimal, focused changes.
    git commit -m "type: description"
    \`\`\`
 
-   Use conventional commit types:
-   - \`fix:\` - bug fixes
-   - \`test:\` - adding tests
-   - \`refactor:\` - code improvements
-   - \`feat:\` - new features
+    Use conventional commit types:
+    - \`fix:\` - bug fixes
+    - \`test:\` - adding tests
+    - \`refactor:\` - code improvements
+    - \`feat:\` - new features
 
 If verification fails, do NOT commit - the system will revert automatically.`;
+  }
 
-    // Check if opencode command is available
-    try {
-      await execa('opencode', ['--version'], { cwd: this.projectRoot });
-    } catch (error) {
+  /**
+   * Invokes OpenCode to apply improvements.
+   */
+  private async evolveWithOpenCode(constitution: string): Promise<boolean> {
+    const fileTree = await this.getFileTree();
+    const prompt = this.buildEvolutionPrompt(constitution, fileTree);
+
+    // Check if opencode command is available (reuse isOpenCodeInstalled method)
+    const isOpenCodeAvailable = await this.isOpenCodeInstalled();
+    if (!isOpenCodeAvailable) {
       this.log('❌ OpenCode is not installed or not in PATH');
-      this.log(`   Error: ${formatError(error)}`);
       this.log('   Install it with: npm install -g opencode');
       return false;
     }

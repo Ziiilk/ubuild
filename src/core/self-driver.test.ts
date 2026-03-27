@@ -595,9 +595,8 @@ describe('SelfDriver', () => {
       expect(capturedPrompt).toContain('4. FEATURE');
       expect(capturedPrompt).toContain('5. SKIP');
       expect(capturedPrompt).toContain('## After Changes');
-      expect(capturedPrompt).toContain('npm run build');
-      expect(capturedPrompt).toContain('npm test');
-      expect(capturedPrompt).toContain('npm run lint');
+      expect(capturedPrompt).toContain('npx ts-node src/cli/index.ts list --help');
+      expect(capturedPrompt).toContain('npx ts-node src/cli/index.ts evolve --help');
       expect(capturedPrompt).toContain('git add -A');
       expect(capturedPrompt).toContain('git commit -m');
     });
