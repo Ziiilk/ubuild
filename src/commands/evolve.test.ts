@@ -457,6 +457,68 @@ describe('evolveCommand', () => {
         });
       });
     });
+
+    describe('--keep-untracked option', () => {
+      it('registers the --keep-untracked option', () => {
+        evolveCommand(program);
+
+        const commands = program.commands;
+        const evolveCmd = commands.find((cmd) => cmd.name() === 'evolve');
+
+        expect(evolveCmd).toBeDefined();
+        const keepUntrackedOption = evolveCmd?.options.find(
+          (opt) => opt.long === '--keep-untracked'
+        );
+        expect(keepUntrackedOption).toBeDefined();
+      });
+
+      it('passes keepUntracked: true to runSelfEvolution when --keep-untracked is used', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync(['node', 'test', 'evolve', '--keep-untracked']);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: undefined,
+          dryRun: undefined,
+          sleepMs: undefined,
+          useTsNode: undefined,
+          verifyTimeoutMs: undefined,
+          opencodeTimeoutMs: undefined,
+          maxRetries: undefined,
+          keepUntracked: true,
+        });
+      });
+
+      it('can combine --keep-untracked with other options', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync([
+          'node',
+          'test',
+          'evolve',
+          '--keep-untracked',
+          '--once',
+          '--dry-run',
+        ]);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: true,
+          dryRun: true,
+          sleepMs: undefined,
+          useTsNode: undefined,
+          verifyTimeoutMs: undefined,
+          opencodeTimeoutMs: undefined,
+          maxRetries: undefined,
+          keepUntracked: true,
+        });
+      });
+    });
   });
 
   describe('parsePositiveInt validation', () => {
