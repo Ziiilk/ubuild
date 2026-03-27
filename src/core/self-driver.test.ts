@@ -700,7 +700,7 @@ describe('SelfDriver', () => {
       ).getFileTree;
       const result = await getFileTree.call(driver);
 
-      expect(result).toBe('Project files (unable to list)');
+      expect(result).toBe('Project files (unable to list - git exit code 0)');
     });
 
     it('returns error message when git fails', async () => {

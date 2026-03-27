@@ -99,7 +99,9 @@ describe('EngineResolver', () => {
       version: undefined,
     });
     expect(result.engine).toBeUndefined();
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toEqual([
+      'No Unreal Engine installations found. Checked Windows Registry, Epic Launcher, and environment variables. Specify --engine-path manually.',
+    ]);
   });
 
   it('returns an explicit engine path when it exists', async () => {
@@ -160,7 +162,9 @@ describe('EngineResolver', () => {
       version: '5.3',
     });
     expect(result.engine).toBeUndefined();
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toEqual([
+      'No Unreal Engine installations found. Checked Windows Registry, Epic Launcher, and environment variables. Specify --engine-path manually.',
+    ]);
   });
 
   it('matches version-string associations to installed launcher engines', async () => {
@@ -1136,7 +1140,9 @@ describe('EngineResolver', () => {
       const result = await EngineResolver.resolveEngine(uprojectPath);
 
       expect(result.engine).toBeUndefined();
-      expect(result.warnings).toEqual([]);
+      expect(result.warnings).toEqual([
+        'No Unreal Engine installations found. Checked Windows Registry, Epic Launcher, and environment variables. Specify --engine-path manually.',
+      ]);
     });
   });
 

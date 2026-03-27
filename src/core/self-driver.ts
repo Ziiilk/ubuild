@@ -258,41 +258,18 @@ export class SelfDriver {
       if (!verified) {
         this.log('❌ Verification failed, reverting...');
         const revertSuccess = await this.revert();
-        if (!revertSuccess) {
-          this.log('❌ Revert failed - manual intervention may be required');
-          this.cleanup();
-          return;
-        }
-        const shouldStop = this.handleEvolutionFailure('Verification failed');
-        if (shouldStop) {
+        if (!this.handleRevertFailure(revertSuccess, 'Verification failed')) {
           return;
         }
       } else {
         // Verification passed, check if AI has committed by comparing commit hashes
         const isClean = await this.isWorkingTreeClean();
         const afterCommitHash = await this.getHeadCommitHash();
-        const commitMade = beforeCommitHash !== afterCommitHash;
+        const hashChanged = beforeCommitHash !== afterCommitHash;
 
-        if (isClean && commitMade) {
-          this.log('✅ Changes committed by AI');
-          this.consecutiveFailures = 0; // Reset on success
-        } else if (isClean && !commitMade) {
-          this.log('ℹ️  AI made no changes this iteration (SKIP)');
-          this.consecutiveFailures = 0; // Not a failure
-        } else {
-          // Not clean = changes made but not committed
-          this.log('⚠️  Verification passed but AI did not commit changes');
-          this.log('🔄 Reverting uncommitted changes...');
-          const revertSuccess = await this.revert();
-          if (!revertSuccess) {
-            this.log('❌ Revert failed - manual intervention may be required');
-            this.cleanup();
-            return;
-          }
-          const shouldStop = this.handleEvolutionFailure('Uncommitted changes after verification');
-          if (shouldStop) {
-            return;
-          }
+        const shouldContinue = await this.handlePostVerificationState(isClean, hashChanged);
+        if (!shouldContinue) {
+          return;
         }
       }
 
@@ -357,7 +334,8 @@ export class SelfDriver {
       );
 
       if (!result.stdout.trim()) {
-        return 'Project files (unable to list)';
+        const exitCode = result.exitCode ?? 'unknown';
+        return `Project files (unable to list - git exit code ${exitCode})`;
       }
 
       // Categorize files by type
@@ -574,6 +552,54 @@ If verification fails, do NOT commit - the system will revert automatically.`;
     }
 
     return shouldStop;
+  }
+
+  /**
+   * Handles revert failure by logging error and cleaning up if necessary.
+   * @param revertSuccess - Whether the revert operation succeeded
+   * @param reason - The reason for the revert (for logging)
+   * @returns true if evolution should continue, false if it should stop
+   */
+  private handleRevertFailure(revertSuccess: boolean, reason: string): boolean {
+    if (!revertSuccess) {
+      this.log('❌ Revert failed - manual intervention may be required');
+      this.cleanup();
+      return false;
+    }
+    const shouldStop = this.handleEvolutionFailure(reason);
+    return !shouldStop;
+  }
+
+  /**
+   * Handles post-verification state by checking working tree cleanliness and commit status.
+   * @param isClean - Whether the working tree is clean
+   * @param hashChanged - Whether the commit hash changed (indicating AI committed)
+   * @returns true if evolution should continue, false if it should stop
+   */
+  private async handlePostVerificationState(
+    isClean: boolean,
+    hashChanged: boolean
+  ): Promise<boolean> {
+    if (isClean && hashChanged) {
+      this.log('✅ Changes committed by AI');
+      this.consecutiveFailures = 0; // Reset on success
+      return true;
+    }
+
+    if (isClean && !hashChanged) {
+      this.log('ℹ️  AI made no changes this iteration (SKIP)');
+      this.consecutiveFailures = 0; // Not a failure
+      return true;
+    }
+
+    // Not clean = changes made but not committed
+    this.log('⚠️  Verification passed but AI did not commit changes');
+    this.log('🔄 Reverting uncommitted changes...');
+    const revertSuccess = await this.revert();
+    if (!this.handleRevertFailure(revertSuccess, 'Uncommitted changes after verification')) {
+      return false;
+    }
+    return true;
   }
 
   /**

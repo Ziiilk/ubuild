@@ -178,6 +178,12 @@ export class EngineResolver {
         );
       }
 
+      if (!matchedEngine && engineInstallations.length === 0) {
+        warnings.push(
+          'No Unreal Engine installations found. Checked Windows Registry, Epic Launcher, and environment variables. Specify --engine-path manually.'
+        );
+      }
+
       return {
         engine: matchedEngine,
         uprojectEngine,
