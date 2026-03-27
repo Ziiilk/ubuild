@@ -104,17 +104,21 @@ export class CleanExecutor {
       deletedPaths.push(...pluginResults.deletedPaths);
       failedPaths.push(...pluginResults.failedPaths);
 
+      // Check for failures BEFORE the silent block — success must not depend on logging mode
+      if (failedPaths.length > 0) {
+        if (!this.silent) {
+          this.logger.divider();
+        }
+        return {
+          success: false,
+          deletedPaths,
+          failedPaths,
+          error: `Failed to clean ${failedPaths.length} path(s)`,
+        };
+      }
+
       if (!this.silent) {
         this.logger.divider();
-
-        if (failedPaths.length > 0) {
-          return {
-            success: false,
-            deletedPaths,
-            failedPaths,
-            error: `Failed to clean ${failedPaths.length} path(s)`,
-          };
-        }
 
         if (deletedPaths.length === 0) {
           this.logger.info('No build artifacts found to clean');

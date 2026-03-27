@@ -583,6 +583,40 @@ describe('CleanExecutor', () => {
       expect(silentLogger.success).not.toHaveBeenCalled();
       expect(silentLogger.error).not.toHaveBeenCalled();
     });
+
+    it('returns failure in silent mode when path removal fails', async () => {
+      const silentLogger = {
+        info: jest.fn(),
+        success: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        divider: jest.fn(),
+        title: jest.fn(),
+        subTitle: jest.fn(),
+        json: jest.fn(),
+        write: jest.fn(),
+        writeError: jest.fn(),
+        warning: jest.fn(),
+        clearProgress: jest.fn(),
+        progress: jest.fn(),
+      } as unknown as import('../utils/logger').Logger;
+      const silentExecutor = new CleanExecutor({ logger: silentLogger, silent: true });
+
+      mockFsPathExists.mockResolvedValue(true);
+      mockFsRemove.mockRejectedValue(new Error('Permission denied'));
+
+      const result = await silentExecutor.execute({ projectPath: mockProjectPath });
+
+      // Should report failure even in silent mode
+      expect(result.success).toBe(false);
+      expect(result.failedPaths.length).toBeGreaterThan(0);
+      expect(result.error).toBeDefined();
+
+      // Should not have logged anything in silent mode
+      expect(silentLogger.info).not.toHaveBeenCalled();
+      expect(silentLogger.success).not.toHaveBeenCalled();
+      expect(silentLogger.error).not.toHaveBeenCalled();
+    });
   });
 
   describe('result object', () => {
