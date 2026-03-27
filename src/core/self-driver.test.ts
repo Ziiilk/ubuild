@@ -1502,7 +1502,6 @@ describe('getStatus', () => {
     const status = driver.getStatus();
 
     expect(status.once).toBe(true);
-    expect(status.once).toBe(true);
   });
 
   it('returns current driver state with dryRun option', () => {
@@ -1562,5 +1561,175 @@ describe('getStatus', () => {
       once: true,
       consecutiveFailures: 0,
     });
+  });
+});
+
+describe('unlimited retries (maxRetries = -1)', () => {
+  it('continues evolving despite consecutive failures when maxRetries is -1', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger, maxRetries: -1, sleepMs: 50 });
+
+    let opencodeCallCount = 0;
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode fails first 3 times, succeeds on 4th
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          opencodeCallCount++;
+          if (opencodeCallCount <= 3) {
+            return mockExecaResult(1, '', 'Execution failed');
+          }
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // Verification checks pass
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('npm test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (fullCommand.includes('npm run lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('evolve --help') || fullCommand.includes('list --help')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should retry multiple times and eventually succeed
+    expect(opencodeCallCount).toBe(4);
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Evolution execution issue'));
+  });
+});
+
+describe('verification timeout behavior', () => {
+  it('handles verification timeout gracefully', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger, verifyTimeoutMs: 100 });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode succeeds
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // Build times out (simulated by throwing timeout error)
+      if (fullCommand.includes('npm run build')) {
+        const error: Error & { timedOut?: boolean } = new Error('Timeout');
+        error.timedOut = true;
+        throw error;
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should log verification failure due to timeout
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Verifying changes'));
+    expect(mockLogger).toHaveBeenCalledWith('❌ Verification failed, reverting...');
+  });
+
+  it('handles opencode execution failure gracefully', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger, sleepMs: 50 });
+
+    let opencodeCallCount = 0;
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode fails first time, succeeds second time
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          opencodeCallCount++;
+          if (opencodeCallCount === 1) {
+            return mockExecaResult(1, '', 'Execution failed');
+          }
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // Verification checks pass
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('npm test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (fullCommand.includes('npm run lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('evolve --help') || fullCommand.includes('list --help')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should log OpenCode failure and retry
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('OpenCode exited with code'));
+    expect(opencodeCallCount).toBe(2);
   });
 });

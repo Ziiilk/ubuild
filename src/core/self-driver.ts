@@ -542,8 +542,11 @@ If verification fails, do NOT commit - the system will revert automatically.`;
 
       this.sleepTimer = setTimeout(() => {
         this.sleepTimer = null;
-        this.sleepResolve = null;
-        resolve();
+        // Guard against double-resolution if cleanup called mid-timer
+        if (this.sleepResolve) {
+          this.sleepResolve = null;
+          resolve();
+        }
       }, ms);
     });
   }
