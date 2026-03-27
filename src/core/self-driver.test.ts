@@ -555,6 +555,52 @@ describe('SelfDriver', () => {
 
       expect(result).toBe(false);
     });
+
+    it('constructs prompt with constitution, file tree, and task instructions', async () => {
+      let capturedPrompt = '';
+      const constitution = '# Test Constitution';
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts\nsrc/commands/evolve.ts', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (command === 'opencode' && args?.includes('run')) {
+          // Capture the prompt argument
+          capturedPrompt = args?.[1] ?? '';
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      await evolveWithOpenCode.call(driver, constitution);
+
+      // Verify prompt structure
+      expect(capturedPrompt).toContain('# Test Constitution');
+      expect(capturedPrompt).toContain('## Current Codebase');
+      expect(capturedPrompt).toContain('## Source Files');
+      expect(capturedPrompt).toContain('self-driver.ts');
+      expect(capturedPrompt).toContain('evolve.ts');
+      expect(capturedPrompt).toContain('## Your Task');
+      expect(capturedPrompt).toContain('1. FIX');
+      expect(capturedPrompt).toContain('2. TEST');
+      expect(capturedPrompt).toContain('3. REFACTOR');
+      expect(capturedPrompt).toContain('4. FEATURE');
+      expect(capturedPrompt).toContain('5. SKIP');
+      expect(capturedPrompt).toContain('## After Changes');
+      expect(capturedPrompt).toContain('npm run build');
+      expect(capturedPrompt).toContain('npm test');
+      expect(capturedPrompt).toContain('npm run lint');
+      expect(capturedPrompt).toContain('git add -A');
+      expect(capturedPrompt).toContain('git commit -m');
+    });
   });
 
   describe('readConstitution', () => {
