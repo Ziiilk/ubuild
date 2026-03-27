@@ -1,3 +1,4 @@
+import { BUILD_TARGETS } from './constants';
 import type { BuildTarget } from '../types/build';
 
 /**
@@ -36,5 +37,5 @@ export function inferTargetType(name: string): BuildTarget {
  * @returns True if the target is one of the generic types
  */
 export function isGenericTarget(target: string): target is BuildTarget {
-  return ['Editor', 'Game', 'Client', 'Server'].includes(target);
+  return BUILD_TARGETS.includes(target as BuildTarget);
 }

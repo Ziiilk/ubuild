@@ -8,6 +8,8 @@
  */
 
 import { BuildExecutor } from './build-executor';
+import { BUILD_TARGETS } from '../utils/constants';
+import type { BuildTarget } from '../types/build';
 
 /** Represents a resolved build target with its name and type. */
 export interface ResolvedTarget {
@@ -17,19 +19,13 @@ export interface ResolvedTarget {
   type: string;
 }
 
-/** Generic target types that can be resolved to specific project targets. */
-const GENERIC_TARGETS = ['Editor', 'Game', 'Client', 'Server'] as const;
-
-/** Type representing valid generic target names. */
-type GenericTarget = (typeof GENERIC_TARGETS)[number];
-
 /**
  * Type guard to check if a string is a valid generic target type.
  * @param target - The target name to check
  * @returns True if the target is a valid generic type
  */
-function isGenericTargetType(target: string): target is GenericTarget {
-  return GENERIC_TARGETS.includes(target as GenericTarget);
+function isGenericTargetType(target: string): target is BuildTarget {
+  return BUILD_TARGETS.includes(target as BuildTarget);
 }
 
 /**
@@ -129,6 +125,6 @@ export class TargetResolver {
    * @returns Readonly array of generic target type names
    */
   static getGenericTargets(): readonly string[] {
-    return GENERIC_TARGETS;
+    return BUILD_TARGETS;
   }
 }
