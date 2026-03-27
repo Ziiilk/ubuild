@@ -25,6 +25,7 @@ export class CleanExecutor {
   private logger: Logger;
   private stdout: Writable;
   private stderr: Writable;
+  private silent: boolean;
 
   /**
    * Creates a new CleanExecutor instance.
@@ -35,12 +36,13 @@ export class CleanExecutor {
   ) {
     this.stdout = options.stdout || process.stdout;
     this.stderr = options.stderr || process.stderr;
+    this.silent = options.silent || false;
     this.logger =
       options.logger ||
       new Logger({
         stdout: this.stdout,
         stderr: this.stderr,
-        silent: options.silent,
+        silent: this.silent,
       });
   }
 
@@ -76,30 +78,36 @@ export class CleanExecutor {
       // Define paths to clean
       const pathsToClean = this.getPathsToClean(projectDir, projectName, options.binariesOnly);
 
-      this.logger.info(`Cleaning project: ${projectName}`);
-      this.logger.info(`Project directory: ${projectDir}`);
+      if (!this.silent) {
+        this.logger.info(`Cleaning project: ${projectName}`);
+        this.logger.info(`Project directory: ${projectDir}`);
 
-      if (options.binariesOnly) {
-        this.logger.info('Mode: Binaries and Intermediate only');
-      } else {
-        this.logger.info('Mode: Full clean (Binaries, Intermediate, Saved, DerivedDataCache)');
+        if (options.binariesOnly) {
+          this.logger.info('Mode: Binaries and Intermediate only');
+        } else {
+          this.logger.info('Mode: Full clean (Binaries, Intermediate, Saved, DerivedDataCache)');
+        }
+
+        if (options.dryRun) {
+          this.logger.info('Dry run mode - no files will be deleted');
+        }
+
+        this.logger.divider();
       }
-
-      if (options.dryRun) {
-        this.logger.info('Dry run mode - no files will be deleted');
-      }
-
-      this.logger.divider();
 
       // Clean each path
       for (const cleanPath of pathsToClean) {
         const result = await this.cleanPath(cleanPath, options.dryRun);
         if (result.deleted) {
           deletedPaths.push(cleanPath);
-          this.logger.success(`Removed: ${path.relative(projectDir, cleanPath)}`);
+          if (!this.silent) {
+            this.logger.success(`Removed: ${path.relative(projectDir, cleanPath)}`);
+          }
         } else if (result.error) {
           failedPaths.push({ path: cleanPath, error: result.error });
-          this.logger.error(`Failed to remove: ${path.relative(projectDir, cleanPath)}`);
+          if (!this.silent) {
+            this.logger.error(`Failed to remove: ${path.relative(projectDir, cleanPath)}`);
+          }
         }
       }
 
@@ -108,21 +116,23 @@ export class CleanExecutor {
       deletedPaths.push(...pluginResults.deletedPaths);
       failedPaths.push(...pluginResults.failedPaths);
 
-      this.logger.divider();
+      if (!this.silent) {
+        this.logger.divider();
 
-      if (failedPaths.length > 0) {
-        return {
-          success: false,
-          deletedPaths,
-          failedPaths,
-          error: `Failed to clean ${failedPaths.length} path(s)`,
-        };
-      }
+        if (failedPaths.length > 0) {
+          return {
+            success: false,
+            deletedPaths,
+            failedPaths,
+            error: `Failed to clean ${failedPaths.length} path(s)`,
+          };
+        }
 
-      if (deletedPaths.length === 0) {
-        this.logger.info('No build artifacts found to clean');
-      } else {
-        this.logger.success(`Cleaned ${deletedPaths.length} directory/directories`);
+        if (deletedPaths.length === 0) {
+          this.logger.info('No build artifacts found to clean');
+        } else {
+          this.logger.success(`Cleaned ${deletedPaths.length} directory/directories`);
+        }
       }
 
       return {
@@ -238,10 +248,14 @@ export class CleanExecutor {
           const result = await this.cleanPath(cleanPath, options.dryRun);
           if (result.deleted) {
             deletedPaths.push(cleanPath);
-            this.logger.success(`Removed: ${path.relative(projectDir, cleanPath)}`);
+            if (!this.silent) {
+              this.logger.success(`Removed: ${path.relative(projectDir, cleanPath)}`);
+            }
           } else if (result.error) {
             failedPaths.push({ path: cleanPath, error: result.error });
-            this.logger.error(`Failed to remove: ${path.relative(projectDir, cleanPath)}`);
+            if (!this.silent) {
+              this.logger.error(`Failed to remove: ${path.relative(projectDir, cleanPath)}`);
+            }
           }
         }
       }

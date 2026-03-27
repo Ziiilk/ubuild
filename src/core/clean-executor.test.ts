@@ -51,6 +51,9 @@ jest.mock('./project-path-resolver', () => ({
   },
 }));
 
+// Import mocked modules for resetting in beforeEach
+import { ProjectPathResolver } from './project-path-resolver';
+
 describe('CleanExecutor', () => {
   let executor: CleanExecutor;
   const mockProjectPath = 'C:\\Projects\\TestProject\\TestProject.uproject';
@@ -64,6 +67,10 @@ describe('CleanExecutor', () => {
     mockLoggerInstance.error.mockClear();
     mockLoggerInstance.debug.mockClear();
     mockLoggerInstance.divider.mockClear();
+    // Reset ProjectPathResolver mock to default
+    (ProjectPathResolver.resolveOrThrow as jest.Mock).mockResolvedValue(
+      'C:\\Projects\\TestProject\\TestProject.uproject'
+    );
     executor = new CleanExecutor();
   });
 
@@ -387,13 +394,16 @@ describe('CleanExecutor', () => {
       expect(mockFsPathExists).not.toHaveBeenCalledWith(expect.stringContaining('.sln'));
     });
 
-    it('returns all paths for full clean mode', () => {
+    it('returns all paths for full clean mode', async () => {
       // This is tested indirectly through execute()
       const options: CleanOptions = {
         projectPath: mockProjectPath,
       };
 
-      executor.execute(options);
+      // Set up mock to return true for all paths so they are checked
+      mockFsPathExists.mockResolvedValue(true);
+
+      await executor.execute(options);
 
       // Should check for all paths
       expect(mockFsPathExists).toHaveBeenCalledWith(expect.stringContaining('Binaries'));
@@ -450,6 +460,11 @@ describe('CleanExecutor', () => {
   describe('cleanPluginDirectories', () => {
     it('cleans multiple plugin directories', async () => {
       mockFsReaddir.mockResolvedValue(['Plugin1', 'Plugin2', 'Plugin3']);
+      mockFsPathExists.mockResolvedValue(true);
+      mockFsRemove.mockResolvedValue(undefined);
+      mockFsStat.mockResolvedValue({
+        isDirectory: () => true,
+      } as unknown as import('fs').Stats);
 
       const result = await executor.execute({ projectPath: mockProjectPath });
 
@@ -467,6 +482,8 @@ describe('CleanExecutor', () => {
 
     it('handles empty plugins directory', async () => {
       mockFsReaddir.mockResolvedValue([]);
+      mockFsPathExists.mockResolvedValue(true);
+      mockFsRemove.mockResolvedValue(undefined);
 
       const result = await executor.execute({ projectPath: mockProjectPath });
 
@@ -474,6 +491,9 @@ describe('CleanExecutor', () => {
     });
 
     it('handles mixed file and directory entries in plugins', async () => {
+      mockFsPathExists.mockResolvedValue(true);
+      mockFsRemove.mockResolvedValue(undefined);
+      mockFsReaddir.mockResolvedValue(['file.txt', 'Dir1', 'file2.txt', 'Dir2']);
       let callCount = 0;
       mockFsStat.mockImplementation(() => {
         callCount++;
@@ -500,6 +520,7 @@ describe('CleanExecutor', () => {
     });
 
     it('includes error details in failed paths', async () => {
+      mockFsPathExists.mockResolvedValue(true);
       mockFsRemove.mockRejectedValue(new Error('Specific error message'));
 
       const result = await executor.execute({ projectPath: mockProjectPath });
