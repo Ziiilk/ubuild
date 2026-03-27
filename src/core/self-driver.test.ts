@@ -386,6 +386,43 @@ describe('SelfDriver', () => {
       expect(result).toBe(false);
     });
 
+    it('logs stderr and stdout when verification fails', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(1, 'Build output here', 'Build error: something went wrong');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith('     Error: Build error: something went wrong');
+      expect(mockLogger).toHaveBeenCalledWith('     Output: Build output here');
+    });
+
+    it('logs only stdout when verification fails without stderr', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(1, 'Build failed with this output', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith('     Output: Build failed with this output');
+    });
+
     it('uses ts-node for verification when useTsNode is true', async () => {
       driver = new SelfDriver({ useTsNode: true });
 
@@ -584,6 +621,86 @@ describe('SelfDriver', () => {
       const result = await evolveWithOpenCode.call(driver, '');
 
       expect(result).toBe(false);
+    });
+
+    it('handles opencode timeout and reverts changes', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (command === 'opencode' && args?.includes('run')) {
+          // Return a timed-out result
+          return {
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+            timedOut: true,
+          };
+        }
+        // Git commands for revert
+        if (command === 'git' && args?.includes('reset')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'git' && args?.includes('checkout')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'git' && args?.includes('clean')) {
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      const result = await evolveWithOpenCode.call(driver, '');
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith(
+        '⚠️  OpenCode timed out, reverting any partial changes...'
+      );
+      expect(mockLogger).toHaveBeenCalledWith('🔄 Reverted changes');
+    });
+
+    it('logs stderr output from opencode', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (command === 'opencode' && args?.includes('run')) {
+          return {
+            exitCode: 0,
+            stdout: '',
+            stderr: 'Some debug output from OpenCode',
+            timedOut: false,
+          };
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      const result = await evolveWithOpenCode.call(driver, '');
+
+      expect(result).toBe(true);
+      expect(mockLogger).toHaveBeenCalledWith('OpenCode stderr: Some debug output from OpenCode');
     });
 
     it('constructs prompt with constitution, file tree, and task instructions', async () => {
