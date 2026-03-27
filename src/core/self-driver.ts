@@ -717,6 +717,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
     dryRun: boolean;
     once: boolean;
     consecutiveFailures: number;
+    iterationCount: number;
   } {
     return {
       interrupted: this.interrupted,
@@ -725,6 +726,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       dryRun: this.dryRun,
       once: this.once,
       consecutiveFailures: this.consecutiveFailures,
+      iterationCount: this.iterationCount,
     };
   }
 }

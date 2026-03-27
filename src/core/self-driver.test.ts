@@ -277,6 +277,12 @@ describe('SelfDriver', () => {
       expect(status.projectRoot).toBe('/custom/project/path');
     });
 
+    it('getStatus returns iterationCount starting at 0', () => {
+      driver = new SelfDriver();
+      const status = driver.getStatus();
+      expect(status.iterationCount).toBe(0);
+    });
+
     it('creates driver with all options including projectRoot', () => {
       const options: SelfEvolverOptions = {
         logger: jest.fn(),
@@ -1898,6 +1904,7 @@ describe('getStatus', () => {
       dryRun: false,
       once: false,
       consecutiveFailures: 0,
+      iterationCount: 0,
     });
   });
 
@@ -1964,6 +1971,7 @@ describe('getStatus', () => {
       dryRun: true,
       once: true,
       consecutiveFailures: 0,
+      iterationCount: 0,
     });
   });
 });
