@@ -70,6 +70,7 @@ export function cleanCommand(program: Command): void {
     .option('--engine-path <path>', 'Path to Unreal Engine installation')
     .option('--dry-run', 'Show what would be cleaned without actually deleting')
     .option('--binaries-only', 'Clean only Binaries and Intermediate folders')
+    .option('--silent', 'Suppress all output')
     .action(async (options) => {
       const logger = new Logger();
 
@@ -81,6 +82,7 @@ export function cleanCommand(program: Command): void {
           enginePath: options.enginePath,
           dryRun: options.dryRun,
           binariesOnly: options.binariesOnly,
+          silent: options.silent,
         });
 
         if (!result.success) {
