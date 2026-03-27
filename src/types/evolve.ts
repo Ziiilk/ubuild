@@ -61,4 +61,6 @@ export interface SelfEvolverOptions {
   useTsNode?: boolean;
   /** Maximum number of consecutive retry attempts on failure (default: 5, set to -1 for unlimited) */
   maxRetries?: number;
+  /** Project root directory for evolution (default: process.cwd()) */
+  projectRoot?: string;
 }

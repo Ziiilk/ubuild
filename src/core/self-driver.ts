@@ -57,7 +57,7 @@ export class SelfDriver {
    */
   constructor(options: SelfEvolverOptions = {}) {
     this.log = options.logger || ((msg: string) => Logger.info(`[${formatTimestamp()}] ${msg}`));
-    this.projectRoot = process.cwd();
+    this.projectRoot = options.projectRoot ?? process.cwd();
     this.once = options.once || false;
     this.dryRun = options.dryRun || false;
     this.verifyTimeoutMs = options.verifyTimeoutMs ?? VERIFY_TIMEOUT_MS;
@@ -203,6 +203,9 @@ export class SelfDriver {
    * Runs the self-evolution loop - continues indefinitely until interrupted by user.
    */
   async run(): Promise<void> {
+    // Reset state for potential re-run after cleanup
+    this.sleepCancelled = false;
+
     const preFlightPassed = await this.runPreFlightChecks();
     if (!preFlightPassed) {
       this.cleanup();

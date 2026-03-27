@@ -266,6 +266,34 @@ describe('SelfDriver', () => {
       driver = new SelfDriver(options);
       expect(driver).toBeDefined();
     });
+
+    it('creates driver with custom projectRoot', () => {
+      const options: SelfEvolverOptions = {
+        projectRoot: '/custom/project/path',
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+      const status = driver.getStatus();
+      expect(status.projectRoot).toBe('/custom/project/path');
+    });
+
+    it('creates driver with all options including projectRoot', () => {
+      const options: SelfEvolverOptions = {
+        logger: jest.fn(),
+        once: true,
+        dryRun: false,
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 900000,
+        sleepMs: 10000,
+        useTsNode: true,
+        maxRetries: 3,
+        projectRoot: '/custom/project/path',
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+      const status = driver.getStatus();
+      expect(status.projectRoot).toBe('/custom/project/path');
+    });
   });
 
   describe('verify', () => {
