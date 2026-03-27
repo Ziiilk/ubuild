@@ -42,12 +42,14 @@ export class SelfDriver {
   private useTsNode: boolean;
   private maxRetries: number;
   private consecutiveFailures = 0;
+  private iterationCount = 0;
   private sigintHandler: (() => void) | null = null;
   private sigtermHandler: (() => void) | null = null;
   private originalMaxListeners: number | null = null;
   private sleepTimer: NodeJS.Timeout | null = null;
   private sleepResolve: (() => void) | null = null;
   private cleanedUp = false;
+  private sleepCancelled = false;
 
   /**
    * Creates a new SelfDriver instance.
@@ -96,7 +98,9 @@ export class SelfDriver {
    * Should be called when the driver is no longer needed.
    */
   cleanup(): void {
+    if (this.cleanedUp) return; // Prevent double-cleanup
     this.cleanedUp = true;
+    this.sleepCancelled = true;
 
     if (this.sigintHandler) {
       process.removeListener('SIGINT', this.sigintHandler);
@@ -213,6 +217,12 @@ export class SelfDriver {
     this.log('💡 Press Ctrl+C to stop\n');
 
     while (!this.interrupted) {
+      this.iterationCount++;
+      this.log(`\n📊 Iteration ${this.iterationCount} starting...`);
+
+      // Capture git status before evolution to detect if changes were made
+      const beforeStatus = await this.getGitStatus();
+
       // 1. Read constitution file
       const constitution = await this.readConstitution();
 
@@ -243,10 +253,17 @@ export class SelfDriver {
       } else {
         // Verification passed, check if AI has committed
         const isClean = await this.isWorkingTreeClean();
-        if (isClean) {
+        const afterStatus = await this.getGitStatus();
+        const changesMade = beforeStatus !== afterStatus;
+
+        if (isClean && changesMade) {
           this.log('✅ Changes committed by AI');
           this.consecutiveFailures = 0; // Reset on success
+        } else if (isClean && !changesMade) {
+          this.log('ℹ️  AI made no changes this iteration (SKIP)');
+          this.consecutiveFailures = 0; // Not a failure
         } else {
+          // Not clean = changes made but not committed
           this.log('⚠️  Verification passed but AI did not commit changes');
           this.log('🔄 Reverting uncommitted changes...');
           await this.revert();
@@ -440,13 +457,19 @@ If verification fails, do NOT commit - the system will revert automatically.`;
 
       const result = await execa('opencode', ['run', prompt], {
         cwd: this.projectRoot,
-        stdio: 'inherit',
+        stdio: ['inherit', 'pipe', 'pipe'], // Capture stdout/stderr for debugging
         reject: false,
         timeout: this.opencodeTimeoutMs, // 10 minutes timeout to prevent indefinite hangs
       });
 
-      if (!result || result.exitCode !== 0) {
-        this.log(`⚠️  OpenCode exited with code ${result?.exitCode ?? 'unknown'}`);
+      // Log stderr if present for debugging
+      if (result.stderr && result.stderr.trim()) {
+        const stderrPreview = result.stderr.slice(0, 1000);
+        this.log(`OpenCode stderr: ${stderrPreview}`);
+      }
+
+      if (result.exitCode !== 0) {
+        this.log(`⚠️  OpenCode exited with code ${result.exitCode}`);
         return false;
       }
 
@@ -495,6 +518,17 @@ If verification fails, do NOT commit - the system will revert automatically.`;
 
         if (!result || result.exitCode !== 0) {
           this.log(`  ❌ ${check.name} failed`);
+          // Show error output for debugging
+          if (result?.stderr) {
+            const stderrPreview = result.stderr.slice(0, 500);
+            this.log(`     Error: ${stderrPreview}`);
+          }
+          if (result?.stdout) {
+            const stdoutPreview = result.stdout.slice(0, 500);
+            if (stdoutPreview) {
+              this.log(`     Output: ${stdoutPreview}`);
+            }
+          }
           return false;
         }
         this.log(`  ✅ ${check.name} passed`);
@@ -546,6 +580,23 @@ If verification fails, do NOT commit - the system will revert automatically.`;
   }
 
   /**
+   * Gets git status output for comparing before/after state.
+   * @returns Normalized git status output string
+   */
+  private async getGitStatus(): Promise<string> {
+    try {
+      const status = await execa('git', ['status', '--porcelain'], {
+        cwd: this.projectRoot,
+        reject: false,
+      });
+      return status.stdout.trim();
+    } catch (error) {
+      this.log(`⚠️  Git status check failed: ${formatError(error)}`);
+      return '';
+    }
+  }
+
+  /**
    * Reverts changes (both staged and unstaged).
    */
   private async revert(): Promise<void> {
@@ -553,6 +604,8 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       // First reset any staged changes, then revert working tree
       await execa('git', ['reset', 'HEAD'], { cwd: this.projectRoot });
       await execa('git', ['checkout', '.'], { cwd: this.projectRoot });
+      // Remove untracked files and directories to prevent accumulation across iterations
+      await execa('git', ['clean', '-fd'], { cwd: this.projectRoot });
       this.log('🔄 Reverted changes');
     } catch (error) {
       this.log(`⚠️  Revert failed: ${formatError(error)}`);
@@ -576,8 +629,8 @@ If verification fails, do NOT commit - the system will revert automatically.`;
 
       this.sleepTimer = setTimeout(() => {
         this.sleepTimer = null;
-        // Guard against double-resolution if cleanup called mid-timer
-        if (this.sleepResolve) {
+        // Only resolve if not cancelled and resolve still exists
+        if (!this.sleepCancelled && this.sleepResolve) {
           this.sleepResolve = null;
           resolve();
         }
