@@ -1390,7 +1390,7 @@ describe('uncommitted changes after verification', () => {
 
     // Should log warning about uncommitted changes
     expect(mockLogger).toHaveBeenCalledWith(
-      expect.stringContaining('Working tree not clean after verification')
+      expect.stringContaining('Verification passed but AI did not commit changes')
     );
 
     // Should revert

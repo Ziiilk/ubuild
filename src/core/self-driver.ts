@@ -234,8 +234,8 @@ export class SelfDriver {
         if (isClean) {
           this.log('✅ Changes committed by AI');
         } else {
-          this.log('⚠️  Working tree not clean after verification - AI should have committed');
-          this.log('🔄 Reverting...');
+          this.log('⚠️  Verification passed but AI did not commit changes');
+          this.log('🔄 Reverting uncommitted changes...');
           await this.revert();
         }
       }
@@ -414,6 +414,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
         return false;
       }
 
+      this.log('✅ OpenCode execution completed');
       return true;
     } catch (error) {
       this.log(`⚠️  OpenCode execution failed: ${formatError(error)}`);
