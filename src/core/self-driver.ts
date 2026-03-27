@@ -408,8 +408,17 @@ Execute your decision. Make minimal, focused changes.
    - npm run build
    - npm test
    - npm run lint
-   - npx ts-node src/cli/index.ts evolve --help
    - npx ts-node src/cli/index.ts list --help
+   - npx ts-node src/cli/index.ts engine --help
+   - npx ts-node src/cli/index.ts build --help
+   - npx ts-node src/cli/index.ts generate --help
+   - npx ts-node src/cli/index.ts init --help
+   - npx ts-node src/cli/index.ts run --help
+   - npx ts-node src/cli/index.ts clean --help
+   - npx ts-node src/cli/index.ts update --help
+   - npx ts-node src/cli/index.ts version --help
+   - npx ts-node src/cli/index.ts gencodebase --help
+   - npx ts-node src/cli/index.ts evolve --help
 
 2. **Commit** if verification passes:
    \`\`\`bash
