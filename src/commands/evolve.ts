@@ -15,6 +15,20 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 
 /**
+ * Self-driver class for evolution.
+ * Re-exported from {@link ../core/self-driver}.
+ * @see {@link runSelfEvolution} for implementation details
+ */
+export { runSelfEvolution } from '../core/self-driver';
+
+/**
+ * Options for the evolve command.
+ * Re-exported from {@link ../types/evolve}.
+ * @see {@link SelfEvolverOptions} for details
+ */
+export type { SelfEvolverOptions } from '../types/evolve';
+
+/**
  * Parses and validates a positive integer option value.
  * @param value - The raw string value from CLI
  * @param optionName - The name of the option for error messages
@@ -62,6 +76,23 @@ export function evolveCommand(program: Command): void {
       'Timeout for OpenCode execution in milliseconds (default: 600000)',
       (value) => parsePositiveInt(value, '--opencode-timeout')
     )
+    .option(
+      '--max-retries <n>',
+      'Maximum consecutive retry attempts on failure (default: 5, use -1 for unlimited)',
+      (value) => {
+        const parsed = parseInt(value, 10);
+        if (isNaN(parsed)) {
+          throw new Error(`--max-retries must be a number, got: ${value}`);
+        }
+        if (parsed !== parseFloat(value)) {
+          throw new Error(`--max-retries must be an integer, got: ${value}`);
+        }
+        if (parsed < -1) {
+          throw new Error(`--max-retries must be >= -1, got: ${value}`);
+        }
+        return parsed;
+      }
+    )
     .action(async (options) => {
       Logger.title('ubuild Self-Evolution');
       Logger.info('Using OpenCode (default model)');
@@ -82,13 +113,14 @@ export function evolveCommand(program: Command): void {
 
       try {
         await runSelfEvolution({
-          logger: (msg: string) => Logger.info(msg),
+          logger: Logger.info,
           once: options.once,
           dryRun: options.dryRun,
           sleepMs: options.sleep,
           useTsNode: options.useTsNode,
           verifyTimeoutMs: options.verifyTimeout,
           opencodeTimeoutMs: options.opencodeTimeout,
+          maxRetries: options.maxRetries,
         });
       } catch (error) {
         Logger.error(`Error: ${formatError(error)}`);

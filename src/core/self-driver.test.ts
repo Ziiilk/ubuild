@@ -235,6 +235,37 @@ describe('SelfDriver', () => {
       driver = new SelfDriver(options);
       expect(driver).toBeDefined();
     });
+
+    it('creates driver with maxRetries option', () => {
+      const options: SelfEvolverOptions = {
+        maxRetries: 10,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with unlimited retries (maxRetries = -1)', () => {
+      const options: SelfEvolverOptions = {
+        maxRetries: -1,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with all options including maxRetries', () => {
+      const options: SelfEvolverOptions = {
+        logger: jest.fn(),
+        once: true,
+        dryRun: false,
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 900000,
+        sleepMs: 10000,
+        useTsNode: true,
+        maxRetries: 3,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
   });
 
   describe('verify', () => {
@@ -1258,9 +1289,7 @@ describe('evolution retry logic', () => {
     await run.call(driver);
 
     // Should log retry message and opencode should be called twice (fail then succeed)
-    expect(mockLogger).toHaveBeenCalledWith(
-      expect.stringContaining('Evolution execution issue, retrying')
-    );
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Evolution execution issue'));
     expect(opencodeCallCount).toBe(2);
   });
 });
@@ -1450,5 +1479,88 @@ describe('once mode completion', () => {
 
     // Should log single iteration completion
     expect(mockLogger).toHaveBeenCalledWith('\n✨ Single iteration complete (--once flag set)');
+  });
+});
+
+describe('getStatus', () => {
+  it('returns current driver state with default options', () => {
+    driver = new SelfDriver();
+    const status = driver.getStatus();
+
+    expect(status).toEqual({
+      interrupted: false,
+      cleanedUp: false,
+      projectRoot: mockProjectRoot,
+      dryRun: false,
+      once: false,
+      consecutiveFailures: 0,
+    });
+  });
+
+  it('returns current driver state with once option', () => {
+    driver = new SelfDriver({ once: true });
+    const status = driver.getStatus();
+
+    expect(status.once).toBe(true);
+    expect(status.once).toBe(true);
+  });
+
+  it('returns current driver state with dryRun option', () => {
+    driver = new SelfDriver({ dryRun: true });
+    const status = driver.getStatus();
+
+    expect(status.dryRun).toBe(true);
+  });
+
+  it('returns custom project root', () => {
+    const customRoot = 'C:\\Custom\\Project';
+    process.cwd = jest.fn().mockReturnValue(customRoot);
+    driver = new SelfDriver();
+
+    const status = driver.getStatus();
+    expect(status.projectRoot).toBe(customRoot);
+  });
+
+  it('reflects interrupted state after signal', () => {
+    driver = new SelfDriver();
+    const statusBefore = driver.getStatus();
+    expect(statusBefore.interrupted).toBe(false);
+
+    // Simulate SIGINT
+    process.emit('SIGINT');
+
+    const statusAfter = driver.getStatus();
+    expect(statusAfter.interrupted).toBe(true);
+  });
+
+  it('reflects cleanedUp state after cleanup', () => {
+    driver = new SelfDriver();
+    const statusBefore = driver.getStatus();
+    expect(statusBefore.cleanedUp).toBe(false);
+
+    driver.cleanup();
+
+    const statusAfter = driver.getStatus();
+    expect(statusAfter.cleanedUp).toBe(true);
+  });
+
+  it('returns all options combined', () => {
+    const customRoot = 'C:\\Custom\\Project';
+    process.cwd = jest.fn().mockReturnValue(customRoot);
+
+    driver = new SelfDriver({
+      once: true,
+      dryRun: true,
+    });
+
+    const status = driver.getStatus();
+    expect(status).toEqual({
+      interrupted: false,
+      cleanedUp: false,
+      projectRoot: customRoot,
+      dryRun: true,
+      once: true,
+      consecutiveFailures: 0,
+    });
   });
 });

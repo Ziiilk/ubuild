@@ -39,7 +39,8 @@ export const EVOLUTION_VERIFY_COMMANDS: string[] = [
  *   dryRun: false,
  *   logger: (msg) => console.log(msg),
  *   verifyTimeoutMs: 120000,
- *   opencodeTimeoutMs: 900000
+ *   opencodeTimeoutMs: 900000,
+ *   maxRetries: 3
  * };
  * ```
  */
@@ -58,4 +59,6 @@ export interface SelfEvolverOptions {
   sleepMs?: number;
   /** Use ts-node for verification instead of compiled dist (default: false) */
   useTsNode?: boolean;
+  /** Maximum number of consecutive retry attempts on failure (default: 5, set to -1 for unlimited) */
+  maxRetries?: number;
 }

@@ -25,6 +25,8 @@ const DEFAULT_SLEEP_MS = 5000;
 const VERIFY_TIMEOUT_MS = 60000;
 /** Default timeout for OpenCode execution in milliseconds */
 const OPENCODE_TIMEOUT_MS = 600000;
+/** Default maximum retry attempts on consecutive failures (-1 for unlimited) */
+const DEFAULT_MAX_RETRIES = 5;
 /** Minimum max listeners for process events */
 const MIN_MAX_LISTENERS = 20;
 
@@ -38,6 +40,8 @@ export class SelfDriver {
   private opencodeTimeoutMs: number;
   private sleepMs: number;
   private useTsNode: boolean;
+  private maxRetries: number;
+  private consecutiveFailures = 0;
   private sigintHandler: (() => void) | null = null;
   private sigtermHandler: (() => void) | null = null;
   private originalMaxListeners: number | null = null;
@@ -58,6 +62,7 @@ export class SelfDriver {
     this.opencodeTimeoutMs = options.opencodeTimeoutMs ?? OPENCODE_TIMEOUT_MS;
     this.sleepMs = options.sleepMs ?? DEFAULT_SLEEP_MS;
     this.useTsNode = options.useTsNode || false;
+    this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.setupSignalHandlers();
   }
 
@@ -216,7 +221,15 @@ export class SelfDriver {
       const executed = await this.evolveWithOpenCode(constitution);
 
       if (!executed) {
-        this.log('⚠️  Evolution execution issue, retrying next iteration...');
+        this.consecutiveFailures++;
+        if (this.maxRetries >= 0 && this.consecutiveFailures >= this.maxRetries) {
+          this.log(`❌ Max retries (${this.maxRetries}) reached, stopping evolution`);
+          this.cleanup();
+          return;
+        }
+        this.log(
+          `⚠️  Evolution execution issue (${this.consecutiveFailures}/${this.maxRetries === -1 ? '∞' : this.maxRetries}), retrying next iteration...`
+        );
         await this.sleep(this.sleepMs);
         continue;
       }
@@ -228,15 +241,28 @@ export class SelfDriver {
       if (!verified) {
         this.log('❌ Verification failed, reverting...');
         await this.revert();
+        this.consecutiveFailures++;
+        if (this.maxRetries >= 0 && this.consecutiveFailures >= this.maxRetries) {
+          this.log(`❌ Max retries (${this.maxRetries}) reached, stopping evolution`);
+          this.cleanup();
+          return;
+        }
       } else {
         // Verification passed, check if AI has committed
         const isClean = await this.isWorkingTreeClean();
         if (isClean) {
           this.log('✅ Changes committed by AI');
+          this.consecutiveFailures = 0; // Reset on success
         } else {
           this.log('⚠️  Verification passed but AI did not commit changes');
           this.log('🔄 Reverting uncommitted changes...');
           await this.revert();
+          this.consecutiveFailures++;
+          if (this.maxRetries >= 0 && this.consecutiveFailures >= this.maxRetries) {
+            this.log(`❌ Max retries (${this.maxRetries}) reached, stopping evolution`);
+            this.cleanup();
+            return;
+          }
         }
       }
 
@@ -532,6 +558,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
     projectRoot: string;
     dryRun: boolean;
     once: boolean;
+    consecutiveFailures: number;
   } {
     return {
       interrupted: this.interrupted,
@@ -539,6 +566,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       projectRoot: this.projectRoot,
       dryRun: this.dryRun,
       once: this.once,
+      consecutiveFailures: this.consecutiveFailures,
     };
   }
 }

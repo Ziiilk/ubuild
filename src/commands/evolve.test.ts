@@ -377,6 +377,85 @@ describe('evolveCommand', () => {
         });
       });
     });
+
+    describe('--max-retries option', () => {
+      it('registers the --max-retries option', () => {
+        evolveCommand(program);
+
+        const commands = program.commands;
+        const evolveCmd = commands.find((cmd) => cmd.name() === 'evolve');
+
+        expect(evolveCmd).toBeDefined();
+        const maxRetriesOption = evolveCmd?.options.find((opt) => opt.long === '--max-retries');
+        expect(maxRetriesOption).toBeDefined();
+      });
+
+      it('passes maxRetries to runSelfEvolution when --max-retries is used', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync(['node', 'test', 'evolve', '--max-retries', '10']);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: undefined,
+          dryRun: undefined,
+          sleepMs: undefined,
+          useTsNode: undefined,
+          verifyTimeoutMs: undefined,
+          opencodeTimeoutMs: undefined,
+          maxRetries: 10,
+        });
+      });
+
+      it('passes unlimited retries when --max-retries is -1', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync(['node', 'test', 'evolve', '--max-retries', '-1']);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: undefined,
+          dryRun: undefined,
+          sleepMs: undefined,
+          useTsNode: undefined,
+          verifyTimeoutMs: undefined,
+          opencodeTimeoutMs: undefined,
+          maxRetries: -1,
+        });
+      });
+
+      it('can combine --max-retries with other options', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync([
+          'node',
+          'test',
+          'evolve',
+          '--once',
+          '--max-retries',
+          '3',
+          '--sleep',
+          '10000',
+        ]);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith({
+          logger: expect.any(Function),
+          once: true,
+          dryRun: undefined,
+          sleepMs: 10000,
+          useTsNode: undefined,
+          verifyTimeoutMs: undefined,
+          opencodeTimeoutMs: undefined,
+          maxRetries: 3,
+        });
+      });
+    });
   });
 
   describe('parsePositiveInt validation', () => {
@@ -492,6 +571,47 @@ describe('evolveCommand', () => {
         await expect(
           program.parseAsync(['node', 'test', 'evolve', '--opencode-timeout', '600.7'])
         ).rejects.toThrow('--opencode-timeout must be an integer, got: 600.7');
+      });
+    });
+
+    describe('--max-retries option validation', () => {
+      it('accepts valid positive integer', async () => {
+        await program.parseAsync(['node', 'test', 'evolve', '--max-retries', '10']);
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith(
+          expect.objectContaining({ maxRetries: 10 })
+        );
+      });
+
+      it('accepts -1 for unlimited retries', async () => {
+        await program.parseAsync(['node', 'test', 'evolve', '--max-retries', '-1']);
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith(
+          expect.objectContaining({ maxRetries: -1 })
+        );
+      });
+
+      it('accepts 0 for no retries', async () => {
+        await program.parseAsync(['node', 'test', 'evolve', '--max-retries', '0']);
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith(
+          expect.objectContaining({ maxRetries: 0 })
+        );
+      });
+
+      it('throws error for non-numeric value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--max-retries', 'abc'])
+        ).rejects.toThrow('--max-retries must be a number, got: abc');
+      });
+
+      it('throws error for value less than -1', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--max-retries', '-2'])
+        ).rejects.toThrow('--max-retries must be >= -1, got: -2');
+      });
+
+      it('throws error for float value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--max-retries', '5.5'])
+        ).rejects.toThrow('--max-retries must be an integer, got: 5.5');
       });
     });
   });
