@@ -220,8 +220,8 @@ export class SelfDriver {
       this.iterationCount++;
       this.log(`\n📊 Iteration ${this.iterationCount} starting...`);
 
-      // Capture git status before evolution to detect if changes were made
-      const beforeStatus = await this.getGitStatus();
+      // Capture git commit hash before evolution to detect if changes were committed
+      const beforeCommitHash = await this.getHeadCommitHash();
 
       // 1. Read constitution file
       const constitution = await this.readConstitution();
@@ -251,15 +251,15 @@ export class SelfDriver {
           return;
         }
       } else {
-        // Verification passed, check if AI has committed
+        // Verification passed, check if AI has committed by comparing commit hashes
         const isClean = await this.isWorkingTreeClean();
-        const afterStatus = await this.getGitStatus();
-        const changesMade = beforeStatus !== afterStatus;
+        const afterCommitHash = await this.getHeadCommitHash();
+        const commitMade = beforeCommitHash !== afterCommitHash;
 
-        if (isClean && changesMade) {
+        if (isClean && commitMade) {
           this.log('✅ Changes committed by AI');
           this.consecutiveFailures = 0; // Reset on success
-        } else if (isClean && !changesMade) {
+        } else if (isClean && !commitMade) {
           this.log('ℹ️  AI made no changes this iteration (SKIP)');
           this.consecutiveFailures = 0; // Not a failure
         } else {
@@ -580,18 +580,18 @@ If verification fails, do NOT commit - the system will revert automatically.`;
   }
 
   /**
-   * Gets git status output for comparing before/after state.
-   * @returns Normalized git status output string
+   * Gets the current HEAD commit hash.
+   * @returns The commit hash string, or empty string if not in a git repo or on error
    */
-  private async getGitStatus(): Promise<string> {
+  private async getHeadCommitHash(): Promise<string> {
     try {
-      const status = await execa('git', ['status', '--porcelain'], {
+      const result = await execa('git', ['rev-parse', 'HEAD'], {
         cwd: this.projectRoot,
         reject: false,
       });
-      return status.stdout.trim();
+      return result.stdout.trim();
     } catch (error) {
-      this.log(`⚠️  Git status check failed: ${formatError(error)}`);
+      this.log(`⚠️  Git commit hash check failed: ${formatError(error)}`);
       return '';
     }
   }

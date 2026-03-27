@@ -955,12 +955,26 @@ describe('SelfDriver', () => {
       const mockLogger = jest.fn();
       driver = new SelfDriver({ once: true, logger: mockLogger });
 
+      let gitRevParseCallCount = 0;
+
       mockExeca.mockImplementation(async (command: string, args?: string[]) => {
         const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
 
-        // Git rev-parse succeeds
+        // Git rev-parse --git-dir succeeds (pre-flight check)
         if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
           return mockExecaResult(0, '.git', '');
+        }
+
+        // Git rev-parse HEAD - return different hashes to simulate a commit was made
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+          gitRevParseCallCount++;
+          if (gitRevParseCallCount === 1) {
+            // Before evolution
+            return mockExecaResult(0, 'abc123', '');
+          } else {
+            // After evolution - different hash = commit made
+            return mockExecaResult(0, 'def456', '');
+          }
         }
 
         // Git status returns clean
@@ -1108,8 +1122,27 @@ describe('pre-existing dirty state handling', () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ once: true, logger: mockLogger });
 
+    let gitRevParseCallCount = 0;
+
     mockExeca.mockImplementation(async (command: string, args?: string[]) => {
       const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      // Git rev-parse --git-dir succeeds (pre-flight check)
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+
+      // Git rev-parse HEAD - return different hashes to simulate a commit was made
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+        gitRevParseCallCount++;
+        if (gitRevParseCallCount === 1) {
+          // Before evolution
+          return mockExecaResult(0, 'abc123', '');
+        } else {
+          // After evolution - different hash = commit made
+          return mockExecaResult(0, 'def456', '');
+        }
+      }
 
       // Git status returns clean (AI committed changes)
       if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
