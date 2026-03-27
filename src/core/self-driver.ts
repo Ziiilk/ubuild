@@ -221,15 +221,10 @@ export class SelfDriver {
       const executed = await this.evolveWithOpenCode(constitution);
 
       if (!executed) {
-        this.consecutiveFailures++;
-        if (this.maxRetries >= 0 && this.consecutiveFailures >= this.maxRetries) {
-          this.log(`❌ Max retries (${this.maxRetries}) reached, stopping evolution`);
-          this.cleanup();
+        const shouldStop = this.handleEvolutionFailure('Evolution execution issue');
+        if (shouldStop) {
           return;
         }
-        this.log(
-          `⚠️  Evolution execution issue (${this.consecutiveFailures}/${this.maxRetries === -1 ? '∞' : this.maxRetries}), retrying next iteration...`
-        );
         await this.sleep(this.sleepMs);
         continue;
       }
@@ -241,10 +236,8 @@ export class SelfDriver {
       if (!verified) {
         this.log('❌ Verification failed, reverting...');
         await this.revert();
-        this.consecutiveFailures++;
-        if (this.maxRetries >= 0 && this.consecutiveFailures >= this.maxRetries) {
-          this.log(`❌ Max retries (${this.maxRetries}) reached, stopping evolution`);
-          this.cleanup();
+        const shouldStop = this.handleEvolutionFailure('Verification failed');
+        if (shouldStop) {
           return;
         }
       } else {
@@ -257,10 +250,8 @@ export class SelfDriver {
           this.log('⚠️  Verification passed but AI did not commit changes');
           this.log('🔄 Reverting uncommitted changes...');
           await this.revert();
-          this.consecutiveFailures++;
-          if (this.maxRetries >= 0 && this.consecutiveFailures >= this.maxRetries) {
-            this.log(`❌ Max retries (${this.maxRetries}) reached, stopping evolution`);
-            this.cleanup();
+          const shouldStop = this.handleEvolutionFailure('Uncommitted changes after verification');
+          if (shouldStop) {
             return;
           }
         }
@@ -514,6 +505,28 @@ If verification fails, do NOT commit - the system will revert automatically.`;
     }
 
     return true;
+  }
+
+  /**
+   * Handles evolution failure by incrementing failure counter and checking max retries.
+   * @param reason - The reason for the failure (for logging)
+   * @returns true if evolution should stop (max retries reached), false to continue
+   */
+  private handleEvolutionFailure(reason: string): boolean {
+    this.consecutiveFailures++;
+    const shouldStop = this.maxRetries >= 0 && this.consecutiveFailures >= this.maxRetries;
+
+    if (shouldStop) {
+      this.log(`❌ ${reason} - Max retries (${this.maxRetries}) reached, stopping evolution`);
+      this.cleanup();
+    } else {
+      const retryLabel = this.maxRetries === -1 ? '∞' : this.maxRetries;
+      this.log(
+        `⚠️  ${reason} (${this.consecutiveFailures}/${retryLabel}), retrying next iteration...`
+      );
+    }
+
+    return shouldStop;
   }
 
   /**

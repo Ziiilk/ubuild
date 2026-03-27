@@ -1673,6 +1673,56 @@ describe('unlimited retries (maxRetries = -1)', () => {
   });
 });
 
+describe('max retries exhaustion', () => {
+  it('stops evolution when max retries is reached after consecutive failures', async () => {
+    const mockLogger = jest.fn();
+    const maxRetries = 3;
+    driver = new SelfDriver({ once: true, logger: mockLogger, maxRetries, sleepMs: 50 });
+
+    let opencodeCallCount = 0;
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode always fails
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          opencodeCallCount++;
+          return mockExecaResult(1, '', 'Execution failed');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should retry exactly maxRetries times
+    expect(opencodeCallCount).toBe(maxRetries);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining(`Max retries (${maxRetries}) reached, stopping evolution`)
+    );
+    // Should log each failure
+    expect(
+      mockLogger.mock.calls.filter((call) => call[0].includes('Evolution execution issue')).length
+    ).toBe(maxRetries);
+  });
+});
+
 describe('verification timeout behavior', () => {
   it('handles verification timeout gracefully', async () => {
     const mockLogger = jest.fn();
