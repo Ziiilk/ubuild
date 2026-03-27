@@ -15,7 +15,7 @@ import path from 'path';
 import { Writable } from 'stream';
 import { Logger } from '../utils/logger';
 import { compareVersions } from '../utils/version';
-import { formatError } from '../utils/error';
+import { formatError, handleCommandError } from '../utils/error';
 
 export interface UpdateCommandOptions {
   /** Writable stream for standard output (defaults to process.stdout) */
@@ -125,9 +125,11 @@ export async function executeUpdate(options: UpdateCommandOptions = {}): Promise
     logger.success(`Successfully updated to version ${chalk.bold(newVersion)}!`);
     logger.info('You may need to restart your terminal for changes to take effect.');
   } catch (error) {
-    logger.error(`Update failed: ${formatError(error)}`);
-    logger.info('You can manually update using: npm install -g @zitool/ubuild');
-    throw error;
+    // Add hint to error message for context
+    const enhancedError = new Error(
+      `${formatError(error)}\nYou can manually update using: npm install -g @zitool/ubuild`
+    );
+    throw enhancedError;
   }
 }
 
@@ -149,6 +151,10 @@ export function updateCommand(program: Command): void {
     .command('update')
     .description('Update ubuild to the latest version')
     .action(async () => {
-      await executeUpdate();
+      try {
+        await executeUpdate();
+      } catch (error) {
+        handleCommandError(error, 'Update failed');
+      }
     });
 }

@@ -10,7 +10,7 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { Writable } from 'stream';
 import { Logger } from '../utils/logger';
-import { formatError } from '../utils/error';
+import { formatError, handleCommandError } from '../utils/error';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 
@@ -71,26 +71,21 @@ export async function executeVersion(options: VersionCommandOptions = {}): Promi
 
   const logger = new Logger({ stdout, stderr });
 
-  try {
-    const info = await getVersionInfo();
+  const info = await getVersionInfo();
 
-    if (options.json) {
-      logger.json(info);
-      return;
-    }
-
-    logger.title('ubuild - Unreal Engine Project Management');
-    logger.write(`\n`);
-    logger.write(`  Version: ${chalk.bold.cyan(info.version)}\n`);
-    logger.write(`  Package: ${chalk.gray(info.name)}\n`);
-    logger.write(`\n`);
-    logger.write(`${info.description}\n`);
-    logger.write(`\n`);
-    logger.success('Version information retrieved successfully');
-  } catch (error) {
-    logger.error(`Failed to retrieve version: ${formatError(error)}`);
-    throw error;
+  if (options.json) {
+    logger.json(info);
+    return;
   }
+
+  logger.title('ubuild - Unreal Engine Project Management');
+  logger.write(`\n`);
+  logger.write(`  Version: ${chalk.bold.cyan(info.version)}\n`);
+  logger.write(`  Package: ${chalk.gray(info.name)}\n`);
+  logger.write(`\n`);
+  logger.write(`${info.description}\n`);
+  logger.write(`\n`);
+  logger.success('Version information retrieved successfully');
 }
 
 /**
@@ -104,8 +99,12 @@ export function versionCommand(program: Command): void {
     .description('Display ubuild version information')
     .option('-j, --json', 'Output result as JSON')
     .action(async (options) => {
-      await executeVersion({
-        json: options.json,
-      });
+      try {
+        await executeVersion({
+          json: options.json,
+        });
+      } catch (error) {
+        handleCommandError(error, 'Failed to retrieve version');
+      }
     });
 }
