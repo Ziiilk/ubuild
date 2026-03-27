@@ -155,7 +155,9 @@ export class SelfDriver {
         reject: false,
       });
       return result.exitCode === 0;
-    } catch {
+    } catch (error) {
+      // Log debug info for troubleshooting OpenCode detection issues
+      this.log(`⚠️  OpenCode detection failed: ${formatError(error)}`);
       return false;
     }
   }
@@ -255,7 +257,12 @@ export class SelfDriver {
 
       if (!verified) {
         this.log('❌ Verification failed, reverting...');
-        await this.revert();
+        const revertSuccess = await this.revert();
+        if (!revertSuccess) {
+          this.log('❌ Revert failed - manual intervention may be required');
+          this.cleanup();
+          return;
+        }
         const shouldStop = this.handleEvolutionFailure('Verification failed');
         if (shouldStop) {
           return;
@@ -276,7 +283,12 @@ export class SelfDriver {
           // Not clean = changes made but not committed
           this.log('⚠️  Verification passed but AI did not commit changes');
           this.log('🔄 Reverting uncommitted changes...');
-          await this.revert();
+          const revertSuccess = await this.revert();
+          if (!revertSuccess) {
+            this.log('❌ Revert failed - manual intervention may be required');
+            this.cleanup();
+            return;
+          }
           const shouldStop = this.handleEvolutionFailure('Uncommitted changes after verification');
           if (shouldStop) {
             return;
@@ -599,8 +611,9 @@ If verification fails, do NOT commit - the system will revert automatically.`;
 
   /**
    * Reverts changes (both staged and unstaged).
+   * @returns true if revert succeeded, false otherwise
    */
-  private async revert(): Promise<void> {
+  private async revert(): Promise<boolean> {
     try {
       // First reset any staged changes, then revert working tree
       await execa('git', ['reset', 'HEAD'], { cwd: this.projectRoot });
@@ -608,8 +621,10 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       // Remove untracked files and directories to prevent accumulation across iterations
       await execa('git', ['clean', '-fd'], { cwd: this.projectRoot });
       this.log('🔄 Reverted changes');
+      return true;
     } catch (error) {
       this.log(`⚠️  Revert failed: ${formatError(error)}`);
+      return false;
     }
   }
 
