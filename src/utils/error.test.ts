@@ -4,7 +4,13 @@
  * @module utils/error.test
  */
 
-import { formatError, formatErrorWithPrefix, getErrorStack, isError } from './error';
+import {
+  formatError,
+  formatErrorWithPrefix,
+  getErrorStack,
+  isError,
+  handleCommandError,
+} from './error';
 
 describe('formatError', () => {
   it('should extract message from Error object', () => {
@@ -215,5 +221,49 @@ describe('isError', () => {
 
   it('should handle formatErrorWithPrefix with empty string error', () => {
     expect(formatErrorWithPrefix('Error', '')).toBe('Error: ');
+  });
+});
+
+describe('handleCommandError', () => {
+  const mockExit = jest.spyOn(process, 'exit').mockImplementation((code) => {
+    throw new Error(`process.exit(${code})`);
+  });
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    mockExit.mockImplementation((code) => {
+      throw new Error(`process.exit(${code})`);
+    });
+  });
+
+  afterAll(() => {
+    mockExit.mockRestore();
+  });
+
+  it('should log error and exit with code 1', () => {
+    const error = new Error('Test error');
+    expect(() => handleCommandError(error)).toThrow('process.exit(1)');
+  });
+
+  it('should use default prefix "Unexpected error"', () => {
+    const error = new Error('Test error');
+    expect(() => handleCommandError(error)).toThrow('process.exit(1)');
+  });
+
+  it('should accept custom prefix', () => {
+    const error = new Error('Test error');
+    expect(() => handleCommandError(error, 'Build failed')).toThrow('process.exit(1)');
+  });
+
+  it('should handle non-Error values', () => {
+    expect(() => handleCommandError('string error')).toThrow('process.exit(1)');
+  });
+
+  it('should handle null error', () => {
+    expect(() => handleCommandError(null)).toThrow('process.exit(1)');
+  });
+
+  it('should handle undefined error', () => {
+    expect(() => handleCommandError(undefined)).toThrow('process.exit(1)');
   });
 });

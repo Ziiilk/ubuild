@@ -110,3 +110,35 @@ export function getErrorStack(error: unknown): string | undefined {
 export function isError(value: unknown): value is Error {
   return value instanceof Error;
 }
+
+/**
+ * Handles an error in a CLI command by logging and exiting.
+ *
+ * This utility standardizes error handling across command files,
+ * ensuring consistent error messages and exit behavior.
+ *
+ * @param error - The error value to handle
+ * @param prefix - Optional prefix for the error message (default: 'Unexpected error')
+ *
+ * @example
+ * ```typescript
+ * import { handleCommandError } from '../utils/error';
+ *
+ * // In a command action:
+ * .action(async (options) => {
+ *   try {
+ *     await doWork();
+ *   } catch (error) {
+ *     handleCommandError(error);
+ *   }
+ * });
+ * ```
+ */
+export function handleCommandError(error: unknown, prefix = 'Unexpected error'): never {
+  // Use require to avoid circular dependency with Logger
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Logger } = require('./logger');
+  Logger.error(`${prefix}: ${formatError(error)}`);
+  Logger.error('Exiting with error code 1');
+  process.exit(1);
+}

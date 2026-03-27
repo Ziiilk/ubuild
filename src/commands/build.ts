@@ -8,7 +8,7 @@
  */
 
 import { Command } from 'commander';
-import { Logger } from '../utils/logger';
+import { handleCommandError } from '../utils/error';
 import { ProjectBuilder } from '../core/project-builder';
 
 /**
@@ -62,9 +62,7 @@ export function buildCommand(program: Command): void {
         const builder = new ProjectBuilder();
         await builder.build(options);
       } catch (error) {
-        Logger.error(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
-        Logger.error('Exiting with error code 1');
-        process.exit(1);
+        handleCommandError(error);
       }
     });
 }
