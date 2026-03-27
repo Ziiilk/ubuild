@@ -63,6 +63,37 @@ export class Validator {
   }
 
   /**
+   * Parses and validates an integer option value within specified bounds.
+   * @param value - The raw string value to parse
+   * @param optionName - The name of the option for error messages
+   * @param options - Optional bounds configuration
+   * @param options.min - Minimum allowed value (inclusive)
+   * @param options.max - Maximum allowed value (inclusive)
+   * @returns The parsed integer
+   * @throws Error if value is not a valid integer or is outside bounds
+   */
+  static parseBoundedInt(
+    value: string,
+    optionName: string,
+    options?: { min?: number; max?: number }
+  ): number {
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed)) {
+      throw new Error(`${optionName} must be a number, got: ${value}`);
+    }
+    if (parsed !== parseFloat(value)) {
+      throw new Error(`${optionName} must be an integer, got: ${value}`);
+    }
+    if (options?.min !== undefined && parsed < options.min) {
+      throw new Error(`${optionName} must be >= ${options.min}, got: ${value}`);
+    }
+    if (options?.max !== undefined && parsed > options.max) {
+      throw new Error(`${optionName} must be <= ${options.max}, got: ${value}`);
+    }
+    return parsed;
+  }
+
+  /**
    * Validates a project name format (alphanumeric, underscores, hyphens).
    * @param name - The project name to validate
    * @returns True if the name is valid

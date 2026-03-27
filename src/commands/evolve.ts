@@ -62,19 +62,7 @@ export function evolveCommand(program: Command): void {
     .option(
       '--max-retries <n>',
       'Maximum consecutive retry attempts on failure (default: 5, use -1 for unlimited)',
-      (value) => {
-        const parsed = parseInt(value, 10);
-        if (isNaN(parsed)) {
-          throw new Error(`--max-retries must be a number, got: ${value}`);
-        }
-        if (parsed !== parseFloat(value)) {
-          throw new Error(`--max-retries must be an integer, got: ${value}`);
-        }
-        if (parsed < -1) {
-          throw new Error(`--max-retries must be >= -1, got: ${value}`);
-        }
-        return parsed;
-      }
+      (value) => Validator.parseBoundedInt(value, '--max-retries', { min: -1 })
     )
     .action(async (options) => {
       try {

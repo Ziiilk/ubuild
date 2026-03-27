@@ -467,4 +467,96 @@ describe('Validator', () => {
       );
     });
   });
+
+  describe('parseBoundedInt', () => {
+    it('parses valid integers', () => {
+      expect(Validator.parseBoundedInt('0', '--test')).toBe(0);
+      expect(Validator.parseBoundedInt('42', '--test')).toBe(42);
+      expect(Validator.parseBoundedInt('-1', '--test')).toBe(-1);
+      expect(Validator.parseBoundedInt('999999', '--test')).toBe(999999);
+    });
+
+    it('rejects non-numeric strings', () => {
+      expect(() => Validator.parseBoundedInt('abc', '--test')).toThrow(
+        '--test must be a number, got: abc'
+      );
+    });
+
+    it('rejects float values', () => {
+      expect(() => Validator.parseBoundedInt('1.5', '--test')).toThrow(
+        '--test must be an integer, got: 1.5'
+      );
+      expect(() => Validator.parseBoundedInt('3.14', '--test')).toThrow(
+        '--test must be an integer, got: 3.14'
+      );
+    });
+
+    it('rejects empty strings', () => {
+      expect(() => Validator.parseBoundedInt('', '--test')).toThrow(
+        '--test must be a number, got: '
+      );
+    });
+
+    it('respects min bound', () => {
+      expect(Validator.parseBoundedInt('5', '--test', { min: 0 })).toBe(5);
+      expect(Validator.parseBoundedInt('0', '--test', { min: 0 })).toBe(0);
+      expect(Validator.parseBoundedInt('-1', '--test', { min: -1 })).toBe(-1);
+    });
+
+    it('rejects values below min bound', () => {
+      expect(() => Validator.parseBoundedInt('-1', '--test', { min: 0 })).toThrow(
+        '--test must be >= 0, got: -1'
+      );
+      expect(() => Validator.parseBoundedInt('-5', '--test', { min: -1 })).toThrow(
+        '--test must be >= -1, got: -5'
+      );
+    });
+
+    it('respects max bound', () => {
+      expect(Validator.parseBoundedInt('50', '--test', { max: 100 })).toBe(50);
+      expect(Validator.parseBoundedInt('100', '--test', { max: 100 })).toBe(100);
+    });
+
+    it('rejects values above max bound', () => {
+      expect(() => Validator.parseBoundedInt('101', '--test', { max: 100 })).toThrow(
+        '--test must be <= 100, got: 101'
+      );
+    });
+
+    it('respects both min and max bounds', () => {
+      expect(Validator.parseBoundedInt('50', '--test', { min: 0, max: 100 })).toBe(50);
+      expect(Validator.parseBoundedInt('0', '--test', { min: 0, max: 100 })).toBe(0);
+      expect(Validator.parseBoundedInt('100', '--test', { min: 0, max: 100 })).toBe(100);
+    });
+
+    it('rejects values outside combined bounds', () => {
+      expect(() => Validator.parseBoundedInt('-1', '--test', { min: 0, max: 100 })).toThrow(
+        '--test must be >= 0, got: -1'
+      );
+      expect(() => Validator.parseBoundedInt('101', '--test', { min: 0, max: 100 })).toThrow(
+        '--test must be <= 100, got: 101'
+      );
+    });
+
+    it('handles unlimited retries case (min: -1)', () => {
+      expect(Validator.parseBoundedInt('-1', '--max-retries', { min: -1 })).toBe(-1);
+      expect(Validator.parseBoundedInt('0', '--max-retries', { min: -1 })).toBe(0);
+      expect(Validator.parseBoundedInt('10', '--max-retries', { min: -1 })).toBe(10);
+    });
+
+    it('rejects values below -1 when min is -1', () => {
+      expect(() => Validator.parseBoundedInt('-2', '--max-retries', { min: -1 })).toThrow(
+        '--max-retries must be >= -1, got: -2'
+      );
+    });
+
+    it('includes option name in error messages for debugging', () => {
+      expect(() => Validator.parseBoundedInt('-5', '--max-retries', { min: -1 })).toThrow(
+        '--max-retries must be >= -1, got: -5'
+      );
+      expect(() => Validator.parseBoundedInt('abc', '--timeout')).toThrow(
+        '--timeout must be a number, got: abc'
+      );
+    });
+  });
 });
