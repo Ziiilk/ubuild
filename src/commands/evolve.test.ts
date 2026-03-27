@@ -379,6 +379,123 @@ describe('evolveCommand', () => {
     });
   });
 
+  describe('parsePositiveInt validation', () => {
+    beforeEach(() => {
+      mockRunSelfEvolution.mockResolvedValue(undefined);
+      evolveCommand(program);
+    });
+
+    describe('--sleep option validation', () => {
+      it('accepts valid positive integer', async () => {
+        await program.parseAsync(['node', 'test', 'evolve', '--sleep', '10000']);
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith(
+          expect.objectContaining({ sleepMs: 10000 })
+        );
+      });
+
+      it('throws error for non-numeric value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--sleep', 'abc'])
+        ).rejects.toThrow('--sleep must be a positive integer, got: abc');
+      });
+
+      it('throws error for zero value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--sleep', '0'])
+        ).rejects.toThrow('--sleep must be a positive integer, got: 0');
+      });
+
+      it('throws error for negative value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--sleep', '-100'])
+        ).rejects.toThrow('--sleep must be a positive integer, got: -100');
+      });
+
+      it('throws error for float value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--sleep', '5.5'])
+        ).rejects.toThrow('--sleep must be an integer, got: 5.5');
+      });
+
+      it('throws error for float string value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--sleep', '10.5'])
+        ).rejects.toThrow('--sleep must be an integer, got: 10.5');
+      });
+
+      it('accepts minimum valid value of 1', async () => {
+        await program.parseAsync(['node', 'test', 'evolve', '--sleep', '1']);
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith(expect.objectContaining({ sleepMs: 1 }));
+      });
+    });
+
+    describe('--verify-timeout option validation', () => {
+      it('accepts valid positive integer', async () => {
+        await program.parseAsync(['node', 'test', 'evolve', '--verify-timeout', '120000']);
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith(
+          expect.objectContaining({ verifyTimeoutMs: 120000 })
+        );
+      });
+
+      it('throws error for non-numeric value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--verify-timeout', 'abc'])
+        ).rejects.toThrow('--verify-timeout must be a positive integer, got: abc');
+      });
+
+      it('throws error for zero value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--verify-timeout', '0'])
+        ).rejects.toThrow('--verify-timeout must be a positive integer, got: 0');
+      });
+
+      it('throws error for negative value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--verify-timeout', '-1000'])
+        ).rejects.toThrow('--verify-timeout must be a positive integer, got: -1000');
+      });
+
+      it('throws error for float value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--verify-timeout', '60.5'])
+        ).rejects.toThrow('--verify-timeout must be an integer, got: 60.5');
+      });
+    });
+
+    describe('--opencode-timeout option validation', () => {
+      it('accepts valid positive integer', async () => {
+        await program.parseAsync(['node', 'test', 'evolve', '--opencode-timeout', '900000']);
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith(
+          expect.objectContaining({ opencodeTimeoutMs: 900000 })
+        );
+      });
+
+      it('throws error for non-numeric value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--opencode-timeout', 'abc'])
+        ).rejects.toThrow('--opencode-timeout must be a positive integer, got: abc');
+      });
+
+      it('throws error for zero value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--opencode-timeout', '0'])
+        ).rejects.toThrow('--opencode-timeout must be a positive integer, got: 0');
+      });
+
+      it('throws error for negative value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--opencode-timeout', '-500'])
+        ).rejects.toThrow('--opencode-timeout must be a positive integer, got: -500');
+      });
+
+      it('throws error for float value', async () => {
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--opencode-timeout', '600.7'])
+        ).rejects.toThrow('--opencode-timeout must be an integer, got: 600.7');
+      });
+    });
+  });
+
   describe('error handling', () => {
     it('logs error and exits with code 1 on exception', async () => {
       mockRunSelfEvolution.mockRejectedValue(new Error('Network error'));
