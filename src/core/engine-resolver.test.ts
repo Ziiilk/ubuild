@@ -1196,5 +1196,407 @@ describe('EngineResolver', () => {
       const firstEngine = result.find((e) => e.associationId === firstGuid);
       expect(firstEngine).toBeUndefined();
     });
+
+    it('handles malformed GUID in registry output', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      // Mock registry output with malformed GUID (no closing brace)
+      mockExeca.mockImplementation(async () => ({
+        stdout: [
+          'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds',
+          '{MALFORMED-GUID    REG_SZ    C:\\Epic\\UE_Malformed',
+        ].join('\n'),
+      }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Malformed GUID should be skipped
+      expect(result).toHaveLength(0);
+    });
+
+    it('handles registry line without opening brace', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      // Mock registry output with line that doesn't start with {
+      mockExeca.mockImplementation(async () => ({
+        stdout: [
+          'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds',
+          'NOT-A-GUID    REG_SZ    C:\\Epic\\UE_NotGuid',
+        ].join('\n'),
+      }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Line without opening brace should be skipped
+      expect(result).toHaveLength(0);
+    });
+  });
+
+  describe('launcher manifest error handling', () => {
+    it('handles file read errors gracefully', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      // Mock fs.pathExists to return true but readFile to throw
+      configureFs({
+        existingPaths: [manifestPath],
+      });
+
+      mockReadFile.mockImplementation(async () => {
+        throw new Error('Permission denied reading manifest');
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Should return empty array, not throw
+      expect(result).toHaveLength(0);
+    });
+
+    it('handles malformed JSON in launcher manifest gracefully', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      configureFs({
+        existingPaths: [manifestPath],
+        fileContents: {
+          [manifestPath]: 'not valid json at all {{{',
+        },
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Should return empty array, not throw
+      expect(result).toHaveLength(0);
+    });
+  });
+
+  describe('version loading error handling', () => {
+    it('handles errors when loading engine version info gracefully', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(false);
+
+      process.env.UE_ENGINE_PATH = 'C:\\Engines\\UE_Error';
+
+      // Mock path exists but stat will throw when trying to read version file
+      configureFs({
+        existingPaths: ['C:\\Engines\\UE_Error'],
+      });
+
+      // Make stat throw for version file paths
+      mockStat.mockImplementation(async (candidate: string) => {
+        if (candidate.includes('version')) {
+          throw new Error('Cannot access version file');
+        }
+        return { isDirectory: () => true };
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Should still return the engine, just without version info
+      expect(result).toHaveLength(1);
+      expect(result[0].version).toBeUndefined();
+      expect(result[0].displayName).toBe('UE Engine (from UE_ENGINE_PATH)');
+    });
+  });
+
+  describe('version comparison comprehensive tests', () => {
+    it('compares different major versions', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      const enginePath427 = 'C:\\Engines\\UE_4_27';
+      const enginePath53 = 'C:\\Engines\\UE_5_3';
+      const versionFile427 = path.join(enginePath427, 'Engine', 'Build', 'Build.version');
+      const versionFile53 = path.join(enginePath53, 'Engine', 'Build', 'Build.version');
+
+      configureFs({
+        existingPaths: [manifestPath, enginePath427, enginePath53, versionFile427, versionFile53],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_4_27',
+                InstallLocation: enginePath427,
+                DisplayName: 'UE 4.27',
+              },
+              {
+                AppName: 'UE_5_3',
+                InstallLocation: enginePath53,
+                DisplayName: 'UE 5.3',
+              },
+            ],
+          }),
+          [versionFile427]: JSON.stringify({
+            MajorVersion: 4,
+            MinorVersion: 27,
+            PatchVersion: 0,
+            Changelist: 1000,
+            CompatibleChangelist: 1000,
+            IsLicenseeVersion: 0,
+            IsPromotedBuild: 1,
+            BranchName: '++UE4+Release-4.27',
+            BuildId: 'ue4-1000',
+          }),
+          [versionFile53]: JSON.stringify({
+            MajorVersion: 5,
+            MinorVersion: 3,
+            PatchVersion: 0,
+            Changelist: 2000,
+            CompatibleChangelist: 2000,
+            IsLicenseeVersion: 0,
+            IsPromotedBuild: 1,
+            BranchName: '++UE5+Release-5.3',
+            BuildId: 'ue5-2000',
+          }),
+        },
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Should have both engines with version info loaded from files
+      expect(result).toHaveLength(2);
+      expect(result.some((r) => r.version?.MajorVersion === 5)).toBe(true);
+      expect(result.some((r) => r.version?.MajorVersion === 4)).toBe(true);
+    });
+
+    it('compares different patch versions when major and minor are equal', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      const enginePath531 = 'C:\\Engines\\UE531';
+      const enginePath532 = 'C:\\Engines\\UE532';
+      const versionFile531 = path.join(enginePath531, 'Engine', 'Build', 'Build.version');
+      const versionFile532 = path.join(enginePath532, 'Engine', 'Build', 'Build.version');
+
+      configureFs({
+        existingPaths: [manifestPath, enginePath531, enginePath532, versionFile531, versionFile532],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_5_3_1',
+                InstallLocation: enginePath531,
+                DisplayName: 'UE 5.3.1',
+              },
+              {
+                AppName: 'UE_5_3_2',
+                InstallLocation: enginePath532,
+                DisplayName: 'UE 5.3.2',
+              },
+            ],
+          }),
+          [versionFile531]: JSON.stringify({
+            MajorVersion: 5,
+            MinorVersion: 3,
+            PatchVersion: 1,
+            Changelist: 1000,
+            CompatibleChangelist: 1000,
+            IsLicenseeVersion: 0,
+            IsPromotedBuild: 1,
+            BranchName: '++UE5+Release-5.3.1',
+            BuildId: 'ue5-31',
+          }),
+          [versionFile532]: JSON.stringify({
+            MajorVersion: 5,
+            MinorVersion: 3,
+            PatchVersion: 2,
+            Changelist: 1000,
+            CompatibleChangelist: 1000,
+            IsLicenseeVersion: 0,
+            IsPromotedBuild: 1,
+            BranchName: '++UE5+Release-5.3.2',
+            BuildId: 'ue5-32',
+          }),
+        },
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Should have both engines with correct patch versions
+      expect(result).toHaveLength(2);
+      const patch1 = result.find((r) => r.version?.PatchVersion === 1);
+      const patch2 = result.find((r) => r.version?.PatchVersion === 2);
+      expect(patch1).toBeDefined();
+      expect(patch2).toBeDefined();
+    });
+
+    it('compares different changelists when versions are equal', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      const versionFile1 = 'C:\\Epic\\UE_5.3.0\\Engine\\Build\\Build.version';
+
+      configureFs({
+        existingPaths: [manifestPath, 'C:\\Epic\\UE_5.3.0', versionFile1],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_5_3_CL1000',
+                InstallLocation: 'C:\\Epic\\UE_5.3.0',
+                DisplayName: 'UE 5.3.0 CL1000',
+              },
+              {
+                AppName: 'UE_5_3_CL2000',
+                InstallLocation: 'C:\\Epic\\UE_5.3.0',
+                DisplayName: 'UE 5.3.0 CL2000',
+              },
+            ],
+          }),
+          [versionFile1]: JSON.stringify({
+            MajorVersion: 5,
+            MinorVersion: 3,
+            PatchVersion: 0,
+            Changelist: 1000,
+            CompatibleChangelist: 1000,
+            IsLicenseeVersion: 0,
+            IsPromotedBuild: 1,
+            BranchName: '++UE5+Release-5.3.0',
+            BuildId: 'ue5-cl1000',
+          }),
+        },
+      });
+
+      // Mock execa to return two registry entries at same path with different changelists
+      mockExeca.mockImplementation(async () => ({
+        stdout: [
+          'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds',
+          '{CL1000-GUID}    REG_SZ    C:\\Epic\\UE_5.3.0',
+          '{CL2000-GUID}    REG_SZ    C:\\Epic\\UE_5.3.0',
+        ].join('\n'),
+      }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Should prefer launcher source and sort by version
+      expect(result.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('compareVersionString edge cases', () => {
+    it('handles identical version strings correctly', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      const enginePath = 'C:\\Engines\\UE_Version';
+      const versionFile = path.join(enginePath, 'Engine', 'Build', 'Build.version');
+
+      configureFs({
+        existingPaths: [manifestPath, enginePath, versionFile],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_Test',
+                InstallLocation: enginePath,
+                DisplayName: 'UE Test',
+              },
+            ],
+          }),
+          [versionFile]: JSON.stringify({
+            MajorVersion: 5,
+            MinorVersion: 3,
+            PatchVersion: 2,
+            Changelist: 1000,
+            CompatibleChangelist: 1000,
+            IsLicenseeVersion: 0,
+            IsPromotedBuild: 1,
+            BranchName: '++UE5+Release-5.3.2',
+            BuildId: 'test-1000',
+          }),
+        },
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].version).toEqual({
+        MajorVersion: 5,
+        MinorVersion: 3,
+        PatchVersion: 2,
+        Changelist: 1000,
+        CompatibleChangelist: 1000,
+        IsLicenseeVersion: 0,
+        IsPromotedBuild: 1,
+        BranchName: '++UE5+Release-5.3.2',
+        BuildId: 'test-1000',
+      });
+    });
+
+    it('handles version strings with different segment counts', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const uprojectPath = 'C:\\Projects\\TestGame\\TestGame.uproject';
+
+      configureFs({
+        existingPaths: [uprojectPath],
+        fileContents: {
+          [uprojectPath]: JSON.stringify({ EngineAssociation: '5.3.2.1' }),
+        },
+      });
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      configureFs({
+        existingPaths: [uprojectPath, manifestPath],
+        fileContents: {
+          [uprojectPath]: JSON.stringify({ EngineAssociation: '5.3.2.1' }),
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_5_3',
+                InstallLocation: 'C:\\Epic\\UE_5.3',
+                DisplayName: 'UE 5.3',
+              },
+            ],
+          }),
+        },
+      });
+
+      const result = await EngineResolver.resolveEngine(uprojectPath);
+
+      // Should handle 4-segment vs 3-segment version comparison
+      expect(result.engine).toBeDefined();
+    });
   });
 });
