@@ -10,7 +10,7 @@
 
 import { execa } from 'execa';
 import { Logger, formatTimestamp } from '../utils/logger';
-import { formatError } from '../utils/error';
+import { formatErrorWithPrefix } from '../utils/error';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 
@@ -107,7 +107,7 @@ export class SelfDriver {
       });
       return result;
     } catch (error) {
-      this.log(`⚠️  ${command} failed: ${formatError(error)}`);
+      this.log(`⚠️  ${formatErrorWithPrefix(`${command} failed`, error)}`);
       return null;
     }
   }
@@ -352,7 +352,7 @@ export class SelfDriver {
         return await fs.readFile(constitutionPath, 'utf-8');
       }
     } catch (error) {
-      this.log(`⚠️  Could not read EVOLVE.md: ${formatError(error)}`);
+      this.log(`⚠️  ${formatErrorWithPrefix('Could not read EVOLVE.md', error)}`);
     }
     return '';
   }
@@ -524,7 +524,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       this.log('✅ OpenCode execution completed');
       return true;
     } catch (error) {
-      this.log(`⚠️  OpenCode execution failed: ${formatError(error)}`);
+      this.log(`⚠️  ${formatErrorWithPrefix('OpenCode execution failed', error)}`);
       return false;
     }
   }
