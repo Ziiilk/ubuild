@@ -205,6 +205,10 @@ export class SelfDriver {
   async run(): Promise<void> {
     // Reset state for potential re-run after cleanup
     this.sleepCancelled = false;
+    this.interrupted = false;
+    this.cleanedUp = false;
+    this.consecutiveFailures = 0;
+    this.iterationCount = 0;
 
     const preFlightPassed = await this.runPreFlightChecks();
     if (!preFlightPassed) {
@@ -462,6 +466,13 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       if (result.stderr && result.stderr.trim()) {
         const stderrPreview = result.stderr.slice(0, 5000);
         this.log(`OpenCode stderr: ${stderrPreview}`);
+      }
+
+      // Check if OpenCode timed out - revert any partial changes
+      if (result.timedOut) {
+        this.log('⚠️  OpenCode timed out, reverting any partial changes...');
+        await this.revert();
+        return false;
       }
 
       if (result.exitCode !== 0) {
@@ -724,5 +735,9 @@ If verification fails, do NOT commit - the system will revert automatically.`;
  */
 export async function runSelfEvolution(options?: SelfEvolverOptions): Promise<void> {
   const driver = new SelfDriver(options);
-  await driver.run();
+  try {
+    await driver.run();
+  } finally {
+    driver.cleanup();
+  }
 }
