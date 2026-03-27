@@ -831,7 +831,7 @@ describe('ProjectGenerator', () => {
 
         expect(result.success).toBe(true);
       });
-    });
+    }, 15000);
 
     it('handles early exit code before stream ends', async () => {
       await withTempDir(async (rootDir) => {

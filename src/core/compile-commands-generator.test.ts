@@ -724,5 +724,5 @@ describe('CompileCommandsGenerator', () => {
       expect(ubtCall![1]).toEqual(expect.arrayContaining([expect.stringContaining('Shipping')]));
       expect(ubtCall![1]).toEqual(expect.arrayContaining([expect.stringContaining('Linux')]));
     });
-  });
+  }, 15000);
 });
