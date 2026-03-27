@@ -234,48 +234,29 @@ describe('executeEngine', () => {
   });
 
   describe('error handling', () => {
-    it('exits with error when engine resolution fails', async () => {
-      mockDetectProject.mockResolvedValue({
-        isValid: true,
-        project: createMockProjectInfo(),
-        warnings: [],
-      });
+    it('throws error when engine resolution fails', async () => {
       mockResolveEngine.mockResolvedValue({
         error: 'Failed to resolve engine',
         warnings: [],
       });
 
-      const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
-        throw new Error('process.exit called');
-      }) as (code?: string | number | null | undefined) => never);
-
       await expect(
         executeEngine({
           stdout,
           stderr,
         })
-      ).rejects.toThrow('process.exit called');
-
-      expect(mockExit).toHaveBeenCalledWith(1);
-      mockExit.mockRestore();
+      ).rejects.toThrow('Failed to resolve engine');
     });
 
-    it('exits with error on unexpected exception', async () => {
+    it('throws error on unexpected exception', async () => {
       mockDetectProject.mockRejectedValue(new Error('Unexpected error'));
-
-      const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
-        throw new Error('process.exit called');
-      }) as (code?: string | number | null | undefined) => never);
 
       await expect(
         executeEngine({
           stdout,
           stderr,
         })
-      ).rejects.toThrow('process.exit called');
-
-      expect(mockExit).toHaveBeenCalledWith(1);
-      mockExit.mockRestore();
+      ).rejects.toThrow('Unexpected error');
     });
   });
 

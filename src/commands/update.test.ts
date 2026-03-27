@@ -13,17 +13,8 @@ jest.mock('fs-extra', () => ({
 }));
 
 describe('executeUpdate', () => {
-  let exitSpy: jest.SpyInstance;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    exitSpy = jest.spyOn(process, 'exit').mockImplementation((() => {
-      throw new Error(`process.exit called`);
-    }) as (code?: string | number | null | undefined) => never);
-  });
-
-  afterEach(() => {
-    exitSpy.mockRestore();
   });
 
   it('displays current version and checks for updates', async () => {
@@ -119,7 +110,7 @@ describe('executeUpdate', () => {
     expect(capture.getStdout()).toContain('Successfully updated to version 0.0.9');
   });
 
-  it('exits with error when unable to fetch latest version', async () => {
+  it('throws error when unable to fetch latest version', async () => {
     const capture = createOutputCapture();
     mockReadJson.mockResolvedValue({ version: '0.0.8' });
     mockExeca.mockImplementation(async (cmd: string, args: string[]) => {
@@ -130,7 +121,7 @@ describe('executeUpdate', () => {
     });
 
     await expect(executeUpdate({ stdout: capture.stdout, stderr: capture.stderr })).rejects.toThrow(
-      'process.exit called'
+      'Unable to fetch latest version from npm'
     );
   });
 
@@ -140,7 +131,7 @@ describe('executeUpdate', () => {
     mockExeca.mockRejectedValue(new Error('Network error'));
 
     await expect(executeUpdate({ stdout: capture.stdout, stderr: capture.stderr })).rejects.toThrow(
-      'process.exit called'
+      'Network error'
     );
   });
 
@@ -149,7 +140,7 @@ describe('executeUpdate', () => {
     mockReadJson.mockRejectedValue(new Error('File not found'));
 
     await expect(executeUpdate({ stdout: capture.stdout, stderr: capture.stderr })).rejects.toThrow(
-      'process.exit called'
+      'File not found'
     );
   });
 
@@ -158,7 +149,7 @@ describe('executeUpdate', () => {
     mockReadJson.mockResolvedValue(null);
 
     await expect(executeUpdate({ stdout: capture.stdout, stderr: capture.stderr })).rejects.toThrow(
-      'process.exit called'
+      'Invalid package.json format'
     );
   });
 
@@ -167,7 +158,7 @@ describe('executeUpdate', () => {
     mockReadJson.mockResolvedValue('invalid');
 
     await expect(executeUpdate({ stdout: capture.stdout, stderr: capture.stderr })).rejects.toThrow(
-      'process.exit called'
+      'Invalid package.json format'
     );
   });
 
@@ -176,7 +167,7 @@ describe('executeUpdate', () => {
     mockReadJson.mockResolvedValue({ name: 'test-package' });
 
     await expect(executeUpdate({ stdout: capture.stdout, stderr: capture.stderr })).rejects.toThrow(
-      'process.exit called'
+      'Missing or invalid version in package.json'
     );
   });
 
@@ -185,7 +176,7 @@ describe('executeUpdate', () => {
     mockReadJson.mockResolvedValue({ version: 123 });
 
     await expect(executeUpdate({ stdout: capture.stdout, stderr: capture.stderr })).rejects.toThrow(
-      'process.exit called'
+      'Missing or invalid version in package.json'
     );
   });
 
@@ -338,7 +329,7 @@ describe('executeUpdate', () => {
 
       await expect(
         executeUpdate({ stdout: capture.stdout, stderr: capture.stderr })
-      ).rejects.toThrow('process.exit called');
+      ).rejects.toThrow('EACCES: permission denied, access /usr/lib/node_modules');
     });
 
     it('handles npm view returning whitespace-only version', async () => {
@@ -353,7 +344,7 @@ describe('executeUpdate', () => {
 
       await expect(
         executeUpdate({ stdout: capture.stdout, stderr: capture.stderr })
-      ).rejects.toThrow('process.exit called');
+      ).rejects.toThrow('Unable to fetch latest version from npm');
     });
 
     it('handles npm list failure after successful install', async () => {
@@ -376,10 +367,10 @@ describe('executeUpdate', () => {
         throw new Error(`Unexpected command: ${cmd} ${args.join(' ')}`);
       });
 
-      // When npm list fails after install, the error is caught and process exits
+      // When npm list fails after install, the error is caught and re-thrown
       await expect(
         executeUpdate({ stdout: capture.stdout, stderr: capture.stderr })
-      ).rejects.toThrow('process.exit called');
+      ).rejects.toThrow('npm list failed');
     });
 
     it('handles npm list output without version match', async () => {
@@ -433,7 +424,7 @@ describe('executeUpdate', () => {
 
       await expect(
         executeUpdate({ stdout: capture.stdout, stderr: capture.stderr })
-      ).rejects.toThrow('process.exit called');
+      ).rejects.toThrow('Global install permission denied');
     });
   });
 });

@@ -9,7 +9,7 @@
 
 import { Command } from 'commander';
 import { ProjectBuilder } from '../core/project-builder';
-import { formatError } from '../utils/error';
+import { Logger } from '../utils/logger';
 
 /**
  * Project builder class for executing builds.
@@ -58,11 +58,12 @@ export function buildCommand(program: Command): void {
     .option('--dry-run', 'Show what would be built without actually building')
     .option('--list-targets', 'List available build targets for project')
     .action(async (options) => {
-      const builder = new ProjectBuilder();
       try {
+        const builder = new ProjectBuilder();
         await builder.build(options);
       } catch (error) {
-        builder.getLogger().error(`Build failed: ${formatError(error)}`);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        Logger.error(`Build failed: ${errorMessage}`);
         process.exit(1);
       }
     });

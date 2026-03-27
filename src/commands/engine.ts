@@ -95,7 +95,7 @@ export async function executeEngine(options: EngineCommandOptions): Promise<void
 
     if (result.error) {
       logger.error(result.error);
-      process.exit(1);
+      throw new Error(result.error);
     }
 
     if (result.engine && result.uprojectEngine) {
@@ -160,7 +160,7 @@ export async function executeEngine(options: EngineCommandOptions): Promise<void
     }
   } catch (error) {
     logger.error(`Unexpected error: ${formatError(error)}`);
-    process.exit(1);
+    throw error;
   }
 }
 
@@ -186,15 +186,10 @@ export function engineCommand(program: Command): void {
     .option('-j, --json', 'Output result as JSON')
     .option('-v, --verbose', 'Show verbose engine detection details')
     .action(async (options) => {
-      try {
-        await executeEngine({
-          project: options.project,
-          json: options.json,
-          verbose: options.verbose,
-        });
-      } catch (error) {
-        Logger.error(formatError(error));
-        process.exit(1);
-      }
+      await executeEngine({
+        project: options.project,
+        json: options.json,
+        verbose: options.verbose,
+      });
     });
 }

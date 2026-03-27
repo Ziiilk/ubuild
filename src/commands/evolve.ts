@@ -9,7 +9,6 @@
 
 import { Command } from 'commander';
 import { Logger } from '../utils/logger';
-import { formatError } from '../utils/error';
 import { runSelfEvolution } from '../core/self-driver';
 import { Validator } from '../utils/validator';
 import * as fs from 'fs-extra';
@@ -106,8 +105,9 @@ export function evolveCommand(program: Command): void {
           maxRetries: options.maxRetries,
         });
       } catch (error) {
-        Logger.error(`Error: ${formatError(error)}`);
-        process.exit(1);
+        // Re-throw as Error to ensure consistent error handling
+        const err = error instanceof Error ? error : new Error(String(error));
+        throw err;
       }
     });
 }

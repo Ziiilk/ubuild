@@ -57,7 +57,7 @@ export async function executeGenerate(options: GenerateCommandOptions): Promise<
     if (!Validator.isValidIDE(ide)) {
       logger.error(`Invalid IDE type: ${ide}`);
       listAvailableIDEs(logger);
-      process.exit(1);
+      throw new Error(`Invalid IDE type: ${ide}`);
     }
 
     logger.info(`Generating ${ide.toUpperCase()} project files...`);
@@ -72,28 +72,28 @@ export async function executeGenerate(options: GenerateCommandOptions): Promise<
 
     logger.divider();
 
-    if (result.success) {
-      logger.success('Project files generated successfully');
-
-      if (result.generatedFiles.length > 0) {
-        logger.subTitle('Generated Files');
-        result.generatedFiles.forEach((file) => {
-          logger.write(`  • ${file}\n`);
-        });
-      }
-
-      if (ide === 'sln' || ide === 'vs2022') {
-        logger.write('\n');
-        logger.write(`Open ${chalk.bold('.sln')} file in Visual Studio to build and debug.\n`);
-      } else if (ide === 'vscode') {
-        logger.write('\n');
-        logger.write(
-          `Open the ${chalk.bold('.code-workspace')} file in Visual Studio Code (UBT 生成的方案).\n`
-        );
-      }
-    } else {
+    if (!result.success) {
       logger.error(`Failed to generate project files: ${result.error}`);
-      process.exit(1);
+      throw new Error(result.error || 'Failed to generate project files');
+    }
+
+    logger.success('Project files generated successfully');
+
+    if (result.generatedFiles.length > 0) {
+      logger.subTitle('Generated Files');
+      result.generatedFiles.forEach((file) => {
+        logger.write(`  • ${file}\n`);
+      });
+    }
+
+    if (ide === 'sln' || ide === 'vs2022') {
+      logger.write('\n');
+      logger.write(`Open ${chalk.bold('.sln')} file in Visual Studio to build and debug.\n`);
+    } else if (ide === 'vscode') {
+      logger.write('\n');
+      logger.write(
+        `Open the ${chalk.bold('.code-workspace')} file in Visual Studio Code (UBT 生成的方案).\n`
+      );
     }
   } catch (error) {
     logger.error(`Generation failed: ${formatError(error)}`);

@@ -617,15 +617,12 @@ describe('evolveCommand', () => {
   });
 
   describe('error handling', () => {
-    it('logs error and exits with code 1 on exception', async () => {
+    it('throws error on exception', async () => {
       mockRunSelfEvolution.mockRejectedValue(new Error('Network error'));
 
       evolveCommand(program);
 
-      await program.parseAsync(['node', 'test', 'evolve']);
-
-      expect(mockLoggerError).toHaveBeenCalledWith('Error: Network error');
-      expect(process.exit).toHaveBeenCalledWith(1);
+      await expect(program.parseAsync(['node', 'test', 'evolve'])).rejects.toThrow('Network error');
     });
 
     it('handles non-Error exceptions', async () => {
@@ -633,10 +630,7 @@ describe('evolveCommand', () => {
 
       evolveCommand(program);
 
-      await program.parseAsync(['node', 'test', 'evolve']);
-
-      expect(mockLoggerError).toHaveBeenCalledWith('Error: String error');
-      expect(process.exit).toHaveBeenCalledWith(1);
+      await expect(program.parseAsync(['node', 'test', 'evolve'])).rejects.toThrow('String error');
     });
   });
 

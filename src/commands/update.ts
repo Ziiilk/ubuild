@@ -85,7 +85,7 @@ export async function executeUpdate(options: UpdateCommandOptions = {}): Promise
 
       if (!latestVersion) {
         logger.error('Unable to fetch latest version from npm');
-        process.exit(1);
+        throw new Error('Unable to fetch latest version from npm');
       }
 
       logger.info(`Latest version: ${chalk.bold(latestVersion)}`);
@@ -128,11 +128,11 @@ export async function executeUpdate(options: UpdateCommandOptions = {}): Promise
     } catch (error) {
       logger.error(`Failed to check npm: ${formatError(error)}`);
       logger.info('You can manually update using: npm install -g @zitool/ubuild');
-      process.exit(1);
+      throw error;
     }
   } catch (error) {
     logger.error(`Update failed: ${formatError(error)}`);
-    process.exit(1);
+    throw error;
   }
 }
 

@@ -9,7 +9,6 @@
 
 import { Command } from 'commander';
 import { ProjectRunner } from '../core/project-runner';
-import { formatError } from '../utils/error';
 
 /**
  * Project runner class for executing projects.
@@ -59,12 +58,13 @@ export function runCommand(program: Command): void {
     .option('--detached', 'Run the process in detached mode (non-blocking)')
     .option('--args <args...>', 'Additional arguments to pass to the executable')
     .action(async (options) => {
-      const runner = new ProjectRunner();
       try {
+        const runner = new ProjectRunner();
         await runner.run(options);
       } catch (error) {
-        runner.getLogger().error(`Run failed: ${formatError(error)}`);
-        process.exit(1);
+        // Re-throw as Error to ensure consistent error handling
+        const err = error instanceof Error ? error : new Error(String(error));
+        throw err;
       }
     });
 }

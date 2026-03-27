@@ -89,7 +89,7 @@ export async function executeVersion(options: VersionCommandOptions = {}): Promi
     logger.success('Version information retrieved successfully');
   } catch (error) {
     logger.error(`Failed to retrieve version: ${formatError(error)}`);
-    process.exit(1);
+    throw error;
   }
 }
 
@@ -104,13 +104,8 @@ export function versionCommand(program: Command): void {
     .description('Display ubuild version information')
     .option('-j, --json', 'Output result as JSON')
     .action(async (options) => {
-      try {
-        await executeVersion({
-          json: options.json,
-        });
-      } catch (error) {
-        Logger.error(`Error: ${formatError(error)}`);
-        process.exit(1);
-      }
+      await executeVersion({
+        json: options.json,
+      });
     });
 }

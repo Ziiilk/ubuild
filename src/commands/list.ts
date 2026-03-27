@@ -133,15 +133,10 @@ export function listCommand(program: Command): void {
     .option('-r, --recursive', 'Search recursively for .uproject files')
     .option('-j, --json', 'Output result as JSON')
     .action(async (options) => {
-      try {
-        await executeList({
-          project: options.project,
-          recursive: options.recursive,
-          json: options.json,
-        });
-      } catch (error) {
-        Logger.error(formatError(error));
-        process.exit(1);
-      }
+      await executeList({
+        project: options.project,
+        recursive: options.recursive,
+        json: options.json,
+      });
     });
 }
