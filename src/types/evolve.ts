@@ -63,4 +63,6 @@ export interface SelfEvolverOptions {
   maxRetries?: number;
   /** Project root directory for evolution (default: process.cwd()) */
   projectRoot?: string;
+  /** Keep untracked files when reverting changes (default: false - removes untracked files) */
+  keepUntracked?: boolean;
 }

@@ -300,6 +300,69 @@ describe('SelfDriver', () => {
       const status = driver.getStatus();
       expect(status.projectRoot).toBe('/custom/project/path');
     });
+
+    it('creates driver with keepUntracked option', () => {
+      const options: SelfEvolverOptions = {
+        keepUntracked: true,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with all options including keepUntracked', () => {
+      const options: SelfEvolverOptions = {
+        logger: jest.fn(),
+        once: true,
+        dryRun: false,
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 900000,
+        sleepMs: 10000,
+        useTsNode: true,
+        maxRetries: 3,
+        projectRoot: '/custom/project/path',
+        keepUntracked: true,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+  });
+
+  describe('constructor validation', () => {
+    it('throws error when sleepMs is zero', () => {
+      expect(() => {
+        driver = new SelfDriver({ sleepMs: 0 });
+      }).toThrow('Invalid sleepMs: 0. Must be a positive number.');
+    });
+
+    it('throws error when sleepMs is negative', () => {
+      expect(() => {
+        driver = new SelfDriver({ sleepMs: -1000 });
+      }).toThrow('Invalid sleepMs: -1000. Must be a positive number.');
+    });
+
+    it('throws error when maxRetries is less than -1', () => {
+      expect(() => {
+        driver = new SelfDriver({ maxRetries: -2 });
+      }).toThrow('Invalid maxRetries: -2. Must be >= -1 (-1 for unlimited).');
+    });
+
+    it('throws error when verifyTimeoutMs is zero', () => {
+      expect(() => {
+        driver = new SelfDriver({ verifyTimeoutMs: 0 });
+      }).toThrow('Invalid verifyTimeoutMs: 0. Must be a positive number.');
+    });
+
+    it('throws error when opencodeTimeoutMs is negative', () => {
+      expect(() => {
+        driver = new SelfDriver({ opencodeTimeoutMs: -100 });
+      }).toThrow('Invalid opencodeTimeoutMs: -100. Must be a positive number.');
+    });
+
+    it('accepts maxRetries of -1 for unlimited retries', () => {
+      expect(() => {
+        driver = new SelfDriver({ maxRetries: -1 });
+      }).not.toThrow();
+    });
   });
 
   describe('verify', () => {
@@ -528,6 +591,56 @@ describe('SelfDriver', () => {
       const revert = (driver as unknown as { revert: () => Promise<boolean> }).revert;
       const result = await revert.call(driver);
       expect(result).toBe(false);
+    });
+
+    it('skips git clean when keepUntracked is true', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ keepUntracked: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('reset')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'git' && args?.includes('checkout')) {
+          return mockExecaResult(0, '', '');
+        }
+        // git clean should NOT be called when keepUntracked is true
+        if (command === 'git' && args?.includes('clean')) {
+          throw new Error('git clean should not be called');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const revert = (driver as unknown as { revert: () => Promise<boolean> }).revert;
+      const result = await revert.call(driver);
+
+      expect(result).toBe(true);
+      expect(mockLogger).toHaveBeenCalledWith('ℹ️  Preserving untracked files (--keep-untracked)');
+    });
+
+    it('calls git clean when keepUntracked is false (default)', async () => {
+      driver = new SelfDriver({ keepUntracked: false });
+
+      let cleanCalled = false;
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('reset')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'git' && args?.includes('checkout')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'git' && args?.includes('clean')) {
+          cleanCalled = true;
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const revert = (driver as unknown as { revert: () => Promise<boolean> }).revert;
+      const result = await revert.call(driver);
+
+      expect(result).toBe(true);
+      expect(cleanCalled).toBe(true);
     });
   });
 

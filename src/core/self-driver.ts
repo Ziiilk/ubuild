@@ -50,6 +50,8 @@ export class SelfDriver {
   private sleepResolve: (() => void) | null = null;
   private cleanedUp = false;
   private sleepCancelled = false;
+  private increasedMaxListeners = false;
+  private keepUntracked: boolean;
 
   /**
    * Creates a new SelfDriver instance.
@@ -65,6 +67,26 @@ export class SelfDriver {
     this.sleepMs = options.sleepMs ?? DEFAULT_SLEEP_MS;
     this.useTsNode = options.useTsNode || false;
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.keepUntracked = options.keepUntracked || false;
+
+    // Validate options
+    if (this.sleepMs <= 0) {
+      throw new Error(`Invalid sleepMs: ${this.sleepMs}. Must be a positive number.`);
+    }
+    if (this.maxRetries < -1) {
+      throw new Error(`Invalid maxRetries: ${this.maxRetries}. Must be >= -1 (-1 for unlimited).`);
+    }
+    if (this.verifyTimeoutMs <= 0) {
+      throw new Error(
+        `Invalid verifyTimeoutMs: ${this.verifyTimeoutMs}. Must be a positive number.`
+      );
+    }
+    if (this.opencodeTimeoutMs <= 0) {
+      throw new Error(
+        `Invalid opencodeTimeoutMs: ${this.opencodeTimeoutMs}. Must be a positive number.`
+      );
+    }
+
     this.setupSignalHandlers();
   }
 
@@ -94,6 +116,11 @@ export class SelfDriver {
    * Sets up signal handlers for graceful interruption (Ctrl+C, SIGTERM).
    */
   private setupSignalHandlers(): void {
+    // If handlers already exist, don't re-register
+    if (this.sigintHandler && this.sigtermHandler) {
+      return;
+    }
+
     this.sigintHandler = (): void => {
       this.interrupted = true;
       this.log('\n\n⚠️  Interrupted by user (Ctrl+C)');
@@ -104,10 +131,11 @@ export class SelfDriver {
     };
 
     // Increase max listeners once to prevent memory leak warnings with multiple handlers
-    // This is safe because we're properly cleaning up handlers in cleanup()
+    // Track whether THIS instance increased it so we only restore if we did
     const currentMax = process.getMaxListeners();
     if (currentMax < MIN_MAX_LISTENERS) {
       this.originalMaxListeners = currentMax;
+      this.increasedMaxListeners = true;
       process.setMaxListeners(MIN_MAX_LISTENERS);
     }
 
@@ -133,10 +161,12 @@ export class SelfDriver {
       process.removeListener('SIGTERM', this.sigtermHandler);
       this.sigtermHandler = null;
     }
-    // Restore original max listeners if we changed it
-    if (this.originalMaxListeners !== null) {
+    // Restore original max listeners only if THIS instance increased it
+    // This prevents multiple instances from corrupting each other's state
+    if (this.increasedMaxListeners && this.originalMaxListeners !== null) {
       process.setMaxListeners(this.originalMaxListeners);
       this.originalMaxListeners = null;
+      this.increasedMaxListeners = false;
     }
     // Clear any pending sleep timer and resolve the sleep promise
     if (this.sleepTimer) {
@@ -209,6 +239,9 @@ export class SelfDriver {
     this.cleanedUp = false;
     this.consecutiveFailures = 0;
     this.iterationCount = 0;
+
+    // Re-register signal handlers if they were cleaned up (allows re-run after cleanup)
+    this.setupSignalHandlers();
 
     const preFlightPassed = await this.runPreFlightChecks();
     if (!preFlightPassed) {
@@ -670,10 +703,15 @@ If verification fails, do NOT commit - the system will revert automatically.`;
     }
 
     // Remove untracked files and directories to prevent accumulation across iterations
-    const cleanResult = await this.safeExeca('git', ['clean', '-fd']);
-    if (!cleanResult || cleanResult.exitCode !== 0) {
-      this.log('⚠️  Git clean failed');
-      return false;
+    // Skip if keepUntracked is true to preserve new files created during evolution
+    if (!this.keepUntracked) {
+      const cleanResult = await this.safeExeca('git', ['clean', '-fd']);
+      if (!cleanResult || cleanResult.exitCode !== 0) {
+        this.log('⚠️  Git clean failed');
+        return false;
+      }
+    } else {
+      this.log('ℹ️  Preserving untracked files (--keep-untracked)');
     }
 
     this.log('🔄 Reverted changes');

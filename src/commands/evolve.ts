@@ -64,6 +64,10 @@ export function evolveCommand(program: Command): void {
       'Maximum consecutive retry attempts on failure (default: 5, use -1 for unlimited)',
       (value) => Validator.parseBoundedInt(value, '--max-retries', { min: -1 })
     )
+    .option(
+      '--keep-untracked',
+      'Keep untracked files when reverting changes (default: remove untracked files)'
+    )
     .action(async (options) => {
       try {
         Logger.title('ubuild Self-Evolution');
@@ -92,6 +96,7 @@ export function evolveCommand(program: Command): void {
           verifyTimeoutMs: options.verifyTimeout,
           opencodeTimeoutMs: options.opencodeTimeout,
           maxRetries: options.maxRetries,
+          keepUntracked: options.keepUntracked,
         });
       } catch (error) {
         handleCommandError(error);
