@@ -109,21 +109,16 @@ describe('executeGenerate', () => {
       );
     });
 
-    it('exits with error for invalid IDE type', async () => {
-      const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
-        throw new Error('process.exit called');
-      }) as (code?: string | number | null | undefined) => never);
-
+    it('throws error for invalid IDE type', async () => {
       await expect(
         executeGenerate({
           ide: 'invalid-ide',
           stdout,
           stderr,
         })
-      ).rejects.toThrow('process.exit called');
+      ).rejects.toThrow('Invalid IDE type: invalid-ide');
 
-      expect(mockExit).toHaveBeenCalledWith(1);
-      mockExit.mockRestore();
+      expect(stderr.output).toContain('Invalid IDE type: invalid-ide');
     });
   });
 
@@ -263,29 +258,19 @@ describe('executeGenerate', () => {
         error: 'Engine path not found',
       });
 
-      const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
-        throw new Error('process.exit called');
-      }) as (code?: string | number | null | undefined) => never);
-
       await expect(
         executeGenerate({
           ide: 'sln',
           stdout,
           stderr,
         })
-      ).rejects.toThrow('process.exit called');
+      ).rejects.toThrow('Engine path not found');
 
-      expect(mockExit).toHaveBeenCalledWith(1);
       expect(stderr.output).toContain('Engine path not found');
-      mockExit.mockRestore();
     });
 
-    it('exits with error on unexpected exception', async () => {
+    it('throws error on unexpected exception', async () => {
       mockGenerate.mockRejectedValue(new Error('Unexpected error'));
-
-      const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
-        throw new Error('process.exit called');
-      }) as (code?: string | number | null | undefined) => never);
 
       await expect(
         executeGenerate({
@@ -293,11 +278,7 @@ describe('executeGenerate', () => {
           stdout,
           stderr,
         })
-      ).rejects.toThrow('process.exit called');
-
-      expect(mockExit).toHaveBeenCalledWith(1);
-      expect(stderr.output).toContain('Unexpected error');
-      mockExit.mockRestore();
+      ).rejects.toThrow('Unexpected error');
     });
   });
 

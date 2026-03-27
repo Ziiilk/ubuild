@@ -13,7 +13,7 @@ import { Writable } from 'stream';
 import { ProjectGenerator } from '../core/project-generator';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
-import { formatError } from '../utils/error';
+import { handleCommandError } from '../utils/error';
 
 /** Options for the generate command. */
 export interface GenerateCommandOptions {
@@ -37,6 +37,7 @@ export interface GenerateCommandOptions {
  * Executes the generate command to create IDE project files.
  * @param options - Command execution options
  * @returns Promise that resolves when execution completes
+ * @throws Error if generation fails
  */
 export async function executeGenerate(options: GenerateCommandOptions): Promise<void> {
   const stdout = options.stdout || process.stdout;
@@ -44,60 +45,55 @@ export async function executeGenerate(options: GenerateCommandOptions): Promise<
 
   const logger = new Logger({ stdout, stderr });
 
-  try {
-    logger.title('Generate Project Files');
+  logger.title('Generate Project Files');
 
-    if (options.listIdes) {
-      listAvailableIDEs(logger);
-      return;
-    }
+  if (options.listIdes) {
+    listAvailableIDEs(logger);
+    return;
+  }
 
-    const ide = options.ide || 'sln';
+  const ide = options.ide || 'sln';
 
-    if (!Validator.isValidIDE(ide)) {
-      logger.error(`Invalid IDE type: ${ide}`);
-      listAvailableIDEs(logger);
-      throw new Error(`Invalid IDE type: ${ide}`);
-    }
+  if (!Validator.isValidIDE(ide)) {
+    logger.error(`Invalid IDE type: ${ide}`);
+    listAvailableIDEs(logger);
+    throw new Error(`Invalid IDE type: ${ide}`);
+  }
 
-    logger.info(`Generating ${ide.toUpperCase()} project files...`);
-    logger.divider();
+  logger.info(`Generating ${ide.toUpperCase()} project files...`);
+  logger.divider();
 
-    const result = await ProjectGenerator.generate({
-      ide: ide,
-      projectPath: options.projectPath,
-      enginePath: options.enginePath,
-      force: options.force,
+  const result = await ProjectGenerator.generate({
+    ide: ide,
+    projectPath: options.projectPath,
+    enginePath: options.enginePath,
+    force: options.force,
+  });
+
+  logger.divider();
+
+  if (!result.success) {
+    logger.error(`Failed to generate project files: ${result.error}`);
+    throw new Error(result.error || 'Failed to generate project files');
+  }
+
+  logger.success('Project files generated successfully');
+
+  if (result.generatedFiles.length > 0) {
+    logger.subTitle('Generated Files');
+    result.generatedFiles.forEach((file) => {
+      logger.write(`  • ${file}\n`);
     });
+  }
 
-    logger.divider();
-
-    if (!result.success) {
-      logger.error(`Failed to generate project files: ${result.error}`);
-      throw new Error(result.error || 'Failed to generate project files');
-    }
-
-    logger.success('Project files generated successfully');
-
-    if (result.generatedFiles.length > 0) {
-      logger.subTitle('Generated Files');
-      result.generatedFiles.forEach((file) => {
-        logger.write(`  • ${file}\n`);
-      });
-    }
-
-    if (ide === 'sln' || ide === 'vs2022') {
-      logger.write('\n');
-      logger.write(`Open ${chalk.bold('.sln')} file in Visual Studio to build and debug.\n`);
-    } else if (ide === 'vscode') {
-      logger.write('\n');
-      logger.write(
-        `Open the ${chalk.bold('.code-workspace')} file in Visual Studio Code (UBT 生成的方案).\n`
-      );
-    }
-  } catch (error) {
-    logger.error(`Generation failed: ${formatError(error)}`);
-    process.exit(1);
+  if (ide === 'sln' || ide === 'vs2022') {
+    logger.write('\n');
+    logger.write(`Open ${chalk.bold('.sln')} file in Visual Studio to build and debug.\n`);
+  } else if (ide === 'vscode') {
+    logger.write('\n');
+    logger.write(
+      `Open the ${chalk.bold('.code-workspace')} file in Visual Studio Code (UBT 生成的方案).\n`
+    );
   }
 }
 
@@ -116,13 +112,17 @@ export function generateCommand(program: Command): void {
     .option('--force', 'Force regeneration of project files')
     .option('--list-ides', 'List available IDE types')
     .action(async (options) => {
-      await executeGenerate({
-        ide: options.ide,
-        projectPath: options.project,
-        enginePath: options.enginePath,
-        force: options.force,
-        listIdes: options.listIdes,
-      });
+      try {
+        await executeGenerate({
+          ide: options.ide,
+          projectPath: options.project,
+          enginePath: options.enginePath,
+          force: options.force,
+          listIdes: options.listIdes,
+        });
+      } catch (error) {
+        handleCommandError(error, 'Generation failed');
+      }
     });
 }
 

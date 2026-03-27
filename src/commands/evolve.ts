@@ -11,6 +11,7 @@ import { Command } from 'commander';
 import { Logger, formatTimestamp } from '../utils/logger';
 import { runSelfEvolution } from '../core/self-driver';
 import { Validator } from '../utils/validator';
+import { handleCommandError } from '../utils/error';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 
@@ -105,9 +106,7 @@ export function evolveCommand(program: Command): void {
           maxRetries: options.maxRetries,
         });
       } catch (error) {
-        Logger.error(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
-        Logger.error('Exiting with error code 1');
-        process.exit(1);
+        handleCommandError(error);
       }
     });
 }
