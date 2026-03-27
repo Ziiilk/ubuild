@@ -27,8 +27,8 @@ const VERIFY_TIMEOUT_MS = 60000;
 const OPENCODE_TIMEOUT_MS = 600000;
 /** Default maximum retry attempts on consecutive failures (-1 for unlimited) */
 const DEFAULT_MAX_RETRIES = 5;
-/** Minimum max listeners for process events */
-const MIN_MAX_LISTENERS = 20;
+/** Minimum max listeners for process events (increased to handle concurrent test runs) */
+const MIN_MAX_LISTENERS = 50;
 
 export class SelfDriver {
   private log: (msg: string) => void;
