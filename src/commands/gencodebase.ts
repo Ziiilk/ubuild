@@ -12,6 +12,7 @@ import chalk from 'chalk';
 import { CompileCommandsGenerator } from '../core/compile-commands-generator';
 import type { CompileCommandsGenerateOptions } from '../core/compile-commands-generator';
 import { Logger } from '../utils/logger';
+import { handleCommandError } from '../utils/error';
 
 /**
  * Options for the gencodebase command.
@@ -119,9 +120,7 @@ export function gencodebaseCommand(program: Command): void {
       try {
         await executeGencodebase(options);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        Logger.error(`Failed to generate compile commands: ${errorMessage}`);
-        process.exit(1);
+        handleCommandError(error, 'Failed to generate compile commands');
       }
     });
 }

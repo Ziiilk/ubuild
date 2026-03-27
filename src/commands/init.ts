@@ -16,7 +16,7 @@ import { ProjectInitializer } from '../core/project-initializer';
 import { InitOptions, InitResult } from '../types/init';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
-import { formatError } from '../utils/error';
+import { handleCommandError, formatError } from '../utils/error';
 
 /** Command line options specific to the init command. */
 type InitCommandActionOptions = InitOptions & {
@@ -163,9 +163,7 @@ export function initCommand(program: Command): void {
       try {
         await executeInit(options);
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        Logger.error(`Init failed: ${errorMessage}`);
-        process.exit(1);
+        handleCommandError(error, 'Init failed');
       }
     });
 }
