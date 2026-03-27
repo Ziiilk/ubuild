@@ -357,26 +357,4 @@ export class BuildExecutor {
     });
     return executor.execute(options);
   }
-
-  /**
-   * Instance method wrapper for getAvailableTargets.
-   * Gets available build targets for a project by scanning .Target.cs files.
-   * @param projectPath - Path to the project directory or .uproject file
-   * @returns Promise resolving to array of available targets with names and types
-   */
-  async getAvailableTargetsInstance(
-    projectPath: string
-  ): Promise<Array<{ name: string; type: string }>> {
-    return BuildExecutor.getAvailableTargets(projectPath);
-  }
-
-  /**
-   * Instance method wrapper for getDefaultOptions.
-   * Gets default build options based on available project targets.
-   * @param projectPath - Path to the project directory or .uproject file
-   * @returns Promise resolving to partial build options with sensible defaults
-   */
-  async getDefaultOptionsInstance(projectPath: string): Promise<Partial<BuildOptions>> {
-    return BuildExecutor.getDefaultOptions(projectPath);
-  }
 }

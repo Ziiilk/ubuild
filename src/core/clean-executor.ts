@@ -14,7 +14,6 @@ import { Writable } from 'stream';
 import { CleanOptions, CleanResult } from '../types/clean';
 import { formatError } from '../utils/error';
 import { Logger } from '../utils/logger';
-import { EngineResolver } from './engine-resolver';
 import { ProjectPathResolver } from './project-path-resolver';
 
 /**
@@ -63,17 +62,6 @@ export class CleanExecutor {
 
       const projectDir = path.dirname(projectPath);
       const projectName = path.basename(projectPath, '.uproject');
-
-      // Determine engine path (for potential future use)
-      try {
-        await EngineResolver.resolveEnginePath({
-          projectPath,
-          enginePath: options.enginePath,
-        });
-      } catch (error) {
-        // Engine resolution is optional for clean operation
-        this.logger.debug(`Could not resolve engine path: ${formatError(error)}`);
-      }
 
       // Define paths to clean
       const pathsToClean = this.getPathsToClean(projectDir, projectName, options.binariesOnly);

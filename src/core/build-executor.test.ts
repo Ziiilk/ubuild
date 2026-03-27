@@ -655,38 +655,6 @@ describe('BuildExecutor', () => {
     });
   });
 
-  describe('instance methods', () => {
-    it('getAvailableTargetsInstance delegates to static method', async () => {
-      await withTempDir(async (rootDir) => {
-        const project = await createFakeProject(rootDir, {
-          projectName: 'InstanceGame',
-          withSource: true,
-          targets: [{ name: 'InstanceGame', type: 'Game' }],
-        });
-
-        const executor = new BuildExecutor({ silent: true });
-        const targets = await executor.getAvailableTargetsInstance(project.uprojectPath);
-
-        expect(targets).toEqual([{ name: 'InstanceGame', type: 'Game' }]);
-      });
-    });
-
-    it('getDefaultOptionsInstance delegates to static method', async () => {
-      await withTempDir(async (rootDir) => {
-        const project = await createFakeProject(rootDir, {
-          projectName: 'InstanceGame',
-          withSource: true,
-          targets: [{ name: 'InstanceGameEditor', type: 'Editor' }],
-        });
-
-        const executor = new BuildExecutor({ silent: true });
-        const options = await executor.getDefaultOptionsInstance(project.uprojectPath);
-
-        expect(options.target).toBe('Editor');
-      });
-    });
-  });
-
   describe('constructor', () => {
     it('uses default stdout/stderr when not provided', () => {
       const executor = new BuildExecutor({ silent: true });

@@ -39,12 +39,6 @@ jest.mock('../utils/logger', () => ({
   Logger: jest.fn().mockImplementation(() => mockLoggerInstance),
 }));
 
-jest.mock('./engine-resolver', () => ({
-  EngineResolver: {
-    resolveEnginePath: jest.fn().mockResolvedValue(undefined),
-  },
-}));
-
 jest.mock('./project-path-resolver', () => ({
   ProjectPathResolver: {
     resolveOrThrow: jest.fn().mockResolvedValue('C:\\Projects\\TestProject\\TestProject.uproject'),
@@ -248,21 +242,6 @@ describe('CleanExecutor', () => {
       expect(result.error).toBe('Project not found');
     });
 
-    it('handles engine resolution failure gracefully', async () => {
-      const mockEngineResolver = await import('./engine-resolver');
-      (mockEngineResolver.EngineResolver.resolveEnginePath as jest.Mock).mockRejectedValue(
-        new Error('Engine not found')
-      );
-
-      const result = await executor.execute(baseOptions);
-
-      // Should still succeed despite engine resolution failure
-      expect(result.success).toBe(true);
-      expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Could not resolve engine path')
-      );
-    });
-
     it('cleans plugin Binaries directories', async () => {
       await executor.execute(baseOptions);
 
@@ -356,22 +335,6 @@ describe('CleanExecutor', () => {
 
       expect(mockProjectPathResolver.ProjectPathResolver.resolveOrThrow).toHaveBeenCalledWith(
         customPath
-      );
-    });
-
-    it('uses custom engine path when provided', async () => {
-      const options: CleanOptions = {
-        ...baseOptions,
-        enginePath: 'C:\\UnrealEngine\\5.3\\Engine',
-      };
-
-      await executor.execute(options);
-
-      const mockEngineResolver = await import('./engine-resolver');
-      expect(mockEngineResolver.EngineResolver.resolveEnginePath).toHaveBeenCalledWith(
-        expect.objectContaining({
-          enginePath: 'C:\\UnrealEngine\\5.3\\Engine',
-        })
       );
     });
   });
