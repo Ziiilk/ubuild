@@ -1529,6 +1529,10 @@ describe('once mode completion', () => {
 });
 
 describe('getStatus', () => {
+  beforeEach(() => {
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
   it('returns current driver state with default options', () => {
     driver = new SelfDriver();
     const status = driver.getStatus();
