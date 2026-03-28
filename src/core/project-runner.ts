@@ -19,6 +19,7 @@ import { BuildExecutor } from './build-executor';
 import { EngineResolver } from './engine-resolver';
 import { ProjectPathResolver } from './project-path-resolver';
 import { TargetResolver } from './target-resolver';
+import { Platform } from '../utils/platform';
 
 /** Options for running an Unreal Engine project executable. */
 export interface RunOptions {
@@ -283,6 +284,8 @@ export class ProjectRunner {
       const resolvedTarget = await TargetResolver.resolveTarget(projectPath, targetName);
       targetName = resolvedTarget;
 
+      const exeExt = Platform.exeExtension();
+
       if (targetName.toLowerCase().includes('editor')) {
         let enginePath: string;
         try {
@@ -302,7 +305,7 @@ export class ProjectRunner {
           'Engine',
           'Binaries',
           platform,
-          'UnrealEditor.exe'
+          `UnrealEditor${exeExt}`
         );
 
         if (await fs.pathExists(editorExePath)) {
@@ -310,9 +313,9 @@ export class ProjectRunner {
         }
 
         const alternativePaths = [
-          path.join(enginePath, 'Engine', 'Binaries', platform, 'UnrealEditor-Cmd.exe'),
-          path.join(enginePath, 'Engine', 'Binaries', platform, 'UE4Editor.exe'),
-          path.join(enginePath, 'Engine', 'Binaries', platform, 'UE5Editor.exe'),
+          path.join(enginePath, 'Engine', 'Binaries', platform, `UnrealEditor-Cmd${exeExt}`),
+          path.join(enginePath, 'Engine', 'Binaries', platform, `UE4Editor${exeExt}`),
+          path.join(enginePath, 'Engine', 'Binaries', platform, `UE5Editor${exeExt}`),
         ];
 
         for (const alternativePath of alternativePaths) {
@@ -324,7 +327,7 @@ export class ProjectRunner {
         return editorExePath;
       }
 
-      const executableName = `${projectName}.exe`;
+      const executableName = `${projectName}${exeExt}`;
       const platform = options.platform || 'Win64';
       const config = options.config || 'Development';
 
@@ -337,8 +340,8 @@ export class ProjectRunner {
           `${projectName}-${platform}-${config}`,
           executableName
         ),
-        path.join(projectDir, 'Binaries', platform, `${targetName}.exe`),
-        path.join(projectDir, 'Binaries', platform, `${targetName}-${platform}-${config}.exe`),
+        path.join(projectDir, 'Binaries', platform, `${targetName}${exeExt}`),
+        path.join(projectDir, 'Binaries', platform, `${targetName}-${platform}-${config}${exeExt}`),
       ];
 
       for (const possiblePath of possiblePaths) {
