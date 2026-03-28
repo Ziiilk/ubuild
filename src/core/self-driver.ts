@@ -11,8 +11,8 @@
 import { execa } from 'execa';
 import { Logger, formatTimestamp } from '../utils/logger';
 import { formatErrorWithPrefix } from '../utils/error';
-import * as fs from 'fs-extra';
-import * as path from 'path';
+import fs from 'fs-extra';
+import path from 'path';
 
 import { EVOLUTION_VERIFY_COMMANDS } from '../types/evolve';
 import type { SelfEvolverOptions } from '../types/evolve';

@@ -9,6 +9,7 @@
 
 import fs from 'fs-extra';
 import path from 'path';
+import { Logger } from '../utils/logger';
 import { ProjectPathResolution } from '../types/project';
 
 /**
@@ -30,6 +31,11 @@ export class ProjectPathResolver {
         .then((files) => files.filter((file) => file.endsWith('.uproject')));
 
       if (uprojectFiles.length > 0) {
+        if (uprojectFiles.length > 1) {
+          Logger.warning(
+            `Multiple .uproject files found in ${projectPath}: ${uprojectFiles.join(', ')}. Using ${uprojectFiles[0]}.`
+          );
+        }
         return {
           inputPath: projectPath,
           resolvedPath: path.join(projectPath, uprojectFiles[0]),
