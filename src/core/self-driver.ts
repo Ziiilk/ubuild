@@ -440,7 +440,7 @@ export class SelfDriver {
    * Builds the evolution prompt for OpenCode with constitution and file tree.
    */
   private buildEvolutionPrompt(constitution: string, fileTree: string): string {
-    const verifyCommands = this.useTsNode
+    const cliVerifyCommands = this.useTsNode
       ? EVOLUTION_VERIFY_COMMANDS.map(
           (cmd) => `   - npx ts-node src/cli/index.ts ${cmd} --help`
         ).join('\n')
@@ -449,7 +449,6 @@ export class SelfDriver {
         );
 
     return `${constitution}
-
 ## Current Codebase
 
 Source files:
@@ -470,7 +469,10 @@ Execute your decision. Make minimal, focused changes.
 ## After Changes
 
 1. **Verify** all pass:
-${verifyCommands}
+   - npm run build
+   - npm test
+   - npm run lint
+${cliVerifyCommands}
 
 2. **Commit** if verification passes:
    \`\`\`bash
