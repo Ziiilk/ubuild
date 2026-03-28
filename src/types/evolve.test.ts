@@ -20,6 +20,7 @@ describe('SelfEvolverOptions interface', () => {
       useTsNode: true,
       maxRetries: 3,
       projectRoot: '/custom/project/path',
+      keepUntracked: true,
     };
 
     expect(options.logger).toBeDefined();
@@ -31,6 +32,7 @@ describe('SelfEvolverOptions interface', () => {
     expect(options.useTsNode).toBe(true);
     expect(options.maxRetries).toBe(3);
     expect(options.projectRoot).toBe('/custom/project/path');
+    expect(options.keepUntracked).toBe(true);
   });
 
   it('accepts empty options object', () => {
@@ -88,6 +90,16 @@ describe('SelfEvolverOptions interface', () => {
       projectRoot: '/custom/project/path',
     };
     expect(optionsWithProjectRoot.projectRoot).toBe('/custom/project/path');
+
+    const optionsWithKeepUntracked: SelfEvolverOptions = {
+      keepUntracked: true,
+    };
+    expect(optionsWithKeepUntracked.keepUntracked).toBe(true);
+
+    const optionsWithKeepUntrackedFalse: SelfEvolverOptions = {
+      keepUntracked: false,
+    };
+    expect(optionsWithKeepUntrackedFalse.keepUntracked).toBe(false);
   });
 
   it('logger function can be called', () => {
@@ -124,5 +136,18 @@ describe('EVOLUTION_VERIFY_COMMANDS', () => {
     // Verify the constant exists and has the expected structure
     expect(Array.isArray(EVOLUTION_VERIFY_COMMANDS)).toBe(true);
     expect(EVOLUTION_VERIFY_COMMANDS.every((cmd) => typeof cmd === 'string')).toBe(true);
+  });
+
+  it('contains no duplicate commands', () => {
+    const uniqueCommands = new Set(EVOLUTION_VERIFY_COMMANDS);
+    expect(uniqueCommands.size).toBe(EVOLUTION_VERIFY_COMMANDS.length);
+  });
+
+  it('contains no empty or whitespace-only commands', () => {
+    expect(EVOLUTION_VERIFY_COMMANDS.every((cmd) => cmd.trim().length > 0)).toBe(true);
+  });
+
+  it('includes evolve command for self-verification', () => {
+    expect(EVOLUTION_VERIFY_COMMANDS).toContain('evolve');
   });
 });
