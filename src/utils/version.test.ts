@@ -128,4 +128,68 @@ describe('Version utilities', () => {
       expect(isEqual('2.0.0', '1.0.0')).toBe(false);
     });
   });
+
+  describe('prerelease version handling', () => {
+    describe('compareVersions', () => {
+      it('treats prerelease as equal to its release version', () => {
+        expect(compareVersions('1.0.0-rc.1', '1.0.0')).toBe(0);
+        expect(compareVersions('1.0.0', '1.0.0-rc.1')).toBe(0);
+        expect(compareVersions('2.5.3-alpha', '2.5.3')).toBe(0);
+      });
+
+      it('treats different prerelease tags on same version as equal', () => {
+        expect(compareVersions('1.0.0-alpha', '1.0.0-beta')).toBe(0);
+        expect(compareVersions('1.0.0-rc.1', '1.0.0-rc.2')).toBe(0);
+      });
+
+      it('compares prerelease against different release versions correctly', () => {
+        expect(compareVersions('2.0.0-rc.1', '1.0.0')).toBeGreaterThan(0);
+        expect(compareVersions('1.0.0-rc.1', '1.0.1')).toBeLessThan(0);
+        expect(compareVersions('3.0.0-beta.1', '2.9.9')).toBeGreaterThan(0);
+      });
+
+      it('handles versions with multiple hyphen segments', () => {
+        expect(compareVersions('1.0.0-rc.1+build', '1.0.0')).toBe(0);
+      });
+    });
+
+    describe('isGreaterThan with prerelease', () => {
+      it('returns false when prerelease equals release', () => {
+        expect(isGreaterThan('1.0.0-rc.1', '1.0.0')).toBe(false);
+      });
+
+      it('returns true when prerelease of higher version vs lower release', () => {
+        expect(isGreaterThan('2.0.0-beta', '1.0.0')).toBe(true);
+      });
+
+      it('returns false when prerelease of lower version vs higher release', () => {
+        expect(isGreaterThan('1.0.0-alpha', '2.0.0')).toBe(false);
+      });
+    });
+
+    describe('isLessThan with prerelease', () => {
+      it('returns false when prerelease equals release', () => {
+        expect(isLessThan('1.0.0-rc.1', '1.0.0')).toBe(false);
+      });
+
+      it('returns true when prerelease of lower version vs higher release', () => {
+        expect(isLessThan('1.0.0-alpha', '1.0.1')).toBe(true);
+      });
+    });
+
+    describe('isEqual with prerelease', () => {
+      it('returns true when prerelease matches release', () => {
+        expect(isEqual('1.0.0-rc.1', '1.0.0')).toBe(true);
+        expect(isEqual('2.5.3-beta.2', '2.5.3')).toBe(true);
+      });
+
+      it('returns true when both versions have prerelease tags', () => {
+        expect(isEqual('1.0.0-alpha', '1.0.0-beta')).toBe(true);
+      });
+
+      it('returns false when prerelease version differs from release', () => {
+        expect(isEqual('1.0.0-rc.1', '1.0.1')).toBe(false);
+      });
+    });
+  });
 });
