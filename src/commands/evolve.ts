@@ -12,8 +12,8 @@ import { Logger, formatTimestamp } from '../utils/logger';
 import { runSelfEvolution } from '../core/self-driver';
 import { Validator } from '../utils/validator';
 import { handleCommandError } from '../utils/error';
-import * as fs from 'fs-extra';
-import * as path from 'path';
+import fs from 'fs-extra';
+import path from 'path';
 
 /**
  * Self-driver class for evolution.
