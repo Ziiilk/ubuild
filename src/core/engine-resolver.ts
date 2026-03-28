@@ -596,7 +596,7 @@ export class EngineResolver {
 
       const pathMatch = installation.path.match(/UE_(?:5|4)[._]?(\d+(?:[._]\d+)*)/i);
       if (pathMatch) {
-        const versionStr = pathMatch[1].replace('_', '.');
+        const versionStr = pathMatch[1].replace(/_/g, '.');
         installation.version = {
           MajorVersion: parseInt(versionStr.split('.')[0]) || 5,
           MinorVersion: parseInt(versionStr.split('.')[1]) || 0,
