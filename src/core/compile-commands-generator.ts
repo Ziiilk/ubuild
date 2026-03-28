@@ -120,6 +120,7 @@ export class CompileCommandsGenerator {
     const childProcess = execa(ubtPath, args, {
       stdio: 'pipe',
       cwd: path.dirname(ubtPath),
+      reject: false,
     });
 
     if (childProcess.stdout) {
