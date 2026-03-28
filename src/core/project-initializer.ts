@@ -65,10 +65,8 @@ export class ProjectInitializer {
           await this.createCppProject(name, directory, enginePath);
           break;
         case 'blueprint':
-          await this.createBlueprintProject(name, directory, enginePath);
-          break;
         case 'blank':
-          await this.createBlankProject(name, directory, enginePath);
+          await this.createNonCppProject(name, directory, enginePath);
           break;
       }
 
@@ -229,27 +227,13 @@ export class ProjectInitializer {
   }
 
   /**
-   * Creates the directory structure for a Blueprint project.
+   * Creates the directory structure for non-C++ projects (Blueprint and Blank).
+   * These project types share the same base structure with only a Content directory.
    * @param _name - Project name (unused but kept for API consistency)
    * @param directory - Target directory for the project
    * @param _enginePath - Engine path (unused but kept for API consistency)
    */
-  private static async createBlueprintProject(
-    _name: string,
-    directory: string,
-    _enginePath: string
-  ): Promise<void> {
-    const contentDir = path.join(directory, 'Content');
-    await fs.ensureDir(contentDir);
-  }
-
-  /**
-   * Creates the directory structure for a blank project.
-   * @param _name - Project name (unused but kept for API consistency)
-   * @param directory - Target directory for the project
-   * @param _enginePath - Engine path (unused but kept for API consistency)
-   */
-  private static async createBlankProject(
+  private static async createNonCppProject(
     _name: string,
     directory: string,
     _enginePath: string
