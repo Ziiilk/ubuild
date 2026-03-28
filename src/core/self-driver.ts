@@ -124,10 +124,12 @@ export class SelfDriver {
     this.sigintHandler = (): void => {
       this.interrupted = true;
       this.log('\n\n⚠️  Interrupted by user (Ctrl+C)');
+      this.interruptSleep();
     };
     this.sigtermHandler = (): void => {
       this.interrupted = true;
       this.log('\n\n⚠️  Interrupted by SIGTERM');
+      this.interruptSleep();
     };
 
     // Increase max listeners once to prevent memory leak warnings with multiple handlers
@@ -141,6 +143,21 @@ export class SelfDriver {
 
     process.on('SIGINT', this.sigintHandler);
     process.on('SIGTERM', this.sigtermHandler);
+  }
+
+  /**
+   * Immediately resolves any pending sleep promise and clears the timer.
+   * Used by signal handlers to provide responsive Ctrl+C behavior.
+   */
+  private interruptSleep(): void {
+    if (this.sleepTimer) {
+      clearTimeout(this.sleepTimer);
+      this.sleepTimer = null;
+    }
+    if (this.sleepResolve) {
+      this.sleepResolve();
+      this.sleepResolve = null;
+    }
   }
 
   /**
@@ -168,16 +185,8 @@ export class SelfDriver {
       this.originalMaxListeners = null;
       this.increasedMaxListeners = false;
     }
-    // Clear any pending sleep timer and resolve the sleep promise
-    if (this.sleepTimer) {
-      clearTimeout(this.sleepTimer);
-      this.sleepTimer = null;
-    }
-    // Resolve any pending sleep to prevent hanging
-    if (this.sleepResolve) {
-      this.sleepResolve();
-      this.sleepResolve = null;
-    }
+    // Interrupt any pending sleep for responsive cleanup
+    this.interruptSleep();
     this.log('✅ Cleanup completed');
   }
 
