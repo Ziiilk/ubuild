@@ -22,6 +22,7 @@ import { Platform } from '../utils/platform';
 import { Logger } from '../utils/logger';
 import { ProjectPathResolver } from './project-path-resolver';
 import { formatError } from '../utils/error';
+import { compareVersions as compareVersionStrings } from '../utils/version';
 
 /**
  * Registry key locations to search for Unreal Engine installations.
@@ -155,7 +156,7 @@ export class EngineResolver {
           matchedEngine = engineInstallations.find((engine) => {
             if (engine.associationId && engine.associationId.startsWith('UE_')) {
               const engineVersion = engine.associationId.replace('UE_', '').replace(/_/g, '.');
-              return this.compareVersionString(engineVersion, association) === 0;
+              return compareVersionStrings(engineVersion, association) === 0;
             }
             return false;
           });
@@ -669,32 +670,5 @@ export class EngineResolver {
       return a.PatchVersion - b.PatchVersion;
     }
     return a.Changelist - b.Changelist;
-  }
-
-  /**
-   * Compares two version strings in semver format.
-   * @param a - First version string
-   * @param b - Second version string
-   * @returns Negative if a < b, positive if a > b, 0 if equal
-   */
-  private static compareVersionString(a: string, b: string): number {
-    if (a === b) {
-      return 0;
-    }
-
-    const parseVersion = (v: string): number[] => {
-      return v.split('.').map((part) => parseInt(part, 10) || 0);
-    };
-    const partsA = parseVersion(a);
-    const partsB = parseVersion(b);
-
-    for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-      const partA = partsA[i] || 0;
-      const partB = partsB[i] || 0;
-      if (partA !== partB) {
-        return partA - partB;
-      }
-    }
-    return 0;
   }
 }
