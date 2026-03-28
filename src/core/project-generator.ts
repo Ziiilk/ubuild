@@ -103,7 +103,7 @@ export class ProjectGenerator {
         generatedFiles.push(...(await this.findVSCodeWorkspaceFiles(projectPath)));
         generatedFiles.push(...(await this.findVSCodeConfigFiles(projectPath)));
 
-        const tasksFile = await this.generateVSCodeTasks(projectPath);
+        const tasksFile = await this.generateVSCodeTasks(projectPath, logger);
         if (tasksFile) {
           generatedFiles.push(tasksFile);
         }
@@ -192,7 +192,7 @@ export class ProjectGenerator {
       args.push('-force');
     }
 
-    Logger.debug(`Executing: ${ubtPath} ${args.join(' ')}`);
+    logger.debug(`Executing: ${ubtPath} ${args.join(' ')}`);
 
     const childProcess = execa(ubtPath, args, {
       stdio: 'pipe',
@@ -221,7 +221,7 @@ export class ProjectGenerator {
       throw new Error(`Project generation failed with exit code ${result?.exitCode ?? 'unknown'}`);
     }
 
-    Logger.success('Project files generated successfully');
+    logger.success('Project files generated successfully');
   }
 
   /**
@@ -231,27 +231,13 @@ export class ProjectGenerator {
    */
   private static async findGeneratedSolutionFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
-    const solutionFiles: string[] = [];
 
-    const slnFiles = await fs
-      .readdir(projectDir)
-      .then((files) => files.filter((f) => f.endsWith('.sln')));
+    const allFiles = await fs.readdir(projectDir);
+    const solutionFiles = allFiles.filter(
+      (f) => f.endsWith('.sln') || f.endsWith('.vcxproj.filters') || f.endsWith('.vcxproj')
+    );
 
-    solutionFiles.push(...slnFiles.map((f) => path.join(projectDir, f)));
-
-    const filterFiles = await fs
-      .readdir(projectDir)
-      .then((files) => files.filter((f) => f.endsWith('.vcxproj.filters')));
-
-    solutionFiles.push(...filterFiles.map((f) => path.join(projectDir, f)));
-
-    const vcxprojFiles = await fs
-      .readdir(projectDir)
-      .then((files) => files.filter((f) => f.endsWith('.vcxproj')));
-
-    solutionFiles.push(...vcxprojFiles.map((f) => path.join(projectDir, f)));
-
-    return solutionFiles;
+    return solutionFiles.map((f) => path.join(projectDir, f));
   }
 
   /**
@@ -322,7 +308,10 @@ export class ProjectGenerator {
    * @param projectPath - Path to the .uproject file
    * @returns Promise resolving to the tasks.json path, or null if not generated
    */
-  private static async generateVSCodeTasks(projectPath: string): Promise<string | null> {
+  private static async generateVSCodeTasks(
+    projectPath: string,
+    logger: Logger
+  ): Promise<string | null> {
     const projectDir = path.dirname(projectPath);
     const vscodeDir = path.join(projectDir, '.vscode');
     const tasksPath = path.join(vscodeDir, 'tasks.json');
@@ -364,7 +353,7 @@ export class ProjectGenerator {
           return tasksPath;
         }
       } catch (parseError) {
-        Logger.debug(
+        logger.debug(
           `Failed to parse existing tasks.json, regenerating: ${formatError(parseError)}`
         );
       }

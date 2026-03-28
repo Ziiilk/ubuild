@@ -94,18 +94,14 @@ export class CompileCommandsGenerator {
       args.push('-UseEngineIncludes');
     }
 
-    if (!silent) {
-      Logger.info(
-        `Generating compile commands for: ${chalk.bold(targetNames.join(', '))} | ${chalk.bold(platform)} | ${chalk.bold(config)}`
-      );
-      Logger.info(`Project: ${projectPath}`);
-      Logger.info(`Engine: ${enginePath}`);
-      Logger.divider();
-    }
+    logger.info(
+      `Generating compile commands for: ${chalk.bold(targetNames.join(', '))} | ${chalk.bold(platform)} | ${chalk.bold(config)}`
+    );
+    logger.info(`Project: ${projectPath}`);
+    logger.info(`Engine: ${enginePath}`);
+    logger.divider();
 
-    if (!silent) {
-      Logger.debug(`Executing: ${ubtPath} ${args.join(' ')}`);
-    }
+    logger.debug(`Executing: ${ubtPath} ${args.join(' ')}`);
 
     const childProcess = execa(ubtPath, args, {
       stdio: 'pipe',
@@ -142,7 +138,7 @@ export class CompileCommandsGenerator {
     let actualCompileCommandsPath = targetCompileCommandsPath;
 
     if (await fs.pathExists(engineCompileCommandsPath)) {
-      Logger.debug(
+      logger.debug(
         'Found compile_commands.json at engine directory, copying to project .vscode directory'
       );
       await fs.copy(engineCompileCommandsPath, targetCompileCommandsPath);
@@ -156,7 +152,7 @@ export class CompileCommandsGenerator {
       );
     }
 
-    await this.updateVSCodeSettings(projectDir, silent);
+    await this.updateVSCodeSettings(projectDir, logger);
 
     return actualCompileCommandsPath;
   }
@@ -181,10 +177,10 @@ export class CompileCommandsGenerator {
    * Updates VSCode settings to configure clangd and C/C++ extension for Unreal Engine development.
    * Creates or merges settings.json in the .vscode directory to point to the compile commands database.
    * @param projectDir - Path to the project directory
-   * @param silent - Whether to suppress output messages
+   * @param logger - Logger instance for output
    * @returns Promise resolving when settings have been updated
    */
-  private static async updateVSCodeSettings(projectDir: string, silent = false): Promise<void> {
+  private static async updateVSCodeSettings(projectDir: string, logger: Logger): Promise<void> {
     const vscodeDir = path.join(projectDir, '.vscode');
     const settingsPath = path.join(vscodeDir, 'settings.json');
 
@@ -203,7 +199,7 @@ export class CompileCommandsGenerator {
         const content = await fs.readFile(settingsPath, 'utf-8');
         settings = JSON.parse(content);
       } catch (error) {
-        Logger.debug(
+        logger.debug(
           `Failed to parse existing settings.json, starting fresh: ${formatError(error)}`
         );
         settings = {};
@@ -213,8 +209,6 @@ export class CompileCommandsGenerator {
     settings = { ...settings, ...clangdConfig, ...cppConfig };
 
     await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
-    if (!silent) {
-      Logger.success(`Updated VSCode settings: ${settingsPath}`);
-    }
+    logger.success(`Updated VSCode settings: ${settingsPath}`);
   }
 }

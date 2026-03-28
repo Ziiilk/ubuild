@@ -20,6 +20,7 @@ import { ProjectPathResolver } from './project-path-resolver';
 import { inferTargetType } from '../utils/target-helpers';
 import { TargetResolver } from './target-resolver';
 import { resolveUnrealBuildToolPath } from '../utils/unreal-paths';
+import { DEFAULTS } from '../utils/constants';
 
 /**
  * Executes Unreal Engine project builds using UnrealBuildTool or Build.bat.
@@ -121,9 +122,9 @@ export class BuildExecutor {
    * @throws Error if target cannot be resolved
    */
   private async validateOptions(options: BuildOptions): Promise<Required<BuildOptions>> {
-    const target: string = options.target || 'Editor';
-    const config: string = options.config || 'Development';
-    const platform: string = options.platform || 'Win64';
+    const target: string = options.target || DEFAULTS.BUILD_TARGET;
+    const config: string = options.config || DEFAULTS.BUILD_CONFIG;
+    const platform: string = options.platform || DEFAULTS.BUILD_PLATFORM;
     const clean = options.clean || false;
     const verbose = options.verbose || false;
     const additionalArgs = options.additionalArgs || [];
@@ -326,9 +327,9 @@ export class BuildExecutor {
     const hasEditorTarget = targets.some((t) => t.type === 'Editor');
 
     return {
-      target: hasEditorTarget ? 'Editor' : 'Game',
-      config: 'Development',
-      platform: 'Win64',
+      target: hasEditorTarget ? DEFAULTS.BUILD_TARGET : 'Game',
+      config: DEFAULTS.BUILD_CONFIG,
+      platform: DEFAULTS.BUILD_PLATFORM,
     };
   }
 
