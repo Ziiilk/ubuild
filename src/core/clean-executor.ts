@@ -252,7 +252,11 @@ export class CleanExecutor {
         }
       }
     } catch (error) {
-      this.logger.debug(`Failed to clean plugins: ${formatError(error)}`);
+      const errorMsg = formatError(error);
+      if (!this.silent) {
+        this.logger.warning(`Failed to clean plugins: ${errorMsg}`);
+      }
+      failedPaths.push({ path: pluginsDir, error: errorMsg });
     }
 
     return { deletedPaths, failedPaths };

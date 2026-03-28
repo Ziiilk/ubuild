@@ -536,7 +536,7 @@ export class EngineResolver {
         }
       }
     } catch (error) {
-      Logger.debug('Failed to read launcher manifest: ' + formatError(error));
+      Logger.warning('Failed to read launcher manifest: ' + formatError(error));
     }
 
     Logger.debug(`Total launcher engines found: ${installations.length}`);
@@ -611,7 +611,7 @@ export class EngineResolver {
         installation.displayName = `UE ${versionStr}`;
       }
     } catch (error) {
-      Logger.debug('Failed to load engine version info: ' + formatError(error));
+      Logger.warning('Failed to load engine version info: ' + formatError(error));
     }
   }
 

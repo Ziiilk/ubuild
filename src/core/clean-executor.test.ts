@@ -287,11 +287,14 @@ describe('CleanExecutor', () => {
 
       const result = await executor.execute(baseOptions);
 
-      // Should still succeed despite plugin cleaning failure
-      expect(result.success).toBe(true);
-      expect(mockLoggerInstance.debug).toHaveBeenCalledWith(
+      // Plugin cleaning failure should cause overall failure
+      expect(result.success).toBe(false);
+      expect(mockLoggerInstance.warning).toHaveBeenCalledWith(
         expect.stringContaining('Failed to clean plugins')
       );
+      // Plugin directory should be recorded in failedPaths
+      expect(result.failedPaths!.length).toBeGreaterThan(0);
+      expect(result.failedPaths!.some((fp) => fp.path.includes('Plugins'))).toBe(true);
     });
 
     it('logs success message with count of cleaned directories', async () => {
