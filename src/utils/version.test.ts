@@ -47,6 +47,37 @@ describe('Version utilities', () => {
       expect(compareVersions('1.2.3.4.5', '1.2.3.4.4')).toBeGreaterThan(0);
       expect(compareVersions('1.2.3.4.4', '1.2.3.4.5')).toBeLessThan(0);
     });
+
+    it('treats non-numeric parts as NaN (falsy → 0)', () => {
+      // Number('alpha') = NaN, NaN || 0 = 0
+      // This documents the current behavior: non-numeric segments collapse to 0
+      expect(compareVersions('1.0.0-alpha', '1.0.0')).toBe(0);
+      expect(compareVersions('1.0.0-beta', '1.0.0')).toBe(0);
+      expect(compareVersions('1.0.0-rc.1', '1.0.0')).toBe(0);
+    });
+
+    it('treats two non-numeric versions as equal', () => {
+      // Both collapse to NaN → 0, so they compare as equal
+      expect(compareVersions('alpha', 'beta')).toBe(0);
+      expect(compareVersions('prerelease', '0.0.0')).toBe(0);
+    });
+
+    it('handles single-component versions', () => {
+      expect(compareVersions('5', '5')).toBe(0);
+      expect(compareVersions('5', '4')).toBeGreaterThan(0);
+      expect(compareVersions('4', '5')).toBeLessThan(0);
+    });
+
+    it('handles leading zeros in version parts', () => {
+      // Number('01') = 1, so '01' and '1' are equivalent
+      expect(compareVersions('01.0', '1.0')).toBe(0);
+      expect(compareVersions('1.01', '1.1')).toBe(0);
+    });
+
+    it('handles very large version numbers', () => {
+      expect(compareVersions('999999.0.0', '1000000.0.0')).toBeLessThan(0);
+      expect(compareVersions('1000000.0.0', '999999.0.0')).toBeGreaterThan(0);
+    });
   });
 
   describe('isGreaterThan', () => {
