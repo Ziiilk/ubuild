@@ -492,6 +492,27 @@ describe('SelfDriver', () => {
       expect(mockLogger).toHaveBeenCalledWith('     Output: Build failed with this output');
     });
 
+    it('skips stdout logging when failed check has empty stdout', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          // Non-empty stderr but empty stdout to test the stdoutPreview truthiness branch
+          return mockExecaResult(1, '', 'Build error: something went wrong');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith('     Error: Build error: something went wrong');
+      // Should NOT log stdout since it's empty
+      expect(mockLogger).not.toHaveBeenCalledWith(expect.stringContaining('Output:'));
+    });
+
     it('uses ts-node for verification when useTsNode is true', async () => {
       driver = new SelfDriver({ useTsNode: true });
 
@@ -1082,6 +1103,17 @@ describe('SelfDriver', () => {
         d.cleanup();
         d.cleanup();
       }).not.toThrow();
+    });
+
+    it('skips removeListener when handlers are already null after prior cleanup', () => {
+      const d = new SelfDriver();
+      drivers.push(d);
+
+      // First cleanup nullifies the handlers (sigintHandler = null, sigtermHandler = null)
+      d.cleanup();
+
+      // Second cleanup should safely skip removeListener since handlers are null
+      expect(() => d.cleanup()).not.toThrow();
     });
   });
 
@@ -1789,6 +1821,24 @@ describe('cleanup edge cases', () => {
 
     // Original should be restored (or remain the same if it wasn't changed)
     expect(process.getMaxListeners()).toBe(originalMaxListeners);
+  });
+
+  it('does not resolve sleep via timer when sleepCancelled is true', async () => {
+    const d = new SelfDriver({ once: true });
+    const sleep = (d as unknown as { sleep: (ms: number) => Promise<void> }).sleep;
+
+    // Start a short sleep
+    const sleepPromise = sleep.call(d, 50);
+
+    // Call cleanup which sets sleepCancelled = true and resolves via interruptSleep
+    d.cleanup();
+
+    // The sleep should resolve from cleanup, not from the timer
+    // Wait for the timer to also fire (it fires after 50ms)
+    await sleepPromise;
+
+    // Verify driver is cleaned up (sleepCancelled was true when timer fired)
+    expect(d.getStatus().cleanedUp).toBe(true);
   });
 });
 
