@@ -440,13 +440,10 @@ export class SelfDriver {
    * Builds the evolution prompt for OpenCode with constitution and file tree.
    */
   private buildEvolutionPrompt(constitution: string, fileTree: string): string {
-    const cliVerifyCommands = this.useTsNode
-      ? EVOLUTION_VERIFY_COMMANDS.map(
-          (cmd) => `   - npx ts-node src/cli/index.ts ${cmd} --help`
-        ).join('\n')
-      : EVOLUTION_VERIFY_COMMANDS.map((cmd) => `   - node dist/cli/index.js ${cmd} --help`).join(
-          '\n'
-        );
+    const runner = this.getCommandRunner();
+    const cliVerifyCommands = EVOLUTION_VERIFY_COMMANDS.map(
+      (cmd) => `   - ${runner.file} ${runner.prefixArgs.join(' ')} ${cmd} --help`
+    ).join('\n');
 
     return `${constitution}
 ## Current Codebase
@@ -533,23 +530,27 @@ If verification fails, do NOT commit - the system will revert automatically.`;
   }
 
   /**
+   * Returns the command runner configuration based on the useTsNode setting.
+   * Centralizes the ts-node vs dist branching used by both verify() and buildEvolutionPrompt().
+   */
+  private getCommandRunner(): { file: string; prefixArgs: string[] } {
+    return this.useTsNode
+      ? { file: 'npx', prefixArgs: ['ts-node', 'src/cli/index.ts'] }
+      : { file: 'node', prefixArgs: ['dist/cli/index.js'] };
+  }
+
+  /**
    * Comprehensive verification - includes self-verification.
    * Uses EVOLUTION_VERIFY_COMMANDS to dynamically check all CLI commands.
    * When adding new commands, add them to EVOLUTION_VERIFY_COMMANDS in types/evolve.ts.
    */
   private async verify(): Promise<boolean> {
-    // Use ts-node for verification if enabled, otherwise use compiled dist/
-    const commandChecks = this.useTsNode
-      ? EVOLUTION_VERIFY_COMMANDS.map((cmd) => ({
-          name: `${cmd.charAt(0).toUpperCase() + cmd.slice(1)} command`,
-          file: 'npx',
-          args: ['ts-node', 'src/cli/index.ts', cmd, '--help'],
-        }))
-      : EVOLUTION_VERIFY_COMMANDS.map((cmd) => ({
-          name: `${cmd.charAt(0).toUpperCase() + cmd.slice(1)} command`,
-          file: 'node',
-          args: ['dist/cli/index.js', cmd, '--help'],
-        }));
+    const runner = this.getCommandRunner();
+    const commandChecks = EVOLUTION_VERIFY_COMMANDS.map((cmd) => ({
+      name: `${cmd.charAt(0).toUpperCase() + cmd.slice(1)} command`,
+      file: runner.file,
+      args: [...runner.prefixArgs, cmd, '--help'],
+    }));
 
     const checks: Array<{ name: string; file: string; args: string[] }> = [
       { name: 'Build', file: 'npm', args: ['run', 'build'] },
