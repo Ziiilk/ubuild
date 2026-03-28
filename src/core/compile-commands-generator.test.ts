@@ -686,6 +686,97 @@ describe('CompileCommandsGenerator', () => {
     });
   });
 
+  it('falls back to Editor Game when TargetResolver returns undefined', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      // Simulate TargetResolver returning undefined (no targets found)
+      jest
+        .spyOn(TargetResolver, 'resolveTargetName')
+        .mockResolvedValueOnce(undefined as unknown as string);
+
+      const result = await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+      });
+
+      expect(result).toBeDefined();
+
+      // Should fall back to 'Editor Game' targets
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).toEqual(expect.arrayContaining([expect.stringContaining('Editor')]));
+      expect(ubtCall![1]).toEqual(expect.arrayContaining([expect.stringContaining('Game')]));
+    });
+  });
+
+  it('merges VSCode settings with existing valid settings.json', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+      const projectDir = path.dirname(project.uprojectPath);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      // Create existing .vscode/settings.json with custom settings
+      const vscodeDir = path.join(projectDir, '.vscode');
+      await fs.ensureDir(vscodeDir);
+      const existingSettings = {
+        'editor.fontSize': 14,
+        'workbench.colorTheme': 'Dark+',
+      };
+      await fs.writeJson(path.join(vscodeDir, 'settings.json'), existingSettings, { spaces: 2 });
+
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+      });
+
+      // Verify settings were merged, not replaced
+      const mergedSettings = await fs.readJson(path.join(vscodeDir, 'settings.json'));
+      expect(mergedSettings['editor.fontSize']).toBe(14);
+      expect(mergedSettings['workbench.colorTheme']).toBe('Dark+');
+      expect(mergedSettings['clangd.arguments']).toBeDefined();
+      expect(mergedSettings['C_Cpp.default.compileCommands']).toBeDefined();
+    });
+  });
+
+  it('replaces VSCode settings when existing settings.json is malformed', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+      const projectDir = path.dirname(project.uprojectPath);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      // Create existing .vscode/settings.json with invalid JSON
+      const vscodeDir = path.join(projectDir, '.vscode');
+      await fs.ensureDir(vscodeDir);
+      await fs.writeFile(path.join(vscodeDir, 'settings.json'), '{ invalid json !!!');
+
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+      });
+
+      // Should start fresh with only clangd/cpp settings
+      const newSettings = await fs.readJson(path.join(vscodeDir, 'settings.json'));
+      expect(newSettings['clangd.arguments']).toBeDefined();
+      expect(newSettings['C_Cpp.default.compileCommands']).toBeDefined();
+      // Should not have any remnants of the malformed settings
+      expect(Object.keys(newSettings).length).toBe(2);
+    });
+  });
+
   it('generates compile commands with all options specified', async () => {
     await withTempDir(async (rootDir) => {
       const project = await createFakeProject(rootDir, {
