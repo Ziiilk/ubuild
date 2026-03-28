@@ -2719,6 +2719,49 @@ describe('handlePostVerificationState', () => {
     expect(status.consecutiveFailures).toBe(0);
   });
 
+  it('handles partial commit when hashChanged && !isClean', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    // AI committed some changes (hash changed) but left others uncommitted
+    const result = await handlePostVerificationState.call(driver, false, true, false);
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('AI left uncommitted changes after partial commit')
+    );
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Reverting uncommitted changes')
+    );
+
+    // Failure counter should be reset since verification passed
+    const status = driver.getStatus();
+    expect(status.consecutiveFailures).toBe(0);
+  });
+
   it('logs info message about reset failure counter when reverting uncommitted changes', async () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ once: true, logger: mockLogger });

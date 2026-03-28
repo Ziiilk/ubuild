@@ -661,8 +661,12 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       return true;
     }
 
-    // Not clean = changes made but not committed
-    this.log('⚠️  Verification passed but AI did not commit changes');
+    // Not clean = some changes left uncommitted
+    if (hashChanged) {
+      this.log('⚠️  Verification passed but AI left uncommitted changes after partial commit');
+    } else {
+      this.log('⚠️  Verification passed but AI did not commit changes');
+    }
     this.log('🔄 Reverting uncommitted changes...');
     const revertSuccess = await this.revert();
     if (!revertSuccess) {
