@@ -1,6 +1,7 @@
 import { EngineDetectionResult, EngineInstallation, EngineAssociation } from '../types/engine';
 import { ProjectDetectionResult, ProjectInfo } from '../types/project';
 import { CapturedWritable } from '../test-utils/capture-stream';
+import { Command } from 'commander';
 
 const mockResolveEngine = jest.fn<Promise<EngineDetectionResult>, [string | undefined]>();
 const mockFindEngineInstallations = jest.fn<Promise<EngineInstallation[]>, []>();
@@ -20,7 +21,7 @@ jest.mock('../core/project-detector', () => ({
 }));
 
 // Import after mocking
-import { executeEngine } from './engine';
+import { executeEngine, engineCommand } from './engine';
 
 describe('executeEngine', () => {
   let stdout: CapturedWritable;
@@ -448,5 +449,146 @@ describe('executeEngine', () => {
 
       expect(mockResolveEngine).toHaveBeenCalledWith('C:\\Some\\Directory');
     });
+  });
+});
+
+describe('engineCommand', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('registers the engine command with commander', () => {
+    const program = new Command();
+    engineCommand(program);
+
+    const engineCmd = program.commands.find((cmd) => cmd.name() === 'engine');
+    expect(engineCmd).toBeDefined();
+    expect(engineCmd?.description()).toBe('Display engine information for the current project');
+  });
+
+  it('registers all expected options', () => {
+    const program = new Command();
+    engineCommand(program);
+
+    const engineCmd = program.commands.find((cmd) => cmd.name() === 'engine');
+    const options = engineCmd?.options || [];
+
+    const optionFlags = options.map((opt) => opt.long);
+    expect(optionFlags).toContain('--project');
+    expect(optionFlags).toContain('--json');
+    expect(optionFlags).toContain('--verbose');
+  });
+
+  it('registers short option flags', () => {
+    const program = new Command();
+    engineCommand(program);
+
+    const engineCmd = program.commands.find((cmd) => cmd.name() === 'engine');
+    const options = engineCmd?.options || [];
+
+    const optionFlags = options.map((opt) => opt.short);
+    expect(optionFlags).toContain('-p');
+    expect(optionFlags).toContain('-j');
+    expect(optionFlags).toContain('-v');
+  });
+
+  it('calls executeEngine with options on action', async () => {
+    mockDetectProject.mockResolvedValue({
+      isValid: true,
+      project: {
+        name: 'TestProject',
+        path: 'C:\\Projects\\TestProject',
+        uproject: {
+          FileVersion: 3,
+          EngineAssociation: '5.3',
+          Category: 'Games',
+          Description: '',
+          Modules: [],
+          Plugins: [],
+        },
+        sourceDir: 'C:\\Projects\\TestProject\\Source',
+        targets: [],
+        modules: [],
+      },
+      warnings: [],
+    });
+    mockResolveEngine.mockResolvedValue({
+      engine: {
+        path: 'C:\\Engine',
+        associationId: '5.3',
+        displayName: 'UE 5.3',
+        source: 'launcher',
+      },
+      uprojectEngine: undefined,
+      warnings: [],
+    });
+
+    const program = new Command();
+    engineCommand(program);
+
+    await program.parseAsync(['node', 'test', 'engine', '--project', 'C:\\Test']);
+
+    expect(mockDetectProject).toHaveBeenCalled();
+    expect(mockResolveEngine).toHaveBeenCalled();
+  });
+
+  it('passes json flag to executeEngine', async () => {
+    mockDetectProject.mockResolvedValue({
+      isValid: true,
+      warnings: [],
+    });
+    mockResolveEngine.mockResolvedValue({
+      engine: undefined,
+      uprojectEngine: undefined,
+      warnings: [],
+    });
+
+    const program = new Command();
+    engineCommand(program);
+
+    await program.parseAsync(['node', 'test', 'engine', '--json']);
+
+    // JSON mode should call resolveEngine but not throw
+    expect(mockResolveEngine).toHaveBeenCalled();
+  });
+
+  it('passes verbose flag to executeEngine', async () => {
+    mockDetectProject.mockResolvedValue({
+      isValid: true,
+      project: {
+        name: 'TestProject',
+        path: 'C:\\Projects\\TestProject',
+        uproject: {
+          FileVersion: 3,
+          EngineAssociation: '5.3',
+          Category: 'Games',
+          Description: '',
+          Modules: [],
+          Plugins: [],
+        },
+        sourceDir: 'C:\\Projects\\TestProject\\Source',
+        targets: [],
+        modules: [],
+      },
+      warnings: [],
+    });
+    mockResolveEngine.mockResolvedValue({
+      engine: {
+        path: 'C:\\Engine',
+        associationId: '5.3',
+        displayName: 'UE 5.3',
+        source: 'launcher',
+      },
+      uprojectEngine: undefined,
+      warnings: [],
+    });
+    mockFindEngineInstallations.mockResolvedValue([]);
+
+    const program = new Command();
+    engineCommand(program);
+
+    await program.parseAsync(['node', 'test', 'engine', '--verbose']);
+
+    expect(mockFindEngineInstallations).toHaveBeenCalled();
   });
 });
