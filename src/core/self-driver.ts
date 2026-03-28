@@ -496,14 +496,6 @@ If verification fails, do NOT commit - the system will revert automatically.`;
     const fileTree = await this.getFileTree();
     const prompt = this.buildEvolutionPrompt(constitution, fileTree);
 
-    // Check if opencode command is available (reuse isOpenCodeInstalled method)
-    const isOpenCodeAvailable = await this.isOpenCodeInstalled();
-    if (!isOpenCodeAvailable) {
-      this.log('❌ OpenCode is not installed or not in PATH');
-      this.log('   Install it with: npm install -g opencode');
-      return false;
-    }
-
     try {
       this.log('🚀 Executing OpenCode...');
 

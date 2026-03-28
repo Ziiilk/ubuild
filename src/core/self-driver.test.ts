@@ -673,12 +673,12 @@ describe('SelfDriver', () => {
       expect(result).toBe(true);
     });
 
-    it('returns false when opencode is not installed', async () => {
+    it('returns false when opencode execution throws (e.g. not installed)', async () => {
       mockExeca.mockImplementation(async (command: string, args?: string[]) => {
         if (command === 'git' && args?.includes('ls-files')) {
           return mockExecaResult(0, 'src/core/self-driver.ts', '');
         }
-        if (command === 'opencode' && args?.includes('--version')) {
+        if (command === 'opencode') {
           throw new Error('Command not found');
         }
         return mockExecaResult(0, '', '');
