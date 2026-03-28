@@ -782,6 +782,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
     once: boolean;
     consecutiveFailures: number;
     iterationCount: number;
+    keepUntracked: boolean;
   } {
     return {
       interrupted: this.interrupted,
@@ -791,6 +792,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       once: this.once,
       consecutiveFailures: this.consecutiveFailures,
       iterationCount: this.iterationCount,
+      keepUntracked: this.keepUntracked,
     };
   }
 }

@@ -2205,6 +2205,7 @@ describe('getStatus', () => {
       once: false,
       consecutiveFailures: 0,
       iterationCount: 0,
+      keepUntracked: false,
     });
   });
 
@@ -2220,6 +2221,13 @@ describe('getStatus', () => {
     const status = driver.getStatus();
 
     expect(status.dryRun).toBe(true);
+  });
+
+  it('returns current driver state with keepUntracked option', () => {
+    driver = new SelfDriver({ keepUntracked: true });
+    const status = driver.getStatus();
+
+    expect(status.keepUntracked).toBe(true);
   });
 
   it('returns custom project root', () => {
@@ -2261,6 +2269,7 @@ describe('getStatus', () => {
     driver = new SelfDriver({
       once: true,
       dryRun: true,
+      keepUntracked: true,
     });
 
     const status = driver.getStatus();
@@ -2272,6 +2281,7 @@ describe('getStatus', () => {
       once: true,
       consecutiveFailures: 0,
       iterationCount: 0,
+      keepUntracked: true,
     });
   });
 });
