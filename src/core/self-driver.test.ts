@@ -2911,6 +2911,126 @@ describe('revert failure scenarios', () => {
   });
 });
 
+describe('handleEvolutionFailure direct tests', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('stops immediately when maxRetries is 0 (first failure triggers stop)', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ maxRetries: 0, logger: mockLogger });
+
+    const handleEvolutionFailure = (
+      driver as unknown as {
+        handleEvolutionFailure: (reason: string) => boolean;
+      }
+    ).handleEvolutionFailure;
+
+    const result = handleEvolutionFailure.call(driver, 'Test failure');
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      '❌ Test failure - Max retries (0) reached, stopping evolution'
+    );
+    expect(driver.getStatus().cleanedUp).toBe(true);
+  });
+
+  it('stops on first failure when maxRetries is 1', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ maxRetries: 1, logger: mockLogger });
+
+    const handleEvolutionFailure = (
+      driver as unknown as {
+        handleEvolutionFailure: (reason: string) => boolean;
+      }
+    ).handleEvolutionFailure;
+
+    const result = handleEvolutionFailure.call(driver, 'First failure');
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      '❌ First failure - Max retries (1) reached, stopping evolution'
+    );
+  });
+
+  it('continues on first failure then stops on second when maxRetries is 2', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ maxRetries: 2, logger: mockLogger });
+
+    const handleEvolutionFailure = (
+      driver as unknown as {
+        handleEvolutionFailure: (reason: string) => boolean;
+      }
+    ).handleEvolutionFailure;
+
+    // First failure: consecutiveFailures becomes 1, 1 >= 2 = false → continue
+    const result1 = handleEvolutionFailure.call(driver, 'First failure');
+    expect(result1).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith('⚠️  First failure (1/2), retrying next iteration...');
+
+    // Second failure: consecutiveFailures becomes 2, 2 >= 2 = true → stop
+    const result2 = handleEvolutionFailure.call(driver, 'Second failure');
+    expect(result2).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      '❌ Second failure - Max retries (2) reached, stopping evolution'
+    );
+  });
+
+  it('never stops and shows infinity symbol when maxRetries is -1', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ maxRetries: -1, logger: mockLogger });
+
+    const handleEvolutionFailure = (
+      driver as unknown as {
+        handleEvolutionFailure: (reason: string) => boolean;
+      }
+    ).handleEvolutionFailure;
+
+    // Call multiple times — should never stop
+    const result1 = handleEvolutionFailure.call(driver, 'Failure 1');
+    expect(result1).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith('⚠️  Failure 1 (1/∞), retrying next iteration...');
+
+    const result2 = handleEvolutionFailure.call(driver, 'Failure 2');
+    expect(result2).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith('⚠️  Failure 2 (2/∞), retrying next iteration...');
+
+    const result3 = handleEvolutionFailure.call(driver, 'Failure 3');
+    expect(result3).toBe(false);
+  });
+
+  it('increments consecutive failures counter correctly', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ maxRetries: 5, logger: mockLogger });
+
+    const handleEvolutionFailure = (
+      driver as unknown as {
+        handleEvolutionFailure: (reason: string) => boolean;
+      }
+    ).handleEvolutionFailure;
+
+    expect(driver.getStatus().consecutiveFailures).toBe(0);
+
+    handleEvolutionFailure.call(driver, 'Failure 1');
+    expect(driver.getStatus().consecutiveFailures).toBe(1);
+
+    handleEvolutionFailure.call(driver, 'Failure 2');
+    expect(driver.getStatus().consecutiveFailures).toBe(2);
+
+    handleEvolutionFailure.call(driver, 'Failure 3');
+    expect(driver.getStatus().consecutiveFailures).toBe(3);
+  });
+});
+
 describe('verify with useTsNode=false', () => {
   beforeEach(() => {
     driver = new SelfDriver({ useTsNode: false });
