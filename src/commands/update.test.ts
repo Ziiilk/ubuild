@@ -277,14 +277,12 @@ describe('executeUpdate', () => {
         throw new Error(`Unexpected command: ${args.join(' ')}`);
       });
 
-      // Note: Prerelease versions with non-numeric parts (like '0.0.9-beta.1')
-      // may not compare as greater than the current version due to NaN in version parsing.
-      // The function gracefully handles this by treating it as not needing an update.
+      // Prerelease suffix is stripped before comparison, so '0.0.9-beta.1'
+      // compares as '0.0.9' which is greater than '0.0.8', triggering an update.
       await executeUpdate({ stdout: capture.stdout, stderr: capture.stderr });
 
-      // Since the prerelease version comparison may result in NaN, it falls back to
-      // "already on latest version" behavior
-      expect(capture.getStdout()).toContain('You are already using the latest version!');
+      expect(capture.getStdout()).toContain('Update available: 0.0.8 → 0.0.9-beta.1');
+      expect(capture.getStdout()).toContain('Successfully updated to version 0.0.9');
     });
 
     it('handles major version update', async () => {

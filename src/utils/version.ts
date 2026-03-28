@@ -40,8 +40,11 @@
  * ```
  */
 export function compareVersions(a: string, b: string): number {
-  const partsA = a.split('.').map(Number);
-  const partsB = b.split('.').map(Number);
+  // Strip prerelease suffix (e.g., "1.0.0-rc.1" → "1.0.0") before splitting.
+  // This prevents "-rc.1" from being split into ["0-rc", "1"] which would
+  // produce an extra numeric component and skew the comparison.
+  const partsA = a.split('-')[0].split('.').map(Number);
+  const partsB = b.split('-')[0].split('.').map(Number);
 
   const maxLength = Math.max(partsA.length, partsB.length);
 
