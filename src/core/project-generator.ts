@@ -14,9 +14,9 @@ import type { GenerateOptions, GenerateResult, IDE } from '../types/generate';
 import { EngineResolver } from './engine-resolver';
 import { Logger } from '../utils/logger';
 import { formatError } from '../utils/error';
-import { Platform } from '../utils/platform';
 import { ProjectPathResolver } from './project-path-resolver';
 import { DEFAULTS } from '../utils/constants';
+import { resolveUnrealBuildToolPath } from '../utils/unreal-paths';
 
 /**
  * Represents a VSCode task definition in tasks.json.
@@ -176,18 +176,7 @@ export class ProjectGenerator {
     ide: IDE,
     logger: Logger
   ): Promise<void> {
-    const ubtPath = path.join(
-      enginePath,
-      'Engine',
-      'Binaries',
-      'DotNET',
-      'UnrealBuildTool',
-      `UnrealBuildTool${Platform.exeExtension()}`
-    );
-
-    if (!(await fs.pathExists(ubtPath))) {
-      throw new Error(`UnrealBuildTool not found at: ${ubtPath}`);
-    }
+    const ubtPath = await resolveUnrealBuildToolPath(enginePath);
 
     const args = ['-projectfiles', `-project="${projectPath}"`, '-game', '-engine'];
 

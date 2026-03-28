@@ -16,10 +16,10 @@ import { BuildOptions, BuildResult } from '../types/build';
 import { EngineResolver } from './engine-resolver';
 import { Logger } from '../utils/logger';
 import { formatError } from '../utils/error';
-import { Platform } from '../utils/platform';
 import { ProjectPathResolver } from './project-path-resolver';
 import { inferTargetType } from '../utils/target-helpers';
 import { TargetResolver } from './target-resolver';
+import { resolveUnrealBuildToolPath } from '../utils/unreal-paths';
 
 /**
  * Executes Unreal Engine project builds using UnrealBuildTool or Build.bat.
@@ -275,18 +275,7 @@ export class BuildExecutor {
     enginePath: string,
     options: Required<BuildOptions>
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    const ubtPath = path.join(
-      enginePath,
-      'Engine',
-      'Binaries',
-      'DotNET',
-      'UnrealBuildTool',
-      `UnrealBuildTool${Platform.exeExtension()}`
-    );
-
-    if (!(await fs.pathExists(ubtPath))) {
-      throw new Error(`UnrealBuildTool not found at: ${ubtPath}`);
-    }
+    const ubtPath = await resolveUnrealBuildToolPath(enginePath);
 
     const args = this.buildArgs(options);
     return this.executeWithStreaming(ubtPath, args);

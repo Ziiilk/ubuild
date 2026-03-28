@@ -13,11 +13,11 @@ import fs from 'fs-extra';
 import { execa } from 'execa';
 import { EngineResolver } from './engine-resolver';
 import { ProjectPathResolver } from './project-path-resolver';
-import { Platform } from '../utils/platform';
 import { Logger } from '../utils/logger';
 import { TargetResolver } from './target-resolver';
 import { formatError } from '../utils/error';
 import { DEFAULTS } from '../utils/constants';
+import { resolveUnrealBuildToolPath } from '../utils/unreal-paths';
 
 /** Options for generating compile commands database. */
 export interface CompileCommandsGenerateOptions {
@@ -72,18 +72,7 @@ export class CompileCommandsGenerator {
     const config = options.config || DEFAULTS.BUILD_CONFIG;
     const targetName = await this.resolveTargetName(projectPath, target);
 
-    const ubtPath = path.join(
-      enginePath,
-      'Engine',
-      'Binaries',
-      'DotNET',
-      'UnrealBuildTool',
-      `UnrealBuildTool${Platform.exeExtension()}`
-    );
-
-    if (!(await fs.pathExists(ubtPath))) {
-      throw new Error(`UnrealBuildTool not found at: ${ubtPath}`);
-    }
+    const ubtPath = await resolveUnrealBuildToolPath(enginePath);
 
     const targetNames = targetName.split(' ').filter(Boolean);
 

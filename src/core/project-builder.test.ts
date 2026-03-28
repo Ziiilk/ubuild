@@ -16,7 +16,7 @@ jest.mock('./build-executor', () => ({
   },
 }));
 
-import { ProjectBuilder } from './project-builder';
+import { ProjectBuilder, executeBuild } from './project-builder';
 import * as EngineResolverModule from './engine-resolver';
 import { createFakeProject, createOutputCapture, withTempDir } from '../test-utils';
 
@@ -569,6 +569,169 @@ describe('ProjectBuilder', () => {
 
         mockResolveEngine.mockRestore();
       });
+    });
+  });
+});
+
+describe('executeBuild', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockExeca.mockReset();
+    mockGetAvailableTargets.mockReset();
+    mockBuildExecutorExecute.mockReset();
+  });
+
+  it('convenience function builds project without creating instance directly', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+      mockBuildExecutorExecute.mockResolvedValueOnce({
+        success: true,
+        exitCode: 0,
+        stdout: 'Build succeeded',
+        stderr: '',
+      });
+
+      const capture = createOutputCapture();
+
+      await executeBuild({
+        project: project.projectDir,
+        target: 'Editor',
+        config: 'Development',
+        platform: 'Win64',
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+      });
+
+      expect(mockBuildExecutorExecute).toHaveBeenCalled();
+      const output = capture.getStdout();
+      expect(output).toContain('Build completed successfully');
+    });
+  });
+
+  it('passes logger and streams to the internal builder', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+      mockBuildExecutorExecute.mockResolvedValueOnce({
+        success: true,
+        exitCode: 0,
+        stdout: 'Build succeeded',
+        stderr: '',
+      });
+
+      const capture = createOutputCapture();
+      const { Logger } = jest.requireActual('../utils/logger');
+      const customLogger = new Logger({
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+        silent: true,
+      });
+
+      await executeBuild({
+        project: project.projectDir,
+        target: 'Editor',
+        config: 'Development',
+        platform: 'Win64',
+        logger: customLogger,
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+        silent: true,
+      });
+
+      expect(mockBuildExecutorExecute).toHaveBeenCalled();
+    });
+  });
+
+  it('propagates build failures from the internal builder', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+      mockBuildExecutorExecute.mockResolvedValueOnce({
+        success: false,
+        exitCode: 1,
+        stdout: '',
+        stderr: 'ERROR: Compilation failed',
+        error: 'Build process exited with code 1',
+      });
+
+      const capture = createOutputCapture();
+
+      await expect(
+        executeBuild({
+          project: project.projectDir,
+          target: 'Editor',
+          config: 'Development',
+          platform: 'Win64',
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        })
+      ).rejects.toThrow('Build failed with exit code 1');
+    });
+  });
+
+  it('propagates validation errors from the internal builder', async () => {
+    await withTempDir(async () => {
+      const capture = createOutputCapture();
+
+      await expect(
+        executeBuild({
+          target: 'InvalidTarget',
+          config: 'Development',
+          platform: 'Win64',
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        })
+      ).rejects.toThrow();
+    });
+  });
+
+  it('supports dry-run mode through convenience function', async () => {
+    await withTempDir(async () => {
+      const capture = createOutputCapture();
+
+      await executeBuild({
+        target: 'Editor',
+        config: 'Development',
+        platform: 'Win64',
+        dryRun: true,
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+        silent: true,
+      });
+
+      const output = capture.getStdout();
+      expect(output).toContain('--dry-run');
+      expect(output).toContain('Editor');
+      expect(output).toContain('Development');
+      expect(output).toContain('Win64');
+      // Should NOT have called the build executor
+      expect(mockBuildExecutorExecute).not.toHaveBeenCalled();
+    });
+  });
+
+  it('supports list-targets mode through convenience function', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+      mockGetAvailableTargets.mockResolvedValueOnce([
+        { name: 'TestGameEditor', type: 'Editor' },
+      ]);
+
+      const capture = createOutputCapture();
+
+      await executeBuild({
+        project: project.projectDir,
+        listTargets: true,
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+        silent: true,
+      });
+
+      const output = capture.getStdout();
+      expect(output).toContain('TestGameEditor');
+      // Should NOT have called the build executor
+      expect(mockBuildExecutorExecute).not.toHaveBeenCalled();
     });
   });
 });
