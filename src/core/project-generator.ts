@@ -16,6 +16,7 @@ import { Logger } from '../utils/logger';
 import { formatError } from '../utils/error';
 import { Platform } from '../utils/platform';
 import { ProjectPathResolver } from './project-path-resolver';
+import { DEFAULTS } from '../utils/constants';
 
 /**
  * Represents a VSCode task definition in tasks.json.
@@ -135,7 +136,7 @@ export class ProjectGenerator {
   private static async validateOptions(
     options: GenerateOptions
   ): Promise<Required<GenerateOptions>> {
-    const ide: IDE = options.ide || 'sln';
+    const ide: IDE = options.ide || DEFAULTS.IDE;
     const force = options.force || false;
 
     const projectPath = await ProjectPathResolver.resolveOrThrow(

@@ -57,6 +57,8 @@ export const DEFAULTS = {
   BUILD_PLATFORM: 'Win64',
   /** Default project type for initialization. */
   PROJECT_TYPE: 'cpp',
+  /** Default project template for initialization. */
+  BUILD_TEMPLATE: 'Basic',
   /** Default IDE type for project generation. */
   IDE: 'sln',
   /** Maximum depth for recursive file searches. */

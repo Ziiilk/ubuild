@@ -17,6 +17,7 @@ import { Platform } from '../utils/platform';
 import { Logger } from '../utils/logger';
 import { TargetResolver } from './target-resolver';
 import { formatError } from '../utils/error';
+import { DEFAULTS } from '../utils/constants';
 
 /** Options for generating compile commands database. */
 export interface CompileCommandsGenerateOptions {
@@ -66,9 +67,9 @@ export class CompileCommandsGenerator {
     });
 
     const projectDir = path.dirname(projectPath);
-    const target = options.target || 'Editor';
-    const platform = options.platform || 'Win64';
-    const config = options.config || 'Development';
+    const target = options.target || DEFAULTS.BUILD_TARGET;
+    const platform = options.platform || DEFAULTS.BUILD_PLATFORM;
+    const config = options.config || DEFAULTS.BUILD_CONFIG;
     const targetName = await this.resolveTargetName(projectPath, target);
 
     const ubtPath = path.join(

@@ -17,6 +17,7 @@ import { InitOptions, InitResult } from '../types/init';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
 import { handleCommandError, formatError } from '../utils/error';
+import { DEFAULTS } from '../utils/constants';
 
 /** Command line options specific to the init command. */
 type InitCommandActionOptions = InitOptions & {
@@ -44,7 +45,7 @@ export async function executeInit(options: InitCommandOptions): Promise<InitResu
   const stderr = options.stderr || process.stderr;
 
   const logger = new Logger({ stdout, stderr });
-  const projectType = options.type || 'cpp';
+  const projectType = options.type || DEFAULTS.PROJECT_TYPE;
 
   logger.title('Initialize Unreal Engine Project');
 

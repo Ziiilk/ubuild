@@ -14,6 +14,7 @@ import { ProjectGenerator } from '../core/project-generator';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
 import { handleCommandError } from '../utils/error';
+import { DEFAULTS } from '../utils/constants';
 
 /** Options for the generate command. */
 export interface GenerateCommandOptions {
@@ -52,7 +53,7 @@ export async function executeGenerate(options: GenerateCommandOptions): Promise<
     return;
   }
 
-  const ide = options.ide || 'sln';
+  const ide = options.ide || DEFAULTS.IDE;
 
   if (!Validator.isValidIDE(ide)) {
     logger.error(`Invalid IDE type: ${ide}`);

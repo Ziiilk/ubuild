@@ -8,6 +8,7 @@ import {
   BUILD_PLATFORMS,
   IDE_TYPES,
   PROJECT_TYPES,
+  DEFAULTS,
   type BuildTarget,
   type BuildConfig,
   type BuildPlatform,
@@ -258,9 +259,9 @@ export class Validator {
     }
 
     // Apply defaults only for undefined values
-    const target = options.target ?? 'Editor';
-    const config = options.config ?? 'Development';
-    const platform = options.platform ?? 'Win64';
+    const target = options.target ?? DEFAULTS.BUILD_TARGET;
+    const config = options.config ?? DEFAULTS.BUILD_CONFIG;
+    const platform = options.platform ?? DEFAULTS.BUILD_PLATFORM;
 
     return { target, config, platform };
   }

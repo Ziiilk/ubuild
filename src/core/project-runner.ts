@@ -20,6 +20,7 @@ import { EngineResolver } from './engine-resolver';
 import { ProjectPathResolver } from './project-path-resolver';
 import { TargetResolver } from './target-resolver';
 import { Platform } from '../utils/platform';
+import { DEFAULTS } from '../utils/constants';
 
 /** Options for running an Unreal Engine project executable. */
 export interface RunOptions {
@@ -189,9 +190,9 @@ export class ProjectRunner {
         stderr: this.stderr,
       });
       const buildResult = await buildExecutor.execute({
-        target: options.target || 'Editor',
-        config: options.config || 'Development',
-        platform: options.platform || 'Win64',
+        target: options.target || DEFAULTS.BUILD_TARGET,
+        config: options.config || DEFAULTS.BUILD_CONFIG,
+        platform: options.platform || DEFAULTS.BUILD_PLATFORM,
         projectPath,
         enginePath,
         verbose: false,
@@ -224,7 +225,7 @@ export class ProjectRunner {
 
     const args = options.args ? [...options.args] : [];
 
-    if ((options.target || 'Editor').toLowerCase().includes('editor')) {
+    if ((options.target || DEFAULTS.BUILD_TARGET).toLowerCase().includes('editor')) {
       args.unshift(projectPath);
     }
 
@@ -280,7 +281,7 @@ export class ProjectRunner {
         return null;
       }
 
-      let targetName = options.target || 'Editor';
+      let targetName = options.target || DEFAULTS.BUILD_TARGET;
       const resolvedTarget = await TargetResolver.resolveTarget(projectPath, targetName);
       targetName = resolvedTarget;
 
@@ -299,7 +300,7 @@ export class ProjectRunner {
           return null;
         }
 
-        const platform = options.platform || 'Win64';
+        const platform = options.platform || DEFAULTS.BUILD_PLATFORM;
         const editorExePath = path.join(
           enginePath,
           'Engine',
@@ -328,8 +329,8 @@ export class ProjectRunner {
       }
 
       const executableName = `${projectName}${exeExt}`;
-      const platform = options.platform || 'Win64';
-      const config = options.config || 'Development';
+      const platform = options.platform || DEFAULTS.BUILD_PLATFORM;
+      const config = options.config || DEFAULTS.BUILD_CONFIG;
 
       const possiblePaths = [
         path.join(projectDir, 'Binaries', platform, executableName),

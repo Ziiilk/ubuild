@@ -60,6 +60,10 @@ describe('Constants', () => {
       expect(DEFAULTS.PROJECT_TYPE).toBe('cpp');
     });
 
+    it('should have correct default build template', () => {
+      expect(DEFAULTS.BUILD_TEMPLATE).toBe('Basic');
+    });
+
     it('should have correct default IDE', () => {
       expect(DEFAULTS.IDE).toBe('sln');
     });

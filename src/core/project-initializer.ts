@@ -16,6 +16,7 @@ import type { EngineInstallation, EngineVersionInfo } from '../types/engine';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
 import { formatError } from '../utils/error';
+import { DEFAULTS } from '../utils/constants';
 import { EngineResolver } from './engine-resolver';
 
 /** Default engine version fallback when engine version detection fails. */
@@ -131,13 +132,13 @@ export class ProjectInitializer {
       );
     }
 
-    const type: ProjectType = options.type || 'cpp';
+    const type: ProjectType = options.type || DEFAULTS.PROJECT_TYPE;
     if (!Validator.isValidProjectType(type)) {
       throw new Error(`Invalid project type: ${type}`);
     }
 
     const directory = options.directory || path.join(process.cwd(), name);
-    const template = options.template || 'Basic';
+    const template = options.template || DEFAULTS.BUILD_TEMPLATE;
 
     let enginePath = options.enginePath;
     if (!enginePath) {
