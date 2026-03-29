@@ -8,6 +8,7 @@
  * @module core/project-initializer
  */
 
+import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs-extra';
 import inquirer from 'inquirer';
@@ -564,7 +565,7 @@ A${name}GameModeBase::A${name}GameModeBase()
     const configDir = path.join(directory, 'Config');
 
     const defaultEngineContent = `[/Script/EngineSettings.GeneralProjectSettings]
-ProjectID=00000000000000000000000000000000
+ProjectID=${crypto.randomUUID()}
 
 [/Script/Engine.Engine]
 +ActiveGameNameRedirects=(OldGameName="/Script/Engine",NewGameName="/Script/Engine")

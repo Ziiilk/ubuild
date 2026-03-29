@@ -13,6 +13,7 @@ import {
 interface ExecaOptions {
   stdio: 'pipe';
   cwd: string;
+  reject: boolean;
   shell: true;
 }
 
@@ -120,6 +121,7 @@ describe('BuildExecutor', () => {
         {
           stdio: 'pipe',
           cwd: path.dirname(engine.buildBatPath),
+          reject: false,
         }
       );
     });
@@ -171,6 +173,7 @@ describe('BuildExecutor', () => {
         {
           stdio: 'pipe',
           cwd: path.dirname(engine.unrealBuildToolPath),
+          reject: false,
         }
       );
     });

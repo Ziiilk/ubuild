@@ -222,6 +222,7 @@ export class BuildExecutor {
     const childProcess = execa(executablePath, args, {
       stdio: 'pipe',
       cwd: path.dirname(executablePath),
+      reject: false,
     });
 
     let stdout = '';
