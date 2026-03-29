@@ -595,7 +595,7 @@ export class EngineResolver {
         }
       }
 
-      const pathMatch = installation.path.match(/UE_(?:5|4)[._]?(\d+(?:[._]\d+)*)/i);
+      const pathMatch = installation.path.match(/UE_((?:5|4)[._]\d+(?:[._]\d+)*)/i);
       if (pathMatch) {
         const versionStr = pathMatch[1].replace(/_/g, '.');
         installation.version = {

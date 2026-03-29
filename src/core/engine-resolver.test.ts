@@ -680,8 +680,9 @@ describe('EngineResolver', () => {
       const result = await EngineResolver.findEngineInstallations();
 
       expect(result).toHaveLength(1);
-      // The regex captures version info after UE_5 or UE_4 prefix
-      expect(result[0].displayName).toBeDefined();
+      expect(result[0].version).toBeDefined();
+      // Verify displayName includes major version
+      expect(result[0].displayName).toBe('UE 5.3.2');
     });
   });
 
