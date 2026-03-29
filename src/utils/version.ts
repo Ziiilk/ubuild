@@ -49,8 +49,12 @@ export function compareVersions(a: string, b: string): number {
   const maxLength = Math.max(partsA.length, partsB.length);
 
   for (let i = 0; i < maxLength; i++) {
-    const partA = partsA[i] || 0;
-    const partB = partsB[i] || 0;
+    // Use nullish coalescing (??) instead of logical OR (||) to correctly
+    // distinguish between missing parts (undefined → 0) and NaN from
+    // non-numeric segments. NaN ?? 0 still yields NaN, so we use a helper
+    // that explicitly converts NaN to 0 for consistent comparison behavior.
+    const partA = toNumericPart(partsA[i]);
+    const partB = toNumericPart(partsB[i]);
 
     if (partA !== partB) {
       return partA - partB;
@@ -58,6 +62,21 @@ export function compareVersions(a: string, b: string): number {
   }
 
   return 0;
+}
+
+/**
+ * Converts a version part to a numeric value for comparison.
+ * Returns 0 for missing parts (undefined) and non-numeric segments (NaN),
+ * ensuring consistent comparison behavior.
+ *
+ * @param value - The version part value (number, undefined, or NaN)
+ * @returns The numeric value, or 0 if the part is missing or non-numeric
+ */
+function toNumericPart(value: number | undefined): number {
+  if (value === undefined || Number.isNaN(value)) {
+    return 0;
+  }
+  return value;
 }
 
 /**

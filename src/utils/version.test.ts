@@ -48,16 +48,16 @@ describe('Version utilities', () => {
       expect(compareVersions('1.2.3.4.4', '1.2.3.4.5')).toBeLessThan(0);
     });
 
-    it('treats non-numeric parts as NaN (falsy → 0)', () => {
-      // Number('alpha') = NaN, NaN || 0 = 0
-      // This documents the current behavior: non-numeric segments collapse to 0
+    it('treats non-numeric parts as 0 via toNumericPart', () => {
+      // Number('alpha') = NaN, toNumericPart(NaN) = 0
+      // Non-numeric segments are explicitly converted to 0 for consistent comparison
       expect(compareVersions('1.0.0-alpha', '1.0.0')).toBe(0);
       expect(compareVersions('1.0.0-beta', '1.0.0')).toBe(0);
       expect(compareVersions('1.0.0-rc.1', '1.0.0')).toBe(0);
     });
 
     it('treats two non-numeric versions as equal', () => {
-      // Both collapse to NaN → 0, so they compare as equal
+      // Both produce NaN → toNumericPart returns 0 → they compare as equal
       expect(compareVersions('alpha', 'beta')).toBe(0);
       expect(compareVersions('prerelease', '0.0.0')).toBe(0);
     });
