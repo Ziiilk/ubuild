@@ -239,15 +239,104 @@ export class SelfDriver {
   }
 
   /**
-   * Runs the self-evolution loop - continues indefinitely until interrupted by user.
+   * Resets internal state for a fresh run.
+   * Called at the start of `run()` to support re-running after cleanup.
    */
-  async run(): Promise<void> {
-    // Reset state for potential re-run after cleanup
+  private resetState(): void {
     this.sleepCancelled = false;
     this.interrupted = false;
     this.cleanedUp = false;
     this.consecutiveFailures = 0;
     this.iterationCount = 0;
+  }
+
+  /**
+   * Displays dry-run information showing what would be done without executing.
+   */
+  private displayDryRunInfo(): void {
+    this.log('🔍 Dry run mode - showing what would be done');
+    this.log(`📁 Project: ${this.projectRoot}`);
+    this.log('\n📝 Would perform the following actions:');
+    this.log('  1. Read EVOLVE.md constitution file');
+    this.log('  2. Execute OpenCode with the evolution prompt');
+    this.log('  3. Verify changes (build, test, lint, commands)');
+    this.log('  4. Check if changes are committed');
+    this.log('  5. Revert if verification fails or changes not committed');
+    if (this.once) {
+      this.log('\n  Mode: Single iteration (--once)');
+    } else {
+      this.log('\n  Mode: Continuous (runs until Ctrl+C)');
+      this.log(`  Would loop every ${this.sleepMs / 1000} seconds`);
+    }
+    this.log('\n✨ Dry run complete - no changes made');
+  }
+
+  /**
+   * Displays the start banner for the evolution process.
+   */
+  private logStartBanner(): void {
+    this.log('🔄 Starting self-evolution...');
+    this.log(`📁 Project: ${this.projectRoot}`);
+    this.log('💡 Press Ctrl+C to stop\n');
+  }
+
+  /**
+   * Runs a single evolution iteration: execute → verify → commit check.
+   * @returns 'stop' if evolution should stop entirely, 'retry' if the iteration
+   *   failed and should be retried (skipping the --once check), or 'completed'
+   *   if the iteration finished and the --once check should apply.
+   */
+  private async runIteration(): Promise<'stop' | 'retry' | 'completed'> {
+    this.iterationCount++;
+    this.log(`\n📊 Iteration ${this.iterationCount} starting...`);
+
+    // Capture git commit hash before evolution to detect if changes were committed
+    const beforeCommitHash = await this.getHeadCommitHash();
+
+    // 1. Read constitution file
+    const constitution = await this.readConstitution();
+
+    // 2. AI analyzes, executes, and commits autonomously
+    this.log('\n🤖 AI analyzing and evolving...');
+    const executed = await this.evolveWithOpenCode(constitution);
+
+    if (!executed) {
+      const shouldStop = this.handleEvolutionFailure('Evolution execution issue');
+      return shouldStop ? 'stop' : 'retry';
+    }
+
+    // 3. Verify (the only gate)
+    this.log('\n🔍 Verifying changes...');
+    const verified = await this.verify();
+
+    if (!verified) {
+      this.log('❌ Verification failed, reverting...');
+      const revertSuccess = await this.revert();
+      return this.handleRevertFailure(revertSuccess, 'Verification failed') ? 'completed' : 'stop';
+    }
+
+    // Verification passed, check if AI has committed by comparing commit hashes
+    const isClean = await this.isWorkingTreeClean();
+    const afterCommitHash = await this.getHeadCommitHash();
+
+    // Track hash comparison state - null means we couldn't determine the hash
+    const beforeHashError = beforeCommitHash === null;
+    const afterHashError = afterCommitHash === null;
+    const hashChanged = !beforeHashError && !afterHashError && beforeCommitHash !== afterCommitHash;
+
+    const shouldContinue = await this.handlePostVerificationState(
+      isClean,
+      hashChanged,
+      beforeHashError || afterHashError
+    );
+    return shouldContinue ? 'completed' : 'stop';
+  }
+
+  /**
+   * Runs the self-evolution loop - continues indefinitely until interrupted by user.
+   */
+  async run(): Promise<void> {
+    this.resetState();
 
     // Re-register signal handlers if they were cleaned up (allows re-run after cleanup)
     this.setupSignalHandlers();
@@ -259,85 +348,21 @@ export class SelfDriver {
     }
 
     if (this.dryRun) {
-      this.log('🔍 Dry run mode - showing what would be done');
-      this.log(`📁 Project: ${this.projectRoot}`);
-      this.log('\n📝 Would perform the following actions:');
-      this.log('  1. Read EVOLVE.md constitution file');
-      this.log('  2. Execute OpenCode with the evolution prompt');
-      this.log('  3. Verify changes (build, test, lint, commands)');
-      this.log('  4. Check if changes are committed');
-      this.log('  5. Revert if verification fails or changes not committed');
-      if (this.once) {
-        this.log('\n  Mode: Single iteration (--once)');
-      } else {
-        this.log('\n  Mode: Continuous (runs until Ctrl+C)');
-        this.log(`  Would loop every ${this.sleepMs / 1000} seconds`);
-      }
-      this.log('\n✨ Dry run complete - no changes made');
+      this.displayDryRunInfo();
       this.cleanup();
       return;
     }
 
-    this.log('🔄 Starting self-evolution...');
-    this.log(`📁 Project: ${this.projectRoot}`);
-    this.log('💡 Press Ctrl+C to stop\n');
+    this.logStartBanner();
 
     while (!this.interrupted) {
-      this.iterationCount++;
-      this.log(`\n📊 Iteration ${this.iterationCount} starting...`);
-
-      // Capture git commit hash before evolution to detect if changes were committed
-      const beforeCommitHash = await this.getHeadCommitHash();
-
-      // 1. Read constitution file
-      const constitution = await this.readConstitution();
-
-      // 2. AI analyzes, executes, and commits autonomously
-      this.log('\n🤖 AI analyzing and evolving...');
-      const executed = await this.evolveWithOpenCode(constitution);
-
-      if (!executed) {
-        const shouldStop = this.handleEvolutionFailure('Evolution execution issue');
-        if (shouldStop) {
-          return;
-        }
-        await this.sleep(this.sleepMs);
-        continue;
+      const result = await this.runIteration();
+      if (result === 'stop') {
+        return;
       }
 
-      // 3. Verify (the only gate)
-      this.log('\n🔍 Verifying changes...');
-      const verified = await this.verify();
-
-      if (!verified) {
-        this.log('❌ Verification failed, reverting...');
-        const revertSuccess = await this.revert();
-        if (!this.handleRevertFailure(revertSuccess, 'Verification failed')) {
-          return;
-        }
-      } else {
-        // Verification passed, check if AI has committed by comparing commit hashes
-        const isClean = await this.isWorkingTreeClean();
-        const afterCommitHash = await this.getHeadCommitHash();
-
-        // Track hash comparison state - null means we couldn't determine the hash
-        const beforeHashError = beforeCommitHash === null;
-        const afterHashError = afterCommitHash === null;
-        const hashChanged =
-          !beforeHashError && !afterHashError && beforeCommitHash !== afterCommitHash;
-
-        const shouldContinue = await this.handlePostVerificationState(
-          isClean,
-          hashChanged,
-          beforeHashError || afterHashError
-        );
-        if (!shouldContinue) {
-          return;
-        }
-      }
-
-      // Exit after one iteration if --once flag is set
-      if (this.once) {
+      // Only check --once for completed iterations (not retries from execution failure)
+      if (result === 'completed' && this.once) {
         this.log('\n✨ Single iteration complete (--once flag set)');
         this.cleanup();
         return;
