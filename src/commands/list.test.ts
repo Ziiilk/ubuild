@@ -181,18 +181,13 @@ describe('executeList', () => {
   });
 
   describe('error handling', () => {
-    it('exits with error when project detection fails', async () => {
+    it('throws error when project detection fails', async () => {
       mockDetectProject.mockResolvedValue({
         isValid: false,
         error: 'No .uproject file found',
         warnings: [],
       });
 
-      // Mock process.exit to prevent actual exit
-      const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
-        throw new Error('process.exit called');
-      }) as (code?: string | number | null | undefined) => never);
-
       await expect(
         executeList({
           recursive: false,
@@ -200,22 +195,17 @@ describe('executeList', () => {
           stdout,
           stderr,
         })
-      ).rejects.toThrow('process.exit called');
+      ).rejects.toThrow('No .uproject file found');
 
-      expect(mockExit).toHaveBeenCalledWith(1);
-      mockExit.mockRestore();
+      expect(stderr.output).toContain('No .uproject file found');
     });
 
-    it('exits with error when no project is returned', async () => {
+    it('throws error when no project is returned', async () => {
       mockDetectProject.mockResolvedValue({
         isValid: true,
         warnings: [],
       });
 
-      const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
-        throw new Error('process.exit called');
-      }) as (code?: string | number | null | undefined) => never);
-
       await expect(
         executeList({
           recursive: false,
@@ -223,18 +213,13 @@ describe('executeList', () => {
           stdout,
           stderr,
         })
-      ).rejects.toThrow('process.exit called');
+      ).rejects.toThrow('No project found');
 
-      expect(mockExit).toHaveBeenCalledWith(1);
-      mockExit.mockRestore();
+      expect(stderr.output).toContain('No project found');
     });
 
-    it('exits with error on unexpected exception', async () => {
+    it('throws error on unexpected exception', async () => {
       mockDetectProject.mockRejectedValue(new Error('Unexpected error'));
-
-      const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
-        throw new Error('process.exit called');
-      }) as (code?: string | number | null | undefined) => never);
 
       await expect(
         executeList({
@@ -243,10 +228,9 @@ describe('executeList', () => {
           stdout,
           stderr,
         })
-      ).rejects.toThrow('process.exit called');
+      ).rejects.toThrow('Unexpected error');
 
-      expect(mockExit).toHaveBeenCalledWith(1);
-      mockExit.mockRestore();
+      expect(stderr.output).toContain('Unexpected error');
     });
 
     it('displays warnings in error output when project is invalid', async () => {
@@ -255,10 +239,6 @@ describe('executeList', () => {
         error: 'Invalid project',
         warnings: ['Warning 1', 'Warning 2'],
       });
-
-      const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
-        throw new Error('process.exit called');
-      }) as (code?: string | number | null | undefined) => never);
 
       await expect(
         executeList({
@@ -269,8 +249,9 @@ describe('executeList', () => {
         })
       ).rejects.toThrow();
 
-      expect(mockExit).toHaveBeenCalledWith(1);
-      mockExit.mockRestore();
+      expect(stderr.output).toContain('Invalid project');
+      expect(stdout.output).toContain('Warning 1');
+      expect(stdout.output).toContain('Warning 2');
     });
   });
 

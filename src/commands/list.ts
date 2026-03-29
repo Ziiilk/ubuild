@@ -12,7 +12,7 @@ import chalk from 'chalk';
 import { Writable } from 'stream';
 import { ProjectDetector } from '../core/project-detector';
 import { Logger } from '../utils/logger';
-import { formatError } from '../utils/error';
+import { formatError, handleCommandError } from '../utils/error';
 
 /** Options for the list command. */
 export interface ListCommandOptions {
@@ -58,12 +58,12 @@ export async function executeList(options: ListCommandOptions): Promise<void> {
         logger.warning('Warnings:');
         result.warnings.forEach((warning) => logger.write(`  • ${warning}\n`));
       }
-      process.exit(1);
+      throw new Error(result.error || 'Project detection failed');
     }
 
     if (!result.project) {
       logger.error('No project found');
-      process.exit(1);
+      throw new Error('No project found');
     }
 
     const project = result.project;
@@ -116,7 +116,7 @@ export async function executeList(options: ListCommandOptions): Promise<void> {
     logger.success('Project detection complete');
   } catch (error) {
     logger.error(`Unexpected error: ${formatError(error)}`);
-    process.exit(1);
+    throw error;
   }
 }
 
@@ -133,10 +133,14 @@ export function listCommand(program: Command): void {
     .option('-r, --recursive', 'Search recursively for .uproject files')
     .option('-j, --json', 'Output result as JSON')
     .action(async (options) => {
-      await executeList({
-        project: options.project,
-        recursive: options.recursive,
-        json: options.json,
-      });
+      try {
+        await executeList({
+          project: options.project,
+          recursive: options.recursive,
+          json: options.json,
+        });
+      } catch (error) {
+        handleCommandError(error, 'List command failed');
+      }
     });
 }
