@@ -39,84 +39,80 @@ export async function executeList(options: ListCommandOptions): Promise<void> {
 
   const logger = new Logger({ stdout, stderr });
 
-  try {
-    const result = await ProjectDetector.detectProject({
-      cwd: options.project || process.cwd(),
-      recursive: options.recursive,
-    });
+  const result = await ProjectDetector.detectProject({
+    cwd: options.project || process.cwd(),
+    recursive: options.recursive,
+  });
 
-    if (options.json) {
-      logger.json(result);
-      return;
-    }
-
-    logger.title('Project Detection');
-
-    if (!result.isValid) {
-      logger.error(result.error || 'Project detection failed');
-      if (result.warnings.length > 0) {
-        logger.warning('Warnings:');
-        result.warnings.forEach((warning) => logger.write(`  • ${warning}\n`));
-      }
-      throw new Error(result.error || 'Project detection failed');
-    }
-
-    if (!result.project) {
-      logger.error('No project found');
-      throw new Error('No project found');
-    }
-
-    const project = result.project;
-
-    logger.success(`Found project: ${chalk.bold(project.name)}`);
-    logger.write('\n');
-
-    logger.subTitle('Basic Information');
-    logger.write(`  Path: ${project.path}\n`);
-    logger.write(`  Source Directory: ${project.sourceDir || 'Not found'}\n`);
-    logger.write(`  Engine Association: ${project.uproject.EngineAssociation}\n`);
-
-    if (project.uproject.Modules.length > 0) {
-      logger.subTitle('Modules');
-      project.uproject.Modules.forEach((module) => {
-        logger.write(`  • ${module.Name} (${module.Type}) - Loading: ${module.LoadingPhase}\n`);
-      });
-    }
-
-    if (project.targets.length > 0) {
-      logger.subTitle('Build Targets');
-      project.targets.forEach((target) => {
-        logger.write(`  • ${target.name} (${target.type})\n`);
-      });
-    }
-
-    if (project.modules.length > 0) {
-      logger.subTitle('Source Modules');
-      project.modules.forEach((module) => {
-        logger.write(`  • ${module.name}\n`);
-      });
-    }
-
-    if (project.uproject.Plugins && project.uproject.Plugins.length > 0) {
-      logger.subTitle('Plugins');
-      project.uproject.Plugins.forEach((plugin) => {
-        const status = plugin.Enabled ? chalk.green('Enabled') : chalk.gray('Disabled');
-        logger.write(`  • ${plugin.Name} - ${status}\n`);
-      });
-    }
-
-    if (result.warnings.length > 0) {
-      logger.subTitle('Warnings');
-      result.warnings.forEach((warning) => {
-        logger.write(`  • ${warning}\n`);
-      });
-    }
-
-    logger.write('\n');
-    logger.success('Project detection complete');
-  } catch (error) {
-    throw error;
+  if (options.json) {
+    logger.json(result);
+    return;
   }
+
+  logger.title('Project Detection');
+
+  if (!result.isValid) {
+    logger.error(result.error || 'Project detection failed');
+    if (result.warnings.length > 0) {
+      logger.warning('Warnings:');
+      result.warnings.forEach((warning) => logger.write(`  • ${warning}\n`));
+    }
+    throw new Error(result.error || 'Project detection failed');
+  }
+
+  if (!result.project) {
+    logger.error('No project found');
+    throw new Error('No project found');
+  }
+
+  const project = result.project;
+
+  logger.success(`Found project: ${chalk.bold(project.name)}`);
+  logger.write('\n');
+
+  logger.subTitle('Basic Information');
+  logger.write(`  Path: ${project.path}\n`);
+  logger.write(`  Source Directory: ${project.sourceDir || 'Not found'}\n`);
+  logger.write(`  Engine Association: ${project.uproject.EngineAssociation}\n`);
+
+  if (project.uproject.Modules.length > 0) {
+    logger.subTitle('Modules');
+    project.uproject.Modules.forEach((module) => {
+      logger.write(`  • ${module.Name} (${module.Type}) - Loading: ${module.LoadingPhase}\n`);
+    });
+  }
+
+  if (project.targets.length > 0) {
+    logger.subTitle('Build Targets');
+    project.targets.forEach((target) => {
+      logger.write(`  • ${target.name} (${target.type})\n`);
+    });
+  }
+
+  if (project.modules.length > 0) {
+    logger.subTitle('Source Modules');
+    project.modules.forEach((module) => {
+      logger.write(`  • ${module.name}\n`);
+    });
+  }
+
+  if (project.uproject.Plugins && project.uproject.Plugins.length > 0) {
+    logger.subTitle('Plugins');
+    project.uproject.Plugins.forEach((plugin) => {
+      const status = plugin.Enabled ? chalk.green('Enabled') : chalk.gray('Disabled');
+      logger.write(`  • ${plugin.Name} - ${status}\n`);
+    });
+  }
+
+  if (result.warnings.length > 0) {
+    logger.subTitle('Warnings');
+    result.warnings.forEach((warning) => {
+      logger.write(`  • ${warning}\n`);
+    });
+  }
+
+  logger.write('\n');
+  logger.success('Project detection complete');
 }
 
 /**

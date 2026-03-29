@@ -49,117 +49,113 @@ export async function executeEngine(options: EngineCommandOptions): Promise<void
 
   const logger = new Logger({ stdout, stderr });
 
-  try {
-    if (!options.json) {
-      logger.title('Engine Information');
-    }
+  if (!options.json) {
+    logger.title('Engine Information');
+  }
 
-    let projectPath = options.project || process.cwd();
+  let projectPath = options.project || process.cwd();
 
-    const projectResult = await ProjectDetector.detectProject({ cwd: projectPath });
-    if (projectResult.project) {
-      projectPath = projectResult.project.path;
-    }
+  const projectResult = await ProjectDetector.detectProject({ cwd: projectPath });
+  if (projectResult.project) {
+    projectPath = projectResult.project.path;
+  }
 
-    const result = await EngineResolver.resolveEngine(projectPath);
+  const result = await EngineResolver.resolveEngine(projectPath);
 
-    if (options.json) {
-      logger.json(result);
-      return;
-    }
+  if (options.json) {
+    logger.json(result);
+    return;
+  }
 
-    if (options.verbose) {
-      logger.subTitle('Engine Detection Details');
-      const allInstallations = await EngineResolver.findEngineInstallations();
-      logger.write(`Total engines detected: ${allInstallations.length}`);
+  if (options.verbose) {
+    logger.subTitle('Engine Detection Details');
+    const allInstallations = await EngineResolver.findEngineInstallations();
+    logger.write(`Total engines detected: ${allInstallations.length}`);
 
-      if (allInstallations.length > 0) {
-        allInstallations.forEach((engine, index) => {
-          logger.write(`\n  Engine ${index + 1}:`);
-          logger.write(`    Path: ${engine.path}`);
-          logger.write(`    Source: ${engine.source || 'unknown'}`);
-          logger.write(`    Association ID: ${engine.associationId}`);
-          logger.write(`    Display Name: ${engine.displayName || '(none)'}`);
-          if (engine.version) {
-            logger.write(
-              `    Version: ${engine.version.MajorVersion}.${engine.version.MinorVersion}.${engine.version.PatchVersion}`
-            );
-          }
-          if (engine.installedDate) {
-            logger.write(`    Installed: ${engine.installedDate}`);
-          }
-        });
-      }
-      logger.write('\n');
-    }
-
-    if (result.error) {
-      logger.error(result.error);
-      throw new Error(result.error);
-    }
-
-    if (result.engine && result.uprojectEngine) {
-      const engine = result.engine;
-      logger.success(
-        `Found engine for project: ${chalk.bold(engine.displayName || engine.associationId)}`
-      );
-
-      logger.subTitle('Engine Details');
-      logger.write(`  Path: ${engine.path}`);
-
-      if (engine.version) {
-        logger.write(
-          `  Version: ${engine.version.MajorVersion}.${engine.version.MinorVersion}.${engine.version.PatchVersion}`
-        );
-        logger.write(`  Build ID: ${engine.version.BuildId}`);
-        logger.write(`  Branch: ${engine.version.BranchName}`);
-        logger.write(`  Changelist: ${engine.version.Changelist}`);
-        logger.write(`  Promoted Build: ${engine.version.IsPromotedBuild ? 'Yes' : 'No'}`);
-      }
-
-      logger.write(`  Association ID: ${engine.associationId}`);
-      if (engine.installedDate) {
-        logger.write(`  Installed: ${engine.installedDate}`);
-      }
-    } else if (!result.engine) {
-      logger.warning('No engine installation found');
-    }
-
-    if (result.uprojectEngine) {
-      logger.subTitle('Project Engine Association');
-      logger.write(`  GUID: ${result.uprojectEngine.guid}`);
-      if (result.uprojectEngine.name) {
-        logger.write(`  Name: ${result.uprojectEngine.name}`);
-      }
-      if (result.uprojectEngine.path) {
-        logger.write(`  Path: ${result.uprojectEngine.path}`);
-      }
-      if (result.uprojectEngine.version) {
-        logger.write(`  Version: ${result.uprojectEngine.version}`);
-      }
-
-      if (!result.engine) {
-        logger.warning(
-          'Engine association found in project, but no matching engine installation detected'
-        );
-      }
-    }
-
-    if (result.warnings.length > 0) {
-      logger.subTitle('Warnings');
-      result.warnings.forEach((warning) => {
-        logger.write(`  • ${warning}`);
+    if (allInstallations.length > 0) {
+      allInstallations.forEach((engine, index) => {
+        logger.write(`\n  Engine ${index + 1}:`);
+        logger.write(`    Path: ${engine.path}`);
+        logger.write(`    Source: ${engine.source || 'unknown'}`);
+        logger.write(`    Association ID: ${engine.associationId}`);
+        logger.write(`    Display Name: ${engine.displayName || '(none)'}`);
+        if (engine.version) {
+          logger.write(
+            `    Version: ${engine.version.MajorVersion}.${engine.version.MinorVersion}.${engine.version.PatchVersion}`
+          );
+        }
+        if (engine.installedDate) {
+          logger.write(`    Installed: ${engine.installedDate}`);
+        }
       });
     }
-
     logger.write('\n');
-    if (result.engine && result.uprojectEngine) {
-      logger.success('Engine information retrieved successfully');
-    } else if (!result.engine) {
-      logger.warning('No engine installation found');
+  }
+
+  if (result.error) {
+    logger.error(result.error);
+    throw new Error(result.error);
+  }
+
+  if (result.engine && result.uprojectEngine) {
+    const engine = result.engine;
+    logger.success(
+      `Found engine for project: ${chalk.bold(engine.displayName || engine.associationId)}`
+    );
+
+    logger.subTitle('Engine Details');
+    logger.write(`  Path: ${engine.path}`);
+
+    if (engine.version) {
+      logger.write(
+        `  Version: ${engine.version.MajorVersion}.${engine.version.MinorVersion}.${engine.version.PatchVersion}`
+      );
+      logger.write(`  Build ID: ${engine.version.BuildId}`);
+      logger.write(`  Branch: ${engine.version.BranchName}`);
+      logger.write(`  Changelist: ${engine.version.Changelist}`);
+      logger.write(`  Promoted Build: ${engine.version.IsPromotedBuild ? 'Yes' : 'No'}`);
     }
-  } catch (error) {
-    throw error;
+
+    logger.write(`  Association ID: ${engine.associationId}`);
+    if (engine.installedDate) {
+      logger.write(`  Installed: ${engine.installedDate}`);
+    }
+  } else if (!result.engine) {
+    logger.warning('No engine installation found');
+  }
+
+  if (result.uprojectEngine) {
+    logger.subTitle('Project Engine Association');
+    logger.write(`  GUID: ${result.uprojectEngine.guid}`);
+    if (result.uprojectEngine.name) {
+      logger.write(`  Name: ${result.uprojectEngine.name}`);
+    }
+    if (result.uprojectEngine.path) {
+      logger.write(`  Path: ${result.uprojectEngine.path}`);
+    }
+    if (result.uprojectEngine.version) {
+      logger.write(`  Version: ${result.uprojectEngine.version}`);
+    }
+
+    if (!result.engine) {
+      logger.warning(
+        'Engine association found in project, but no matching engine installation detected'
+      );
+    }
+  }
+
+  if (result.warnings.length > 0) {
+    logger.subTitle('Warnings');
+    result.warnings.forEach((warning) => {
+      logger.write(`  • ${warning}`);
+    });
+  }
+
+  logger.write('\n');
+  if (result.engine && result.uprojectEngine) {
+    logger.success('Engine information retrieved successfully');
+  } else if (!result.engine) {
+    logger.warning('No engine installation found');
   }
 }
 
