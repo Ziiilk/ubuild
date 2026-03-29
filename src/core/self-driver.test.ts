@@ -3205,3 +3205,152 @@ describe('interrupted loop exit', () => {
     expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Evolution stopped'));
   });
 });
+
+describe('opencode timeout revert failure handling', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('logs error when revert fails after opencode timeout', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+      if (command === 'opencode' && args?.includes('run')) {
+        return {
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          timedOut: true,
+        };
+      }
+      // Make all git revert commands fail
+      if (command === 'git') {
+        return mockExecaResult(1, '', 'fatal: error');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const evolveWithOpenCode = (
+      driver as unknown as {
+        evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+      }
+    ).evolveWithOpenCode;
+    const result = await evolveWithOpenCode.call(driver, '');
+
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith(
+      '⚠️  OpenCode timed out, reverting any partial changes...'
+    );
+    expect(mockLogger).toHaveBeenCalledWith(
+      '❌ Revert after timeout failed - manual intervention may be required'
+    );
+  });
+
+  it('does not log revert failure when revert succeeds after timeout', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+      if (command === 'opencode' && args?.includes('run')) {
+        return {
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          timedOut: true,
+        };
+      }
+      // All git commands succeed for revert
+      if (command === 'git') {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const evolveWithOpenCode = (
+      driver as unknown as {
+        evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+      }
+    ).evolveWithOpenCode;
+    const result = await evolveWithOpenCode.call(driver, '');
+
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith(
+      '⚠️  OpenCode timed out, reverting any partial changes...'
+    );
+    expect(mockLogger).toHaveBeenCalledWith('🔄 Reverted changes');
+    // Should NOT log the revert failure message
+    expect(mockLogger).not.toHaveBeenCalledWith(
+      expect.stringContaining('Revert after timeout failed')
+    );
+  });
+});
+
+describe('EVOLVE.md absent warning', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('warns when EVOLVE.md does not exist', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockPathExists.mockResolvedValue(false);
+
+    const readConstitution = (
+      driver as unknown as {
+        readConstitution: () => Promise<string>;
+      }
+    ).readConstitution;
+    const result = await readConstitution.call(driver);
+
+    expect(result).toBe('');
+    expect(mockLogger).toHaveBeenCalledWith(
+      '⚠️  No EVOLVE.md constitution file found - AI will operate without guidance'
+    );
+  });
+
+  it('does not warn when EVOLVE.md exists', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockPathExists.mockResolvedValue(true);
+    mockReadFile.mockResolvedValue('# Evolution Guide');
+
+    const readConstitution = (
+      driver as unknown as {
+        readConstitution: () => Promise<string>;
+      }
+    ).readConstitution;
+    const result = await readConstitution.call(driver);
+
+    expect(result).toBe('# Evolution Guide');
+    expect(mockLogger).not.toHaveBeenCalledWith(
+      expect.stringContaining('No EVOLVE.md constitution file found')
+    );
+  });
+});

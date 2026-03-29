@@ -385,6 +385,7 @@ export class SelfDriver {
       if (await fs.pathExists(constitutionPath)) {
         return await fs.readFile(constitutionPath, 'utf-8');
       }
+      this.log('⚠️  No EVOLVE.md constitution file found - AI will operate without guidance');
     } catch (error) {
       this.log(`⚠️  ${formatErrorWithPrefix('Could not read EVOLVE.md', error)}`);
     }
@@ -537,7 +538,10 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       // Check if OpenCode timed out - revert any partial changes
       if (result.timedOut) {
         this.log('⚠️  OpenCode timed out, reverting any partial changes...');
-        await this.revert();
+        const reverted = await this.revert();
+        if (!reverted) {
+          this.log('❌ Revert after timeout failed - manual intervention may be required');
+        }
         return false;
       }
 
