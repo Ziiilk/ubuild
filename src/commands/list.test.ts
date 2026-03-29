@@ -229,8 +229,6 @@ describe('executeList', () => {
           stderr,
         })
       ).rejects.toThrow('Unexpected error');
-
-      expect(stderr.output).toContain('Unexpected error');
     });
 
     it('displays warnings in error output when project is invalid', async () => {

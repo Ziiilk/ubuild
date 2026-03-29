@@ -13,7 +13,7 @@ import { Writable } from 'stream';
 import { EngineResolver } from '../core/engine-resolver';
 import { Logger } from '../utils/logger';
 import { ProjectDetector } from '../core/project-detector';
-import { formatError, handleCommandError } from '../utils/error';
+import { handleCommandError } from '../utils/error';
 
 /** Options for the engine command. */
 export interface EngineCommandOptions {
@@ -159,7 +159,6 @@ export async function executeEngine(options: EngineCommandOptions): Promise<void
       logger.warning('No engine installation found');
     }
   } catch (error) {
-    logger.error(`Unexpected error: ${formatError(error)}`);
     throw error;
   }
 }
