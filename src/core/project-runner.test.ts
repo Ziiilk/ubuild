@@ -496,6 +496,47 @@ describe('ProjectRunner', () => {
       });
     });
 
+    it('skips build when noBuild option is true even if buildFirst is also set', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'NoBuildGame' });
+        const engine = await createFakeEngine(rootDir);
+        const capture = createOutputCapture();
+
+        mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+        mockExeca.mockImplementation(() => {
+          const child = createFakeExecaChild({ exitCode: 0 });
+          const originalOn = child.on.bind(child);
+          child.on = (event: 'exit', listener: (code: number) => void) => {
+            const registeredChild = originalOn(event, listener);
+            listener(0);
+            return registeredChild;
+          };
+          return child;
+        });
+
+        const runner = new ProjectRunner({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await runner.run({
+          project: project.projectDir,
+          enginePath: engine.enginePath,
+          target: 'Editor',
+          config: 'Development',
+          platform: 'Win64',
+          noBuild: true,
+          buildFirst: true,
+        });
+
+        // Build should NOT be called when noBuild is true
+        expect(mockBuildExecute).not.toHaveBeenCalled();
+        expect(capture.getStdout()).not.toContain('Building project before running...');
+        // But the executable should still be launched
+        expect(mockExeca).toHaveBeenCalled();
+      });
+    });
+
     it('runs in detached mode when specified', async () => {
       await withTempDir(async (rootDir) => {
         const project = await createFakeProject(rootDir, { projectName: 'TestGame' });

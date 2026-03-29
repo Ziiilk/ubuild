@@ -410,7 +410,7 @@ describe('runCommand', () => {
 
     expect(mockRun).toHaveBeenCalledWith(
       expect.objectContaining({
-        build: false,
+        noBuild: true,
       })
     );
 

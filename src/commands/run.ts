@@ -60,6 +60,11 @@ export function runCommand(program: Command): void {
     .option('--args <args...>', 'Additional arguments to pass to the executable')
     .action(async (options) => {
       try {
+        // Commander maps --no-build to { build: false }; normalize to noBuild for RunOptions
+        if ('build' in options && !options.build) {
+          options.noBuild = true;
+          delete options.build;
+        }
         const runner = new ProjectRunner();
         await runner.run(options);
       } catch (error) {

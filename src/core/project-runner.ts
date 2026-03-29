@@ -182,7 +182,9 @@ export class ProjectRunner {
     });
     this.logger.debug(`Resolved engine path: ${enginePath}`);
 
-    if (options.buildFirst === true) {
+    if (options.noBuild) {
+      this.logger.debug('Skipping build (--no-build flag set)');
+    } else if (options.buildFirst === true) {
       this.logger.info('Building project before running...');
       const buildExecutor = new BuildExecutor({
         logger: this.logger,
