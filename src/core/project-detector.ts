@@ -61,6 +61,9 @@ export class ProjectDetector {
         };
       }
 
+      // Merge validation warnings (e.g., unexpected FileVersion) into the result
+      warnings.push(...validationResult.warnings);
+
       const projectName = path.basename(uprojectPath, '.uproject');
 
       const sourceDir = path.join(projectDir, 'Source');

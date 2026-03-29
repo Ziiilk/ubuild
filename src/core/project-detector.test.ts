@@ -304,7 +304,8 @@ describe('ProjectDetector', () => {
     expect(result.isValid).toBe(true);
     expect(result.project).toBeDefined();
     expect(result.error).toBeUndefined();
-    // Note: FileVersion warnings from validation are not currently propagated to final result
+    // FileVersion warnings from validation are propagated to the final result
+    expect(result.warnings).toContain('Unexpected FileVersion: 2. Expected 3.');
   });
 
   it('handles invalid JSON in .uproject file gracefully', async () => {
