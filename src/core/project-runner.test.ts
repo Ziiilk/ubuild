@@ -538,6 +538,41 @@ describe('ProjectRunner', () => {
       });
     });
 
+    it('handles execa rejection in detached mode without unhandled promise', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'RejectGame' });
+        const engine = await createFakeEngine(rootDir);
+        const capture = createOutputCapture();
+
+        mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+
+        const mockUnref = jest.fn();
+        mockExeca.mockImplementation(() => {
+          const child = createFakeExecaChild({}, { rejectWith: new Error('spawn failed') });
+          (child as unknown as { unref: () => void }).unref = mockUnref;
+          return child;
+        });
+
+        const runner = new ProjectRunner({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        // Should NOT throw and should NOT produce an unhandled promise rejection
+        await runner.run({
+          project: project.projectDir,
+          enginePath: engine.enginePath,
+          target: 'Editor',
+          config: 'Development',
+          platform: 'Win64',
+          detached: true,
+        });
+
+        expect(mockUnref).toHaveBeenCalled();
+        expect(capture.getStdout()).toContain('Started process in detached mode');
+      });
+    });
+
     it('passes additional arguments to executable', async () => {
       await withTempDir(async (rootDir) => {
         const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
