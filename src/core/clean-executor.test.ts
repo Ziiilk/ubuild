@@ -162,6 +162,44 @@ describe('CleanExecutor', () => {
       expect(mockFsRemove).not.toHaveBeenCalled();
     });
 
+    it('logs "Would remove" instead of "Removed" in dry run mode', async () => {
+      mockFsPathExists.mockResolvedValue(true);
+
+      const options: CleanOptions = {
+        ...baseOptions,
+        dryRun: true,
+      };
+
+      await executor.execute(options);
+
+      // Should use "Would remove" prefix in dry-run mode
+      const successCalls = mockLoggerInstance.success.mock.calls.map((call: string[]) => call[0]);
+      for (const msg of successCalls) {
+        expect(msg).toMatch(/^Would remove:/);
+      }
+      // Should NOT contain "Removed:" in dry-run mode
+      expect(successCalls.every((msg: string) => !msg.startsWith('Removed:'))).toBe(true);
+    });
+
+    it('logs "Would clean" summary instead of "Cleaned" in dry run mode', async () => {
+      mockFsPathExists.mockResolvedValue(true);
+
+      const options: CleanOptions = {
+        ...baseOptions,
+        dryRun: true,
+      };
+
+      await executor.execute(options);
+
+      // Summary should use "Would clean" in dry-run mode
+      expect(mockLoggerInstance.info).toHaveBeenCalledWith(
+        expect.stringMatching(/^Would clean \d+ directory/)
+      );
+      // Should NOT contain "Cleaned" in dry-run mode
+      const infoCalls = mockLoggerInstance.info.mock.calls.map((call: string[]) => call[0]);
+      expect(infoCalls.every((msg: string) => !msg.startsWith('Cleaned'))).toBe(true);
+    });
+
     it('cleans Binaries and Intermediate directories', async () => {
       await executor.execute(baseOptions);
 

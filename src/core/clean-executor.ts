@@ -84,12 +84,13 @@ export class CleanExecutor {
       }
 
       // Clean each path
+      const removeLabel = options.dryRun ? 'Would remove' : 'Removed';
       for (const cleanPath of pathsToClean) {
         const result = await this.cleanPath(cleanPath, options.dryRun);
         if (result.deleted) {
           deletedPaths.push(cleanPath);
           if (!this.silent) {
-            this.logger.success(`Removed: ${path.relative(projectDir, cleanPath)}`);
+            this.logger.success(`${removeLabel}: ${path.relative(projectDir, cleanPath)}`);
           }
         } else if (result.error) {
           failedPaths.push({ path: cleanPath, error: result.error });
@@ -122,6 +123,8 @@ export class CleanExecutor {
 
         if (deletedPaths.length === 0) {
           this.logger.info('No build artifacts found to clean');
+        } else if (options.dryRun) {
+          this.logger.info(`Would clean ${deletedPaths.length} directory/directories`);
         } else {
           this.logger.success(`Cleaned ${deletedPaths.length} directory/directories`);
         }
@@ -241,7 +244,8 @@ export class CleanExecutor {
           if (result.deleted) {
             deletedPaths.push(cleanPath);
             if (!this.silent) {
-              this.logger.success(`Removed: ${path.relative(projectDir, cleanPath)}`);
+              const removeLabel = options.dryRun ? 'Would remove' : 'Removed';
+              this.logger.success(`${removeLabel}: ${path.relative(projectDir, cleanPath)}`);
             }
           } else if (result.error) {
             failedPaths.push({ path: cleanPath, error: result.error });
