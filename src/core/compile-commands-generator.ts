@@ -166,11 +166,8 @@ export class CompileCommandsGenerator {
    */
   private static async resolveTargetName(projectPath: string, target: string): Promise<string> {
     const resolved = await TargetResolver.resolveTargetName(projectPath, target);
-    // If resolution fails (returns undefined), use a sensible default
-    if (!resolved) {
-      return 'Editor Game';
-    }
-    return resolved;
+    // If resolution fails (returns undefined), fall back to the original target
+    return resolved ?? target;
   }
 
   /**

@@ -686,7 +686,7 @@ describe('CompileCommandsGenerator', () => {
     });
   });
 
-  it('falls back to Editor Game when TargetResolver returns undefined', async () => {
+  it('falls back to original target when TargetResolver returns undefined', async () => {
     await withTempDir(async (rootDir) => {
       const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
       const engine = await createFakeEngine(rootDir);
@@ -707,11 +707,10 @@ describe('CompileCommandsGenerator', () => {
 
       expect(result).toBeDefined();
 
-      // Should fall back to 'Editor Game' targets
+      // Should fall back to the original target ('Editor' by default)
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
       expect(ubtCall![1]).toEqual(expect.arrayContaining([expect.stringContaining('Editor')]));
-      expect(ubtCall![1]).toEqual(expect.arrayContaining([expect.stringContaining('Game')]));
     });
   });
 
