@@ -11,8 +11,8 @@ import chalk from 'chalk';
 import { Writable } from 'stream';
 import { Logger } from '../utils/logger';
 import { formatError, handleCommandError } from '../utils/error';
-import * as fs from 'fs-extra';
-import * as path from 'path';
+import fs from 'fs-extra';
+import path from 'path';
 
 /** Options for the version command. */
 export interface VersionCommandOptions {
