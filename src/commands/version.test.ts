@@ -184,4 +184,33 @@ describe('executeVersion', () => {
     // Simulate running the command without options
     await versionCmd?.parseAsync(['node', 'ubuild']);
   });
+
+  it('command action calls handleCommandError when executeVersion throws', async () => {
+    // getVersionInfo catches readJson errors internally and returns fallback values,
+    // so to trigger handleCommandError we need the executeVersion flow to actually throw.
+    // We mock Logger to throw, which happens after getVersionInfo succeeds.
+    const { Logger } = await import('../utils/logger');
+    const loggerSpy = jest.spyOn(Logger.prototype, 'title').mockImplementation(() => {
+      throw new Error('Logger title failed');
+    });
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    mockedFs.readJson.mockResolvedValue({
+      version: '1.0.0',
+      name: '@test/package',
+      description: 'Test description',
+    });
+
+    versionCommand(program);
+    const versionCmd = program.commands.find((cmd) => cmd.name() === 'version');
+
+    await expect(versionCmd?.parseAsync(['node', 'ubuild'])).rejects.toThrow('process.exit called');
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+    loggerSpy.mockRestore();
+  });
 });

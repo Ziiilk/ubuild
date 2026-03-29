@@ -436,4 +436,24 @@ describe('generateCommand', () => {
       })
     );
   });
+
+  it('action handler calls handleCommandError when executeGenerate throws', async () => {
+    mockGenerate.mockRejectedValue(new Error('Generation engine error'));
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    const program = new Command();
+    generateCommand(program);
+
+    const generateCmd = program.commands.find((cmd) => cmd.name() === 'generate');
+
+    await expect(generateCmd?.parseAsync(['node', 'test', '--ide', 'sln'])).rejects.toThrow(
+      'process.exit called'
+    );
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
 });
