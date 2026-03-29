@@ -591,4 +591,40 @@ describe('engineCommand', () => {
 
     expect(mockFindEngineInstallations).toHaveBeenCalled();
   });
+
+  it('exits with error code 1 on engine command failure', async () => {
+    mockDetectProject.mockRejectedValue(new Error('Engine resolution failed'));
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    const program = new Command();
+    engineCommand(program);
+
+    await expect(program.parseAsync(['node', 'test', 'engine'])).rejects.toThrow(
+      'process.exit called'
+    );
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
+
+  it('handles non-Error exceptions in command action', async () => {
+    mockDetectProject.mockRejectedValue('String error message');
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    const program = new Command();
+    engineCommand(program);
+
+    await expect(program.parseAsync(['node', 'test', 'engine'])).rejects.toThrow(
+      'process.exit called'
+    );
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
 });

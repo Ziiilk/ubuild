@@ -13,7 +13,7 @@ import { Writable } from 'stream';
 import { EngineResolver } from '../core/engine-resolver';
 import { Logger } from '../utils/logger';
 import { ProjectDetector } from '../core/project-detector';
-import { formatError } from '../utils/error';
+import { formatError, handleCommandError } from '../utils/error';
 
 /** Options for the engine command. */
 export interface EngineCommandOptions {
@@ -186,10 +186,14 @@ export function engineCommand(program: Command): void {
     .option('-j, --json', 'Output result as JSON')
     .option('-v, --verbose', 'Show verbose engine detection details')
     .action(async (options) => {
-      await executeEngine({
-        project: options.project,
-        json: options.json,
-        verbose: options.verbose,
-      });
+      try {
+        await executeEngine({
+          project: options.project,
+          json: options.json,
+          verbose: options.verbose,
+        });
+      } catch (error) {
+        handleCommandError(error, 'Engine command failed');
+      }
     });
 }
