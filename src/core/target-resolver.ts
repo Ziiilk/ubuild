@@ -9,7 +9,7 @@
 
 import { BuildExecutor } from './build-executor';
 import { BUILD_TARGETS } from '../utils/constants';
-import type { BuildTarget } from '../types/build';
+import { isGenericTarget } from '../utils/target-helpers';
 
 /** Represents a resolved build target with its name and type. */
 export interface ResolvedTarget {
@@ -17,15 +17,6 @@ export interface ResolvedTarget {
   name: string;
   /** Target type (Editor, Game, Client, or Server) */
   type: string;
-}
-
-/**
- * Type guard to check if a string is a valid generic target type.
- * @param target - The target name to check
- * @returns True if the target is a valid generic type
- */
-function isGenericTargetType(target: string): target is BuildTarget {
-  return BUILD_TARGETS.includes(target as BuildTarget);
 }
 
 /**
@@ -83,7 +74,7 @@ export class TargetResolver {
     requestedTarget: string,
     availableTargets: ResolvedTarget[]
   ): string | undefined {
-    if (isGenericTargetType(requestedTarget)) {
+    if (isGenericTarget(requestedTarget)) {
       // Look for a target with matching type
       const matchingTarget = availableTargets.find((t) => t.type === requestedTarget);
       if (matchingTarget) {
@@ -117,7 +108,7 @@ export class TargetResolver {
    * @returns True if the target is a generic type
    */
   static isGenericTarget(target: string): boolean {
-    return isGenericTargetType(target);
+    return isGenericTarget(target);
   }
 
   /**
