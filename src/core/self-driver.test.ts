@@ -2670,6 +2670,8 @@ describe('handlePostVerificationState', () => {
     expect(mockLogger).toHaveBeenCalledWith(
       expect.stringContaining('Working tree is not clean, reverting to be safe')
     );
+    // Verify failure counter is reset - successful revert in hash error case is not a real failure
+    expect(driver.getStatus().consecutiveFailures).toBe(0);
   });
 
   it('handles hash error when revert fails for dirty working tree', async () => {

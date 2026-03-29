@@ -672,9 +672,13 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       // Not clean but can't verify commit - revert to be safe
       this.log('⚠️  Working tree is not clean, reverting to be safe...');
       const revertSuccess = await this.revert();
-      if (!this.handleRevertFailure(revertSuccess, 'Uncommitted changes (hash error)')) {
+      if (!revertSuccess) {
+        this.log('❌ Revert failed - manual intervention may be required');
+        this.cleanup();
         return false;
       }
+      // Not a real failure - successfully reverted to clean state despite hash error
+      this.consecutiveFailures = 0;
       return true;
     }
 
