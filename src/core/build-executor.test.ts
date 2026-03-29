@@ -665,4 +665,167 @@ describe('BuildExecutor', () => {
       expect(executor).toBeDefined();
     });
   });
+
+  describe('execute() error handling', () => {
+    it('returns failure result when a non-Error value is thrown during build execution', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'ErrorGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        // Force execa to throw a non-Error value (string)
+        mockExeca.mockImplementationOnce(() => {
+          throw 'String error from execa';
+        });
+
+        const result = await BuildExecutor.execute({
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+          target: 'Editor',
+          silent: true,
+        });
+
+        expect(result).toMatchObject({
+          success: false,
+          exitCode: -1,
+          stdout: '',
+          error: 'Build execution failed',
+        });
+        expect(result.stderr).toBe('String error from execa');
+      });
+    });
+
+    it('returns failure result when an Error is thrown during build execution', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'ErrorGame2' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockImplementationOnce(() => {
+          throw new Error('Unexpected internal failure');
+        });
+
+        const result = await BuildExecutor.execute({
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+          target: 'Editor',
+          silent: true,
+        });
+
+        expect(result).toMatchObject({
+          success: false,
+          exitCode: -1,
+          stdout: '',
+          error: 'Build execution failed',
+        });
+        expect(result.stderr).toBe('Unexpected internal failure');
+      });
+    });
+  });
+
+  describe('target resolution exact-match', () => {
+    it('uses exact target name when it matches an available target', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, {
+          projectName: 'MatchGame',
+          withSource: true,
+          targets: [
+            { name: 'MatchGame', type: 'Game' },
+            { name: 'MatchGameEditor', type: 'Editor' },
+          ],
+        });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: {
+              stdout: 'Build succeeded with exact target',
+              exitCode: 0,
+            },
+          })
+        );
+
+        const result = await BuildExecutor.execute({
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+          // Use the specific target name directly (not a generic type)
+          target: 'MatchGame',
+          silent: true,
+        });
+
+        expect(result).toMatchObject({
+          success: true,
+          exitCode: 0,
+          stdout: 'Build succeeded with exact target',
+        });
+        // Verify the exact target name was passed to the build tool
+        expect(mockExeca).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.arrayContaining(['MatchGame']),
+          expect.any(Object)
+        );
+      });
+    });
+
+    it('uses exact editor target name when it matches an available target', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, {
+          projectName: 'ExactGame',
+          withSource: true,
+          targets: [
+            { name: 'ExactGame', type: 'Game' },
+            { name: 'ExactGameEditor', type: 'Editor' },
+          ],
+        });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: {
+              stdout: 'Build succeeded',
+              exitCode: 0,
+            },
+          })
+        );
+
+        const result = await BuildExecutor.execute({
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+          target: 'Editor',
+          silent: true,
+        });
+
+        expect(result).toMatchObject({
+          success: true,
+          exitCode: 0,
+        });
+        // Verify 'Editor' was resolved to 'ExactGameEditor'
+        expect(mockExeca).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.arrayContaining(['ExactGameEditor']),
+          expect.any(Object)
+        );
+      });
+    });
+  });
+
+  describe('getAvailableTargets with .uproject path', () => {
+    it('correctly resolves targets when given a .uproject file path', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, {
+          projectName: 'PathGame',
+          withSource: true,
+          targets: [
+            { name: 'PathGame', type: 'Game' },
+            { name: 'PathGameEditor', type: 'Editor' },
+          ],
+        });
+
+        // Pass the .uproject file path directly (not the directory)
+        const targets = await BuildExecutor.getAvailableTargets(project.uprojectPath);
+
+        expect(targets).toHaveLength(2);
+        expect(targets).toContainEqual({ name: 'PathGame', type: 'Game' });
+        expect(targets).toContainEqual({ name: 'PathGameEditor', type: 'Editor' });
+      });
+    });
+  });
 });
