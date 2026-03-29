@@ -66,7 +66,7 @@ describe('Logger', () => {
       process.env.DEBUG = originalDebug;
     });
 
-    it('outputs title with underline', () => {
+    it('outputs title with underline matching title length', () => {
       const capture = createOutputCapture();
       const logger = new Logger({ stdout: capture.stdout, stderr: capture.stderr });
 
@@ -74,9 +74,15 @@ describe('Logger', () => {
 
       const output = capture.getStdout();
       expect(output).toContain('Section Title');
+      const lines = output.split('\n').filter((l) => l.length > 0);
+      const titleLine = lines[0];
+      const underlineLine = lines[1];
+      // Strip ANSI codes for length comparison
+      const stripAnsi = (s: string) => s.replace(/[\u001b\u009b]\[[0-9;]*m/g, ''); // eslint-disable-line no-control-regex
+      expect(stripAnsi(underlineLine).length).toBe(stripAnsi(titleLine).length);
     });
 
-    it('outputs subtitle with underline', () => {
+    it('outputs subtitle with underline matching subtitle length', () => {
       const capture = createOutputCapture();
       const logger = new Logger({ stdout: capture.stdout, stderr: capture.stderr });
 
@@ -84,6 +90,11 @@ describe('Logger', () => {
 
       const output = capture.getStdout();
       expect(output).toContain('Subsection');
+      const lines = output.split('\n').filter((l) => l.length > 0);
+      const titleLine = lines[0];
+      const underlineLine = lines[1];
+      const stripAnsi = (s: string) => s.replace(/[\u001b\u009b]\[[0-9;]*m/g, ''); // eslint-disable-line no-control-regex
+      expect(stripAnsi(underlineLine).length).toBe(stripAnsi(titleLine).length);
     });
 
     it('outputs JSON data', () => {
@@ -184,6 +195,42 @@ describe('Logger', () => {
       logger.title('Build Step');
 
       expect(capture.getStdout()).toContain('[STAGE] Build Step');
+    });
+
+    it('title underline matches formatted title length with prefix', () => {
+      const capture = createOutputCapture();
+      const logger = new Logger({
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+        prefix: 'STAGE',
+      });
+
+      logger.title('Build Step');
+
+      const output = capture.getStdout();
+      const lines = output.split('\n').filter((l) => l.length > 0);
+      const titleLine = lines[0];
+      const underlineLine = lines[1];
+      const stripAnsi = (s: string) => s.replace(/[\u001b\u009b]\[[0-9;]*m/g, ''); // eslint-disable-line no-control-regex
+      expect(stripAnsi(underlineLine).length).toBe(stripAnsi(titleLine).length);
+    });
+
+    it('subTitle underline matches formatted subtitle length with prefix', () => {
+      const capture = createOutputCapture();
+      const logger = new Logger({
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+        prefix: 'STEP',
+      });
+
+      logger.subTitle('Compiling');
+
+      const output = capture.getStdout();
+      const lines = output.split('\n').filter((l) => l.length > 0);
+      const titleLine = lines[0];
+      const underlineLine = lines[1];
+      const stripAnsi = (s: string) => s.replace(/[\u001b\u009b]\[[0-9;]*m/g, ''); // eslint-disable-line no-control-regex
+      expect(stripAnsi(underlineLine).length).toBe(stripAnsi(titleLine).length);
     });
   });
 

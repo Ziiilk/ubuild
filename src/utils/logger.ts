@@ -161,8 +161,9 @@ export class Logger {
    */
   title(title: string): void {
     if (this.silent) return;
-    this.stdout.write('\n' + chalk.bold.cyan(this.formatMessage(title)) + '\n');
-    this.stdout.write(chalk.cyan('═'.repeat(title.length)) + '\n');
+    const formatted = this.formatMessage(title);
+    this.stdout.write('\n' + chalk.bold.cyan(formatted) + '\n');
+    this.stdout.write(chalk.cyan('═'.repeat(formatted.length)) + '\n');
   }
 
   /**
@@ -171,8 +172,9 @@ export class Logger {
    */
   subTitle(subTitle: string): void {
     if (this.silent) return;
-    this.stdout.write('\n' + chalk.bold(this.formatMessage(subTitle)) + '\n');
-    this.stdout.write(chalk.gray('─'.repeat(subTitle.length)) + '\n');
+    const formatted = this.formatMessage(subTitle);
+    this.stdout.write('\n' + chalk.bold(formatted) + '\n');
+    this.stdout.write(chalk.gray('─'.repeat(formatted.length)) + '\n');
   }
 
   /**
