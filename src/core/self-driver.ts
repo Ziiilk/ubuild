@@ -668,6 +668,21 @@ If verification fails, do NOT commit - the system will revert automatically.`;
   }
 
   /**
+   * Attempts to revert changes and reset the consecutive failure counter on success.
+   * @returns true if revert succeeded (failure counter reset), false if revert failed (stops evolution)
+   */
+  private async revertOrFailOrResetFailures(): Promise<boolean> {
+    const revertSuccess = await this.revert();
+    if (!revertSuccess) {
+      this.log('❌ Revert failed - manual intervention may be required');
+      this.cleanup();
+      return false;
+    }
+    this.consecutiveFailures = 0;
+    return true;
+  }
+
+  /**
    * Handles post-verification state by checking working tree cleanliness and commit status.
    * @param isClean - Whether the working tree is clean
    * @param hashChanged - Whether the commit hash changed (indicating AI committed)
@@ -689,15 +704,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       }
       // Not clean but can't verify commit - revert to be safe
       this.log('⚠️  Working tree is not clean, reverting to be safe...');
-      const revertSuccess = await this.revert();
-      if (!revertSuccess) {
-        this.log('❌ Revert failed - manual intervention may be required');
-        this.cleanup();
-        return false;
-      }
-      // Not a real failure - successfully reverted to clean state despite hash error
-      this.consecutiveFailures = 0;
-      return true;
+      return this.revertOrFailOrResetFailures();
     }
 
     if (isClean && hashChanged) {
@@ -719,16 +726,37 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       this.log('⚠️  Verification passed but AI did not commit changes');
     }
     this.log('🔄 Reverting uncommitted changes...');
-    const revertSuccess = await this.revert();
-    if (!revertSuccess) {
-      this.log('❌ Revert failed - manual intervention may be required');
-      this.cleanup();
-      return false;
+    return this.revertOrFailOrResetFailures();
+  }
+      // Not clean but can't verify commit - revert to be safe
+      this.log('⚠️  Working tree is not clean, reverting to be safe...');
+      return this.revertOrFailOrResetFailures();
     }
-    // Reset failure counter - verification passed, this is not a real failure
-    this.consecutiveFailures = 0;
-    this.log('ℹ️  Reset failure counter (verification passed, commit missed)');
-    return true;
+
+    if (isClean && hashChanged) {
+      this.log('✅ Changes committed by AI');
+      this.consecutiveFailures = 0; // Reset on success
+      return true;
+    }
+
+    if (isClean && !hashChanged) {
+      this.log('ℹ️  AI made no changes this iteration (SKIP)');
+      this.consecutiveFailures = 0; // Not a failure
+      return true;
+    }
+
+    // Not clean = some changes left uncommitted
+    if (hashChanged) {
+      this.log('⚠️  Verification passed but AI left uncommitted changes after partial commit');
+    } else {
+      this.log('⚠️  Verification passed but AI did not commit changes');
+    }
+    this.log('🔄 Reverting uncommitted changes...');
+    const result = this.revertOrFailOrResetFailures();
+    if (result) {
+      this.log('ℹ️  Reset failure counter (verification passed, commit missed)');
+    }
+    return result;
   }
 
   /**
