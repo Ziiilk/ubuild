@@ -455,6 +455,59 @@ describe('SelfDriver', () => {
       expect(result).toBe(false);
     });
 
+    it('returns false when engine command --help fails while other commands pass', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'node' && args?.includes('engine')) {
+          return mockExecaResult(1, 'Command failed', 'Error: unknown command');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+      expect(result).toBe(false);
+    });
+
+    it('truncates long stderr in verification failure output', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      const longStderr = 'x'.repeat(3000);
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(1, '', longStderr);
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result).toBe(false);
+      // stderr should be truncated at 2000 chars
+      expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('...(truncated)'));
+    });
+
+    it('truncates long stdout in verification failure output', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      const longStdout = 'A'.repeat(3000);
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(1, longStdout, '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result).toBe(false);
+      // stdout should be truncated at 2000 chars
+      expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('...(truncated)'));
+    });
+
     it('logs stderr and stdout when verification fails', async () => {
       const mockLogger = jest.fn();
       driver = new SelfDriver({ logger: mockLogger });
