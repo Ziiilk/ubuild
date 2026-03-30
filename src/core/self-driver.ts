@@ -531,7 +531,10 @@ If verification fails, do NOT commit - the system will revert automatically.`;
 
       // Log stderr if present for debugging
       if (result.stderr && result.stderr.trim()) {
-        const stderrPreview = result.stderr.slice(0, 5000);
+        const stderrPreview =
+          result.stderr.length > 5000
+            ? result.stderr.slice(0, 5000) + '...(truncated)'
+            : result.stderr;
         this.log(`OpenCode stderr: ${stderrPreview}`);
       }
 
@@ -598,11 +601,17 @@ If verification fails, do NOT commit - the system will revert automatically.`;
         this.log(`  ❌ ${check.name} failed`);
         // Show error output for debugging
         if (result?.stderr) {
-          const stderrPreview = result.stderr.slice(0, 2000);
+          const stderrPreview =
+            result.stderr.length > 2000
+              ? result.stderr.slice(0, 2000) + '...(truncated)'
+              : result.stderr;
           this.log(`     Error: ${stderrPreview}`);
         }
         if (result?.stdout) {
-          const stdoutPreview = result.stdout.slice(0, 2000);
+          const stdoutPreview =
+            result.stdout.length > 2000
+              ? result.stdout.slice(0, 2000) + '...(truncated)'
+              : result.stdout;
           if (stdoutPreview) {
             this.log(`     Output: ${stdoutPreview}`);
           }
