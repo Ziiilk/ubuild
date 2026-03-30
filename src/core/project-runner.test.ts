@@ -1058,3 +1058,201 @@ describe('runProject', () => {
     });
   });
 });
+
+describe('ProjectRunner findExecutable for Client/Server targets', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockResolveEnginePath.mockResolvedValue('');
+    mockResolveTarget.mockImplementation((_, target) => Promise.resolve(target));
+  });
+
+  it('finds Game target executable in Binaries/platform directory', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'ShooterGame' });
+      const binariesDir = path.join(project.projectDir, 'Binaries', 'Win64');
+      const gameExe = path.join(binariesDir, 'ShooterGame.exe');
+      await fs.ensureDir(binariesDir);
+      await fs.writeFile(gameExe, '');
+
+      const engine = await createFakeEngine(rootDir);
+      const capture = createOutputCapture();
+
+      mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+      mockExeca.mockImplementation(() => {
+        const child = createFakeExecaChild({ exitCode: 0 });
+        const originalOn = child.on.bind(child);
+        child.on = (event: 'exit', listener: (code: number) => void) => {
+          const registeredChild = originalOn(event, listener);
+          listener(0);
+          return registeredChild;
+        };
+        return child;
+      });
+
+      const runner = new ProjectRunner({
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+      });
+
+      await runner.run({
+        project: project.projectDir,
+        target: 'Game',
+        config: 'Development',
+        platform: 'Win64',
+      });
+
+      expect(mockExeca).toHaveBeenCalledWith(gameExe, [], expect.any(Object));
+    });
+  });
+
+  it('finds Client target executable via resolved target name', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'MultiplayerGame' });
+      const binariesDir = path.join(project.projectDir, 'Binaries', 'Win64');
+      await fs.ensureDir(binariesDir);
+
+      // Client targets typically resolve to "<ProjectName>Client" as target name
+      const clientExe = path.join(binariesDir, 'MultiplayerGameClient.exe');
+      await fs.writeFile(clientExe, '');
+
+      const engine = await createFakeEngine(rootDir);
+      const capture = createOutputCapture();
+
+      mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+      mockResolveTarget.mockImplementation((_projectPath, target) => {
+        if (target === 'Client') return Promise.resolve('MultiplayerGameClient');
+        return Promise.resolve(target);
+      });
+      mockExeca.mockImplementation(() => {
+        const child = createFakeExecaChild({ exitCode: 0 });
+        const originalOn = child.on.bind(child);
+        child.on = (event: 'exit', listener: (code: number) => void) => {
+          const registeredChild = originalOn(event, listener);
+          listener(0);
+          return registeredChild;
+        };
+        return child;
+      });
+
+      const runner = new ProjectRunner({
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+      });
+
+      await runner.run({
+        project: project.projectDir,
+        target: 'Client',
+        config: 'Development',
+        platform: 'Win64',
+      });
+
+      expect(mockExeca).toHaveBeenCalledWith(clientExe, [], expect.any(Object));
+      // Should NOT prepend project path for Client target
+      const execArgs = mockExeca.mock.calls[0][1];
+      expect(execArgs).toEqual([]);
+    });
+  });
+
+  it('finds Server target executable via resolved target name', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'DedicatedGame' });
+      const binariesDir = path.join(project.projectDir, 'Binaries', 'Win64');
+      await fs.ensureDir(binariesDir);
+
+      const serverExe = path.join(binariesDir, 'DedicatedGameServer.exe');
+      await fs.writeFile(serverExe, '');
+
+      const engine = await createFakeEngine(rootDir);
+      const capture = createOutputCapture();
+
+      mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+      mockResolveTarget.mockImplementation((_projectPath, target) => {
+        if (target === 'Server') return Promise.resolve('DedicatedGameServer');
+        return Promise.resolve(target);
+      });
+      mockExeca.mockImplementation(() => {
+        const child = createFakeExecaChild({ exitCode: 0 });
+        const originalOn = child.on.bind(child);
+        child.on = (event: 'exit', listener: (code: number) => void) => {
+          const registeredChild = originalOn(event, listener);
+          listener(0);
+          return registeredChild;
+        };
+        return child;
+      });
+
+      const runner = new ProjectRunner({
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+      });
+
+      await runner.run({
+        project: project.projectDir,
+        target: 'Server',
+        config: 'Development',
+        platform: 'Win64',
+      });
+
+      expect(mockExeca).toHaveBeenCalledWith(serverExe, [], expect.any(Object));
+      const execArgs = mockExeca.mock.calls[0][1];
+      expect(execArgs).toEqual([]);
+    });
+  });
+
+  it('returns default path for Client when no executable found on disk', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'NoExeGame' });
+      const engine = await createFakeEngine(rootDir);
+      const capture = createOutputCapture();
+
+      mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+      mockResolveTarget.mockImplementation((_projectPath, target) => {
+        if (target === 'Client') return Promise.resolve('NoExeGameClient');
+        return Promise.resolve(target);
+      });
+
+      const runner = new ProjectRunner({
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+      });
+
+      // Should throw because executable doesn't exist at the default path
+      await expect(
+        runner.run({
+          project: project.projectDir,
+          target: 'Client',
+          config: 'Development',
+          platform: 'Win64',
+        })
+      ).rejects.toThrow('Executable not found');
+    });
+  });
+
+  it('returns default path for Server when no executable found on disk', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'NoExeGame' });
+      const engine = await createFakeEngine(rootDir);
+      const capture = createOutputCapture();
+
+      mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+      mockResolveTarget.mockImplementation((_projectPath, target) => {
+        if (target === 'Server') return Promise.resolve('NoExeGameServer');
+        return Promise.resolve(target);
+      });
+
+      const runner = new ProjectRunner({
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+      });
+
+      await expect(
+        runner.run({
+          project: project.projectDir,
+          target: 'Server',
+          config: 'Development',
+          platform: 'Win64',
+        })
+      ).rejects.toThrow('Executable not found');
+    });
+  });
+});

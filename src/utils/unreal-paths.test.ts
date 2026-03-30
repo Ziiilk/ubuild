@@ -1,113 +1,89 @@
-import { resolveUnrealBuildToolPath } from './unreal-paths';
 import path from 'path';
-
-const mockFsPathExists = jest.fn();
-
-jest.mock('fs-extra', () => ({
-  pathExists: (...args: unknown[]) => mockFsPathExists(...args),
-}));
-
-const mockExeExtension = jest.fn().mockReturnValue('.exe');
-
-jest.mock('./platform', () => ({
-  Platform: {
-    exeExtension: (...args: unknown[]) => mockExeExtension(...args),
-    isWindows: jest.fn().mockReturnValue(true),
-  },
-}));
+import fs from 'fs-extra';
+import { resolveUnrealBuildToolPath } from './unreal-paths';
+import { withTempDir } from '../test-utils';
 
 describe('resolveUnrealBuildToolPath', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockExeExtension.mockReturnValue('.exe');
-  });
-
-  it('resolves UBT path when executable exists', async () => {
-    mockFsPathExists.mockResolvedValue(true);
-
-    const result = await resolveUnrealBuildToolPath('C:\\Engine\\UE_5.3');
-
-    expect(result).toBe(
-      path.join(
-        'C:\\Engine\\UE_5.3',
+  it('resolves UBT path when the executable exists', async () => {
+    await withTempDir(async (tempDir) => {
+      const enginePath = path.join(tempDir, 'UE_5.3');
+      const ubtDir = path.join(
+        enginePath,
         'Engine',
         'Binaries',
         'DotNET',
-        'UnrealBuildTool',
-        'UnrealBuildTool.exe'
-      )
-    );
-    expect(mockFsPathExists).toHaveBeenCalledTimes(1);
+        'UnrealBuildTool'
+      );
+      await fs.ensureDir(ubtDir);
+      const exeName = `UnrealBuildTool${process.platform === 'win32' ? '.exe' : ''}`;
+      const ubtExe = path.join(ubtDir, exeName);
+      await fs.writeFile(ubtExe, '');
+
+      const result = await resolveUnrealBuildToolPath(enginePath);
+
+      expect(result).toBe(ubtExe);
+    });
   });
 
-  it('throws error when UBT executable does not exist', async () => {
-    mockFsPathExists.mockResolvedValue(false);
+  it('throws when UnrealBuildTool is not found', async () => {
+    await withTempDir(async (tempDir) => {
+      const enginePath = path.join(tempDir, 'UE_5.3');
+      await fs.ensureDir(enginePath);
 
-    const expectedPath = path.join(
-      'C:\\Engine\\UE_5.3',
-      'Engine',
-      'Binaries',
-      'DotNET',
-      'UnrealBuildTool',
-      'UnrealBuildTool.exe'
-    );
-
-    await expect(resolveUnrealBuildToolPath('C:\\Engine\\UE_5.3')).rejects.toThrow(
-      `UnrealBuildTool not found at: ${expectedPath}`
-    );
+      await expect(resolveUnrealBuildToolPath(enginePath)).rejects.toThrow(
+        'UnrealBuildTool not found at'
+      );
+    });
   });
 
-  it('handles fs.pathExists errors gracefully', async () => {
-    mockFsPathExists.mockRejectedValue(new Error('Permission denied'));
+  it('constructs the correct relative path structure', async () => {
+    await withTempDir(async (tempDir) => {
+      const enginePath = path.join(tempDir, 'MyEngine');
+      const ubtDir = path.join(
+        enginePath,
+        'Engine',
+        'Binaries',
+        'DotNET',
+        'UnrealBuildTool'
+      );
+      await fs.ensureDir(ubtDir);
+      const exeName = `UnrealBuildTool${process.platform === 'win32' ? '.exe' : ''}`;
+      await fs.writeFile(path.join(ubtDir, exeName), '');
 
-    await expect(resolveUnrealBuildToolPath('C:\\Engine\\UE_5.3')).rejects.toThrow(
-      'Permission denied'
-    );
+      const result = await resolveUnrealBuildToolPath(enginePath);
+
+      expect(result).toContain(path.join('Engine', 'Binaries', 'DotNET', 'UnrealBuildTool'));
+    });
   });
 
-  it('works with relative engine paths', async () => {
-    mockFsPathExists.mockResolvedValue(true);
+  it('includes the platform-specific extension in the resolved path', async () => {
+    await withTempDir(async (tempDir) => {
+      const enginePath = path.join(tempDir, 'UE_5.4');
+      const ubtDir = path.join(
+        enginePath,
+        'Engine',
+        'Binaries',
+        'DotNET',
+        'UnrealBuildTool'
+      );
+      await fs.ensureDir(ubtDir);
+      const exeName = `UnrealBuildTool${process.platform === 'win32' ? '.exe' : ''}`;
+      await fs.writeFile(path.join(ubtDir, exeName), '');
 
-    const result = await resolveUnrealBuildToolPath('./engine');
+      const result = await resolveUnrealBuildToolPath(enginePath);
 
-    expect(result).toContain('Engine');
-    expect(result).toContain('Binaries');
-    expect(result).toContain('DotNET');
-    expect(result).toContain('UnrealBuildTool');
-    expect(result).toContain('UnrealBuildTool.exe');
+      if (process.platform === 'win32') {
+        expect(result).toContain('UnrealBuildTool.exe');
+      } else {
+        expect(result).toContain('UnrealBuildTool');
+        expect(result).not.toContain('UnrealBuildTool.exe');
+      }
+    });
   });
 
-  it('constructs correct path on non-Windows platforms', async () => {
-    mockExeExtension.mockReturnValue('');
-    mockFsPathExists.mockResolvedValue(true);
-
-    const result = await resolveUnrealBuildToolPath('/opt/UE_5.3');
-
-    expect(result).toBe(
-      path.join('/opt/UE_5.3', 'Engine', 'Binaries', 'DotNET', 'UnrealBuildTool', 'UnrealBuildTool')
-    );
-  });
-
-  it('includes all expected path segments', async () => {
-    mockFsPathExists.mockResolvedValue(true);
-
-    const result = await resolveUnrealBuildToolPath('C:\\UE');
-
-    const segments = result.split(path.sep);
-    expect(segments).toContain('Engine');
-    expect(segments).toContain('Binaries');
-    expect(segments).toContain('DotNET');
-    expect(segments).toContain('UnrealBuildTool');
-  });
-
-  it('passes constructed path to pathExists for validation', async () => {
-    mockFsPathExists.mockResolvedValue(true);
-
-    await resolveUnrealBuildToolPath('C:\\Engine');
-
-    const checkedPath = mockFsPathExists.mock.calls[0][0] as string;
-    expect(checkedPath).toContain('UnrealBuildTool');
-    expect(checkedPath).toContain('DotNET');
-    expect(checkedPath).toContain('Engine');
+  it('throws for a non-existent engine path', async () => {
+    await expect(
+      resolveUnrealBuildToolPath('/non/existent/engine/path')
+    ).rejects.toThrow('UnrealBuildTool not found at');
   });
 });

@@ -1,76 +1,124 @@
 import { inferTargetType, isGenericTarget } from './target-helpers';
+import { BUILD_TARGETS } from './constants';
 
-describe('target-helpers', () => {
-  describe('inferTargetType', () => {
-    it('returns Editor for names containing editor', () => {
-      expect(inferTargetType('MyProjectEditor')).toBe('Editor');
-      expect(inferTargetType('editor')).toBe('Editor');
-      expect(inferTargetType('EDITOR')).toBe('Editor');
-      expect(inferTargetType('MyEditorTarget')).toBe('Editor');
-    });
-
-    it('returns Client for names containing client', () => {
-      expect(inferTargetType('MyProjectClient')).toBe('Client');
-      expect(inferTargetType('client')).toBe('Client');
-      expect(inferTargetType('CLIENT')).toBe('Client');
-      expect(inferTargetType('MyClientTarget')).toBe('Client');
-    });
-
-    it('returns Server for names containing server', () => {
-      expect(inferTargetType('MyProjectServer')).toBe('Server');
-      expect(inferTargetType('server')).toBe('Server');
-      expect(inferTargetType('SERVER')).toBe('Server');
-      expect(inferTargetType('MyServerTarget')).toBe('Server');
-    });
-
-    it('returns Game for names without type keywords', () => {
-      expect(inferTargetType('MyProject')).toBe('Game');
-      expect(inferTargetType('game')).toBe('Game');
-      expect(inferTargetType('SomeRandomTarget')).toBe('Game');
-    });
-
-    it('handles empty string', () => {
-      expect(inferTargetType('')).toBe('Game');
-    });
-
-    it('is case-insensitive', () => {
-      expect(inferTargetType('myprojecteditor')).toBe('Editor');
-      expect(inferTargetType('MYPROJECTEDITOR')).toBe('Editor');
-      expect(inferTargetType('MyProjectEditor')).toBe('Editor');
-    });
-
-    it('prioritizes editor over client and server', () => {
-      expect(inferTargetType('MyEditorClient')).toBe('Editor');
-      expect(inferTargetType('MyEditorServer')).toBe('Editor');
-    });
-
-    it('prioritizes client over server', () => {
-      expect(inferTargetType('MyClientServer')).toBe('Client');
-    });
+describe('inferTargetType', () => {
+  it('infers Editor from names containing "editor"', () => {
+    expect(inferTargetType('MyProjectEditor')).toBe('Editor');
+    expect(inferTargetType('UnrealEditor')).toBe('Editor');
+    expect(inferTargetType('MyProjectEDITOR')).toBe('Editor');
+    expect(inferTargetType('editor')).toBe('Editor');
   });
 
-  describe('isGenericTarget', () => {
-    it('returns true for standard target types', () => {
-      expect(isGenericTarget('Editor')).toBe(true);
-      expect(isGenericTarget('Game')).toBe(true);
-      expect(isGenericTarget('Client')).toBe(true);
-      expect(isGenericTarget('Server')).toBe(true);
-    });
+  it('infers Client from names containing "client"', () => {
+    expect(inferTargetType('MyProjectClient')).toBe('Client');
+    expect(inferTargetType('GameClient')).toBe('Client');
+    expect(inferTargetType('CLIENT')).toBe('Client');
+    expect(inferTargetType('client')).toBe('Client');
+  });
 
-    it('returns false for custom target names', () => {
-      expect(isGenericTarget('MyProject')).toBe(false);
-      expect(isGenericTarget('MyProjectEditor')).toBe(false);
-      expect(isGenericTarget('CustomTarget')).toBe(false);
-    });
+  it('infers Server from names containing "server"', () => {
+    expect(inferTargetType('MyProjectServer')).toBe('Server');
+    expect(inferTargetType('DedicatedServer')).toBe('Server');
+    expect(inferTargetType('SERVER')).toBe('Server');
+    expect(inferTargetType('server')).toBe('Server');
+  });
 
-    it('returns false for empty string', () => {
-      expect(isGenericTarget('')).toBe(false);
-    });
+  it('defaults to Game for names without known type keywords', () => {
+    expect(inferTargetType('MyProject')).toBe('Game');
+    expect(inferTargetType('Game')).toBe('Game');
+    expect(inferTargetType('Standalone')).toBe('Game');
+    expect(inferTargetType('')).toBe('Game');
+  });
 
-    it('is case-sensitive', () => {
-      expect(isGenericTarget('editor')).toBe(false);
-      expect(isGenericTarget('EDITOR')).toBe(false);
-      expect(isGenericTarget('Editor')).toBe(true);
-    });
+  it('is case-insensitive', () => {
+    expect(inferTargetType('MyProjectEditor')).toBe('Editor');
+    expect(inferTargetType('MyProjectEDITOR')).toBe('Editor');
+    expect(inferTargetType('myprojecteditor')).toBe('Editor');
+    expect(inferTargetType('MyProjectClient')).toBe('Client');
+    expect(inferTargetType('MYPROJECTCLIENT')).toBe('Client');
+    expect(inferTargetType('MyProjectServer')).toBe('Server');
+    expect(inferTargetType('MYPROJECTSERVER')).toBe('Server');
+  });
+
+  it('prioritizes Editor over Client and Server when multiple keywords present', () => {
+    // "editor" is checked first in the function
+    expect(inferTargetType('EditorClientServer')).toBe('Editor');
+    expect(inferTargetType('ClientEditor')).toBe('Editor');
+  });
+
+  it('prioritizes Client over Server when both keywords present (no Editor)', () => {
+    // "client" is checked before "server"
+    expect(inferTargetType('ClientServer')).toBe('Client');
+  });
+
+  it('handles names with underscores and hyphens', () => {
+    expect(inferTargetType('My_Project_Editor')).toBe('Editor');
+    expect(inferTargetType('my-project-client')).toBe('Client');
+    expect(inferTargetType('my_project_server')).toBe('Server');
+    expect(inferTargetType('my-project-game')).toBe('Game');
+  });
+
+  it('handles names with numbers', () => {
+    expect(inferTargetType('Project2Editor')).toBe('Editor');
+    expect(inferTargetType('Client3D')).toBe('Client');
+    expect(inferTargetType('Server42')).toBe('Server');
+    expect(inferTargetType('Game2D')).toBe('Game');
+  });
+});
+
+describe('isGenericTarget', () => {
+  it('returns true for all standard BUILD_TARGETS', () => {
+    for (const target of BUILD_TARGETS) {
+      expect(isGenericTarget(target)).toBe(true);
+    }
+  });
+
+  it('returns true for Editor', () => {
+    expect(isGenericTarget('Editor')).toBe(true);
+  });
+
+  it('returns true for Game', () => {
+    expect(isGenericTarget('Game')).toBe(true);
+  });
+
+  it('returns true for Client', () => {
+    expect(isGenericTarget('Client')).toBe(true);
+  });
+
+  it('returns true for Server', () => {
+    expect(isGenericTarget('Server')).toBe(true);
+  });
+
+  it('returns false for custom target names', () => {
+    expect(isGenericTarget('MyCustomTarget')).toBe(false);
+    expect(isGenericTarget('MyPluginTarget')).toBe(false);
+  });
+
+  it('returns false for empty string', () => {
+    expect(isGenericTarget('')).toBe(false);
+  });
+
+  it('returns false for case-variant of standard targets', () => {
+    expect(isGenericTarget('editor')).toBe(false);
+    expect(isGenericTarget('GAME')).toBe(false);
+    expect(isGenericTarget('client')).toBe(false);
+    expect(isGenericTarget('SERVER')).toBe(false);
+  });
+
+  it('returns false for target names that contain but are not exact matches', () => {
+    expect(isGenericTarget('EditorGame')).toBe(false);
+    expect(isGenericTarget('GameClient')).toBe(false);
+    expect(isGenericTarget('ServerHost')).toBe(false);
+  });
+
+  it('acts as a type guard (narrows to BuildTarget)', () => {
+    const value: string = 'Editor';
+    if (isGenericTarget(value)) {
+      // TypeScript should narrow value to BuildTarget here
+      const _assigned: 'Editor' | 'Game' | 'Client' | 'Server' = value;
+      expect(_assigned).toBe('Editor');
+    } else {
+      fail('Expected isGenericTarget to return true for "Editor"');
+    }
   });
 });
