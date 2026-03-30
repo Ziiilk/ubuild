@@ -3354,3 +3354,251 @@ describe('EVOLVE.md absent warning', () => {
     );
   });
 });
+
+describe('continuous loop behavior', () => {
+  const drivers: SelfDriver[] = [];
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode succeeds
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // Verification checks pass
+      if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'npm' && args?.includes('test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (command === 'npm' && args?.includes('run') && args?.includes('lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'node' && args?.includes('dist/cli/index.js') && args?.includes('evolve')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+      if (command === 'node' && args?.includes('dist/cli/index.js') && args?.includes('list')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+  });
+
+  afterEach(() => {
+    drivers.forEach((d) => d.cleanup());
+    drivers.length = 0;
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('runs multiple successful iterations and tracks iterationCount and sleep, and completion messages', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: false, logger: mockLogger, sleepMs: 50 });
+    drivers.push(driver);
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+
+    // Start the run loop in the background
+    const runPromise = run.call(driver);
+
+    // Wait for at least 2 iterations (sleep 50ms each + exec overhead)
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Interrupt the loop
+    process.emit('SIGINT' as NodeJS.Signals);
+
+    await runPromise;
+
+    const status = driver.getStatus();
+    expect(status.iterationCount).toBeGreaterThanOrEqual(2);
+
+    // Should log sleep/wait messages between iterations
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Waiting'));
+    // Should log iteration start messages
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Iteration'));
+    // Should log completion message
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Evolution stopped'));
+  });
+
+  it('interrupted during sleep exits gracefully', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: false, logger: mockLogger, sleepMs: 50 });
+    drivers.push(driver);
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+
+    // Start the run loop
+    const runPromise = run.call(driver);
+
+    // Wait for first iteration to complete and enter sleep
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Interrupt during sleep
+    process.emit('SIGINT' as NodeJS.Signals);
+
+    await runPromise;
+
+    // Should log graceful stop
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Evolution stopped'));
+    // Should have cleaned up
+    expect(driver.getStatus().cleanedUp).toBe(true);
+  });
+});
+
+describe('resetState', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('resets sleepCancelled, interrupted, cleanedUp, consecutiveFailures, and iterationCount', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    // Set dirty state via private field access
+    const internals = driver as unknown as {
+      sleepCancelled: boolean;
+      interrupted: boolean;
+      cleanedUp: boolean;
+      consecutiveFailures: number;
+      iterationCount: number;
+    };
+    internals.sleepCancelled = true;
+    internals.interrupted = true;
+    internals.cleanedUp = true;
+    internals.consecutiveFailures = 5;
+    internals.iterationCount = 10;
+
+    // Call resetState
+    const resetState = (driver as unknown as { resetState: () => void }).resetState;
+    resetState.call(driver);
+
+    // Verify all state is reset
+    expect(internals.sleepCancelled).toBe(false);
+    expect(internals.interrupted).toBe(false);
+    expect(internals.cleanedUp).toBe(false);
+    expect(internals.consecutiveFailures).toBe(0);
+    expect(internals.iterationCount).toBe(0);
+  });
+});
+
+describe('output truncation boundaries', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('truncates stderr at 5000 chars boundary', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    const longStderr = 'x'.repeat(6000);
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+      if (command === 'opencode' && args?.includes('run')) {
+        return mockExecaResult(0, '', longStderr);
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const evolveWithOpenCode = (
+      driver as unknown as {
+        evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+      }
+    ).evolveWithOpenCode;
+
+    const result = await evolveWithOpenCode.call(driver, '');
+
+    expect(result).toBe(true);
+
+    // The stderr should be truncated to exactly 5000 chars
+    const stderrCalls = mockLogger.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && (call[0] as string).includes('OpenCode stderr:')
+    );
+    expect(stderrCalls.length).toBeGreaterThan(0);
+    const loggedStderr = stderrCalls[0][0] as string;
+    expect(loggedStderr.length).toBe('OpenCode stderr: '.length + 5000);
+  });
+
+  it('truncates verify stdout/stderr at 2000 char boundary', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    const longOutput = 'y'.repeat(3000);
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      // Build check fails with long output
+      if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+        return mockExecaResult(1, longOutput, longOutput);
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const verify = (
+      driver as unknown as {
+        verify: () => Promise<boolean>;
+      }
+    ).verify;
+
+    const result = await verify.call(driver);
+
+    expect(result).toBe(false);
+
+    // Check stderr truncation at 2000 chars
+    const errorCalls = mockLogger.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && (call[0] as string).includes('Error: ')
+    );
+    expect(errorCalls.length).toBeGreaterThan(0);
+    const loggedError = errorCalls[0][0] as string;
+    expect(loggedError.length).toBe('     Error: '.length + 2000);
+
+    // Check stdout truncation at 2000 chars
+    const outputCalls = mockLogger.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && (call[0] as string).includes('Output: ')
+    );
+    expect(outputCalls.length).toBeGreaterThan(0);
+    const loggedOutput = outputCalls[0][0] as string;
+    expect(loggedOutput.length).toBe('     Output: '.length + 2000);
+  });
+});
