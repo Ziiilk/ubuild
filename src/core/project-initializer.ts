@@ -309,15 +309,9 @@ export class ProjectInitializer {
       }
     }
 
-    try {
-      const versionFile = path.join(enginePath, 'Engine', 'Build', 'Build.version');
-      if (await fs.pathExists(versionFile)) {
-        const content = await fs.readFile(versionFile, 'utf-8');
-        const versionInfo: EngineVersionInfo = JSON.parse(content);
-        return `${versionInfo.MajorVersion}.${versionInfo.MinorVersion}`;
-      }
-    } catch (error) {
-      Logger.debug(`getEngineAssociationId failed, using default: ${formatError(error)}`);
+    const versionInfo = await this.getEngineVersionInfo(enginePath);
+    if (versionInfo) {
+      return `${versionInfo.MajorVersion}.${versionInfo.MinorVersion}`;
     }
 
     return DEFAULT_ENGINE_VERSION_FALLBACK;
