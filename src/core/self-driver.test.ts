@@ -3558,7 +3558,9 @@ describe('output truncation boundaries', () => {
     );
     expect(stderrCalls.length).toBeGreaterThan(0);
     const loggedStderr = stderrCalls[0][0] as string;
-    expect(loggedStderr.length).toBe('OpenCode stderr: '.length + 5000);
+    expect(loggedStderr).toContain('OpenCode stderr: ');
+    expect(loggedStderr).toContain('...(truncated)');
+    expect(loggedStderr.length).toBe('OpenCode stderr: '.length + 5000 + '...(truncated)'.length);
   });
 
   it('truncates verify stdout/stderr at 2000 char boundary', async () => {
@@ -3591,7 +3593,8 @@ describe('output truncation boundaries', () => {
     );
     expect(errorCalls.length).toBeGreaterThan(0);
     const loggedError = errorCalls[0][0] as string;
-    expect(loggedError.length).toBe('     Error: '.length + 2000);
+    expect(loggedError).toContain('...(truncated)');
+    expect(loggedError.length).toBe('     Error: '.length + 2000 + '...(truncated)'.length);
 
     // Check stdout truncation at 2000 chars
     const outputCalls = mockLogger.mock.calls.filter(
@@ -3599,6 +3602,7 @@ describe('output truncation boundaries', () => {
     );
     expect(outputCalls.length).toBeGreaterThan(0);
     const loggedOutput = outputCalls[0][0] as string;
-    expect(loggedOutput.length).toBe('     Output: '.length + 2000);
+    expect(loggedOutput).toContain('...(truncated)');
+    expect(loggedOutput.length).toBe('     Output: '.length + 2000 + '...(truncated)'.length);
   });
 });
