@@ -181,6 +181,7 @@ export class SelfDriver {
   cleanup(): void {
     if (this.cleanedUp) return; // Prevent double-cleanup
     this.cleanedUp = true;
+    this.interrupted = true;
     this.sleepCancelled = true;
     this.log('🧹 Cleaning up signal handlers and timers...');
 
