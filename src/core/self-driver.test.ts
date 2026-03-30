@@ -3659,3 +3659,230 @@ describe('output truncation boundaries', () => {
     expect(loggedOutput.length).toBe('     Output: '.length + 2000 + '...(truncated)'.length);
   });
 });
+
+describe('revertOrFailOrResetFailures', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('resets consecutive failures to 0 when revert succeeds', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    // Set some failures via the private handleEvolutionFailure method
+    const handleEvolutionFailure = (
+      driver as unknown as {
+        handleEvolutionFailure: (reason: string) => boolean;
+      }
+    ).handleEvolutionFailure;
+    handleEvolutionFailure.call(driver, 'Simulated failure 1');
+    handleEvolutionFailure.call(driver, 'Simulated failure 2');
+    expect(driver.getStatus().consecutiveFailures).toBe(2);
+
+    // Mock successful revert (git reset, checkout, clean all succeed)
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const revertOrFailOrResetFailures = (
+      driver as unknown as {
+        revertOrFailOrResetFailures: () => Promise<boolean>;
+      }
+    ).revertOrFailOrResetFailures;
+    const result = await revertOrFailOrResetFailures.call(driver);
+
+    expect(result).toBe(true);
+    // The failure counter should be reset to 0
+    expect(driver.getStatus().consecutiveFailures).toBe(0);
+    // revert() logs this message on success
+    expect(mockLogger).toHaveBeenCalledWith('🔄 Reverted changes');
+  });
+
+  it('returns false and cleans up when revert fails', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    // Set some failures
+    const handleEvolutionFailure = (
+      driver as unknown as {
+        handleEvolutionFailure: (reason: string) => boolean;
+      }
+    ).handleEvolutionFailure;
+    handleEvolutionFailure.call(driver, 'Simulated failure');
+
+    // Mock failed revert (git reset fails)
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(1, '', 'fatal: error');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const revertOrFailOrResetFailures = (
+      driver as unknown as {
+        revertOrFailOrResetFailures: () => Promise<boolean>;
+      }
+    ).revertOrFailOrResetFailures;
+    const result = await revertOrFailOrResetFailures.call(driver);
+
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith(
+      '❌ Revert failed - manual intervention may be required'
+    );
+    // Driver should be cleaned up
+    expect(driver.getStatus().cleanedUp).toBe(true);
+    // Failures should NOT be reset since revert failed
+    expect(driver.getStatus().consecutiveFailures).toBe(1);
+  });
+});
+
+describe('resetState allows re-run after cleanup', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('allows calling run() again after cleanup() when using dryRun', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ dryRun: true, logger: mockLogger });
+
+    // Setup mocks for pre-flight checks (run() calls resetState then runPreFlightChecks)
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'opencode' && args?.includes('--version')) {
+        return mockExecaResult(0, '1.0.0', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    // First run
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // After first run, driver is cleaned up
+    expect(driver.getStatus().cleanedUp).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith('🔍 Dry run mode - showing what would be done');
+
+    // Clear logger to verify second run produces output
+    mockLogger.mockClear();
+
+    // Second run should work because resetState() is called at the start of run()
+    await run.call(driver);
+
+    expect(mockLogger).toHaveBeenCalledWith('🔍 Dry run mode - showing what would be done');
+    expect(driver.getStatus().cleanedUp).toBe(true);
+  });
+});
+
+describe('truncateOutput boundary cases', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('does not truncate when output length equals maxLength', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    // Create output exactly 5000 chars (the OPENCODE_STDERR_PREVIEW_LIMIT)
+    const exactLengthStderr = 'x'.repeat(5000);
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+      if (command === 'opencode' && args?.includes('run')) {
+        return mockExecaResult(0, '', exactLengthStderr);
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const evolveWithOpenCode = (
+      driver as unknown as {
+        evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+      }
+    ).evolveWithOpenCode;
+    await evolveWithOpenCode.call(driver, '');
+
+    // Should NOT contain truncation indicator
+    const stderrCalls = mockLogger.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && (call[0] as string).includes('OpenCode stderr:')
+    );
+    expect(stderrCalls.length).toBe(1);
+    const loggedStderr = stderrCalls[0][0] as string;
+    expect(loggedStderr).not.toContain('...(truncated)');
+  });
+
+  it('truncates when output length exceeds maxLength by 1', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    // Create output 5001 chars (1 more than OPENCODE_STDERR_PREVIEW_LIMIT)
+    const overLengthStderr = 'x'.repeat(5001);
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+      if (command === 'opencode' && args?.includes('run')) {
+        return mockExecaResult(0, '', overLengthStderr);
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const evolveWithOpenCode = (
+      driver as unknown as {
+        evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+      }
+    ).evolveWithOpenCode;
+    await evolveWithOpenCode.call(driver, '');
+
+    // Should contain truncation indicator
+    const stderrCalls = mockLogger.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && (call[0] as string).includes('OpenCode stderr:')
+    );
+    expect(stderrCalls.length).toBe(1);
+    const loggedStderr = stderrCalls[0][0] as string;
+    expect(loggedStderr).toContain('...(truncated)');
+    expect(loggedStderr.length).toBe('OpenCode stderr: '.length + 5000 + '...(truncated)'.length);
+  });
+});
