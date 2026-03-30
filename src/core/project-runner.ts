@@ -243,9 +243,7 @@ export class ProjectRunner {
         // Prevent unhandled rejection when the child process fails to spawn
         // or exits with an error — the parent process has already moved on
         childProcess.catch((error) => {
-          this.logger.debug(
-            `Detached process error: ${error instanceof Error ? error.message : String(error)}`
-          );
+          this.logger.debug(`Detached process error: ${formatError(error)}`);
         });
         childProcess.unref();
         this.logger.success(`Started process in detached mode: ${path.basename(executablePath)}`);
