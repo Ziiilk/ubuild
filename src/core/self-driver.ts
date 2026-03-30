@@ -27,6 +27,10 @@ const VERIFY_TIMEOUT_MS = 60000;
 const OPENCODE_TIMEOUT_MS = 600000;
 /** Default maximum retry attempts on consecutive failures (-1 for unlimited) */
 const DEFAULT_MAX_RETRIES = 5;
+/** Maximum length for OpenCode stderr preview in log output */
+const OPENCODE_STDERR_PREVIEW_LIMIT = 5000;
+/** Maximum length for verification error output preview in log output */
+const VERIFY_ERROR_PREVIEW_LIMIT = 2000;
 /** Minimum max listeners for process events (increased to handle concurrent test runs) */
 const MIN_MAX_LISTENERS = 50;
 
@@ -88,6 +92,16 @@ export class SelfDriver {
     }
 
     this.setupSignalHandlers();
+  }
+
+  /**
+   * Truncates output to the specified maximum length for log display.
+   * @param output - The string to potentially truncate
+   * @param maxLength - Maximum character length before truncation
+   * @returns The original string or truncated version with ellipsis
+   */
+  private truncateOutput(output: string, maxLength: number): string {
+    return output.length > maxLength ? output.slice(0, maxLength) + '...(truncated)' : output;
   }
 
   /**
@@ -531,10 +545,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
 
       // Log stderr if present for debugging
       if (result.stderr && result.stderr.trim()) {
-        const stderrPreview =
-          result.stderr.length > 5000
-            ? result.stderr.slice(0, 5000) + '...(truncated)'
-            : result.stderr;
+        const stderrPreview = this.truncateOutput(result.stderr, OPENCODE_STDERR_PREVIEW_LIMIT);
         this.log(`OpenCode stderr: ${stderrPreview}`);
       }
 
@@ -601,17 +612,11 @@ If verification fails, do NOT commit - the system will revert automatically.`;
         this.log(`  ❌ ${check.name} failed`);
         // Show error output for debugging
         if (result?.stderr) {
-          const stderrPreview =
-            result.stderr.length > 2000
-              ? result.stderr.slice(0, 2000) + '...(truncated)'
-              : result.stderr;
+          const stderrPreview = this.truncateOutput(result.stderr, VERIFY_ERROR_PREVIEW_LIMIT);
           this.log(`     Error: ${stderrPreview}`);
         }
         if (result?.stdout) {
-          const stdoutPreview =
-            result.stdout.length > 2000
-              ? result.stdout.slice(0, 2000) + '...(truncated)'
-              : result.stdout;
+          const stdoutPreview = this.truncateOutput(result.stdout, VERIFY_ERROR_PREVIEW_LIMIT);
           if (stdoutPreview) {
             this.log(`     Output: ${stdoutPreview}`);
           }
