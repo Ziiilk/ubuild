@@ -222,13 +222,23 @@ describe('ProjectPathResolver', () => {
       }
     });
 
-    it('throws for non-existent file paths', async () => {
+    it('throws for non-existent .uproject file paths', async () => {
       const tempDir = await createTempDir();
       const nonExistentPath = path.join(tempDir, 'does-not-exist.uproject');
 
-      // Non-existent paths are treated as files (not directories), so resolveOrThrow returns them as-is
-      const result = await ProjectPathResolver.resolveOrThrow(nonExistentPath);
-      expect(result).toBe(nonExistentPath);
+      await expect(ProjectPathResolver.resolveOrThrow(nonExistentPath)).rejects.toThrow(
+        `Project file not found: ${nonExistentPath}`
+      );
+    });
+
+    it('returns existing .uproject file path without error', async () => {
+      const tempDir = await createTempDir();
+      const projectFilePath = path.join(tempDir, 'Existing.uproject');
+
+      await fs.writeFile(projectFilePath, JSON.stringify({ FileVersion: 3 }), 'utf-8');
+
+      const result = await ProjectPathResolver.resolveOrThrow(projectFilePath);
+      expect(result).toBe(projectFilePath);
     });
   });
 });

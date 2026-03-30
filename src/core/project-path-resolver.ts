@@ -76,6 +76,15 @@ export class ProjectPathResolver {
       throw new Error(`No .uproject file found in project directory: ${resolution.inputPath}`);
     }
 
+    // Validate that non-directory .uproject paths actually exist on disk.
+    // Without this check, commands like `build --project /nonexistent.uproject`
+    // silently proceed with an invalid path and produce confusing downstream errors.
+    if (!resolution.isDirectory && resolution.hasUProjectExtension) {
+      if (!(await fs.pathExists(resolution.resolvedPath))) {
+        throw new Error(`Project file not found: ${resolution.resolvedPath}`);
+      }
+    }
+
     return resolution.resolvedPath;
   }
 }
