@@ -242,7 +242,11 @@ export class ProjectRunner {
         const childProcess = execa(executablePath, args, execOptions);
         // Prevent unhandled rejection when the child process fails to spawn
         // or exits with an error — the parent process has already moved on
-        childProcess.catch(() => {});
+        childProcess.catch((error) => {
+          this.logger.debug(
+            `Detached process error: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
         childProcess.unref();
         this.logger.success(`Started process in detached mode: ${path.basename(executablePath)}`);
         return;
