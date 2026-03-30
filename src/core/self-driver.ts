@@ -726,33 +726,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       this.log('⚠️  Verification passed but AI did not commit changes');
     }
     this.log('🔄 Reverting uncommitted changes...');
-    return this.revertOrFailOrResetFailures();
-  }
-      // Not clean but can't verify commit - revert to be safe
-      this.log('⚠️  Working tree is not clean, reverting to be safe...');
-      return this.revertOrFailOrResetFailures();
-    }
-
-    if (isClean && hashChanged) {
-      this.log('✅ Changes committed by AI');
-      this.consecutiveFailures = 0; // Reset on success
-      return true;
-    }
-
-    if (isClean && !hashChanged) {
-      this.log('ℹ️  AI made no changes this iteration (SKIP)');
-      this.consecutiveFailures = 0; // Not a failure
-      return true;
-    }
-
-    // Not clean = some changes left uncommitted
-    if (hashChanged) {
-      this.log('⚠️  Verification passed but AI left uncommitted changes after partial commit');
-    } else {
-      this.log('⚠️  Verification passed but AI did not commit changes');
-    }
-    this.log('🔄 Reverting uncommitted changes...');
-    const result = this.revertOrFailOrResetFailures();
+    const result = await this.revertOrFailOrResetFailures();
     if (result) {
       this.log('ℹ️  Reset failure counter (verification passed, commit missed)');
     }
