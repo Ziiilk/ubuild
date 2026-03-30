@@ -542,5 +542,181 @@ describe('ProjectInitializer', () => {
       const uprojectContent = await fs.readJson(result.uprojectPath);
       expect(uprojectContent.EngineAssociation).toBe('5.3');
     });
+
+    it('generates UE4 target files with BuildSettingsVersion.V2 and no IncludeOrderVersion', async () => {
+      const tempDir = await createTempDir();
+      const enginePath = path.join(tempDir, 'Engine');
+
+      // Create engine structure with UE4 version info
+      await fs.ensureDir(path.join(enginePath, 'Engine', 'Binaries'));
+      const versionFile = path.join(enginePath, 'Engine', 'Build', 'Build.version');
+      await fs.ensureDir(path.dirname(versionFile));
+      const ue4VersionInfo: EngineVersionInfo = {
+        MajorVersion: 4,
+        MinorVersion: 27,
+        PatchVersion: 2,
+        Changelist: 12345,
+        CompatibleChangelist: 12345,
+        IsLicenseeVersion: 0,
+        IsPromotedBuild: 1,
+        BranchName: '++UE4+Release-4.27',
+        BuildId: '4.27.2-12345+++UE4+Release-4.27',
+      };
+      await fs.writeFile(versionFile, JSON.stringify(ue4VersionInfo), 'utf-8');
+
+      const mockEngine = createMockEngineInstallation({
+        path: enginePath,
+        version: ue4VersionInfo,
+      });
+      jest.mocked(EngineResolver.findEngineInstallations).mockResolvedValue([mockEngine]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      const options: InitOptions = {
+        name: 'TestProject',
+        type: 'cpp',
+        directory: path.join(tempDir, 'project'),
+        enginePath,
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+
+      expect(result.success).toBe(true);
+
+      const sourceDir = path.join(options.directory!, 'Source');
+
+      // Verify Game target file uses BuildSettingsVersion.V2 for UE4
+      const gameTargetContent = await fs.readFile(
+        path.join(sourceDir, 'TestProject.Target.cs'),
+        'utf-8'
+      );
+      expect(gameTargetContent).toContain('BuildSettingsVersion.V2');
+      expect(gameTargetContent).not.toContain('BuildSettingsVersion.Latest');
+      expect(gameTargetContent).not.toContain('IncludeOrderVersion');
+
+      // Verify Editor target file uses BuildSettingsVersion.V2 for UE4
+      const editorTargetContent = await fs.readFile(
+        path.join(sourceDir, 'TestProjectEditor.Target.cs'),
+        'utf-8'
+      );
+      expect(editorTargetContent).toContain('BuildSettingsVersion.V2');
+      expect(editorTargetContent).not.toContain('BuildSettingsVersion.Latest');
+      expect(editorTargetContent).not.toContain('IncludeOrderVersion');
+    });
+
+    it('falls back to default engine version when engine version cannot be determined', async () => {
+      const tempDir = await createTempDir();
+      const enginePath = path.join(tempDir, 'Engine');
+
+      // Create engine directory WITHOUT Build.version file
+      await fs.ensureDir(path.join(enginePath, 'Engine', 'Binaries'));
+
+      // Return empty installations so no matching engine is found via path
+      jest.mocked(EngineResolver.findEngineInstallations).mockResolvedValue([]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      const options: InitOptions = {
+        name: 'TestProject',
+        type: 'blueprint',
+        directory: path.join(tempDir, 'project'),
+        enginePath,
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+
+      expect(result.success).toBe(true);
+      expect(result.engineAssociation).toBe('5.1');
+
+      const uprojectContent = await fs.readJson(result.uprojectPath);
+      expect(uprojectContent.EngineAssociation).toBe('5.1');
+    });
+
+    it('handles malformed Build.version JSON gracefully', async () => {
+      const tempDir = await createTempDir();
+      const enginePath = path.join(tempDir, 'Engine');
+
+      // Create engine structure with invalid JSON in Build.version
+      await fs.ensureDir(path.join(enginePath, 'Engine', 'Binaries'));
+      const versionFile = path.join(enginePath, 'Engine', 'Build', 'Build.version');
+      await fs.ensureDir(path.dirname(versionFile));
+      await fs.writeFile(versionFile, '{not valid', 'utf-8');
+
+      // Return empty installations so getEngineVersionInfo is the only source
+      jest.mocked(EngineResolver.findEngineInstallations).mockResolvedValue([]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      const options: InitOptions = {
+        name: 'TestProject',
+        type: 'blueprint',
+        directory: path.join(tempDir, 'project'),
+        enginePath,
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+
+      expect(result.success).toBe(true);
+      expect(result.engineAssociation).toBe('5.1');
+    });
+
+    it('uses launcher engine version for engine association', async () => {
+      const tempDir = await createTempDir();
+      const enginePath = path.join(tempDir, 'Engine');
+      await createMockEngineStructure(enginePath);
+
+      const ue4Version: EngineVersionInfo = {
+        MajorVersion: 4,
+        MinorVersion: 27,
+        PatchVersion: 2,
+        Changelist: 12345,
+        CompatibleChangelist: 12345,
+        IsLicenseeVersion: 0,
+        IsPromotedBuild: 1,
+        BranchName: '++UE4+Release-4.27',
+        BuildId: '4.27.2-12345+++UE4+Release-4.27',
+      };
+
+      const mockEngine = createMockEngineInstallation({
+        path: enginePath,
+        source: 'launcher',
+        version: ue4Version,
+      });
+      jest.mocked(EngineResolver.findEngineInstallations).mockResolvedValue([mockEngine]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      const options: InitOptions = {
+        name: 'TestProject',
+        type: 'blueprint',
+        directory: path.join(tempDir, 'project'),
+        enginePath,
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+
+      expect(result.success).toBe(true);
+      expect(result.engineAssociation).toBe('4.27');
+    });
   });
 });
