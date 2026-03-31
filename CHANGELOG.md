@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.10]
+
+- Fix `generate` and `gencodebase` commands failing due to spurious quotes in UnrealBuildTool arguments passed via execa
+
 ## [0.0.9]
 
 - Extend `clangd.arguments` in generated `.vscode/settings.json` with `--background-index`, `--j=8`, `--index-store-path`, `--pch-storage=disk`, `--limit-results=200`, `--header-insertion=iwyu`
