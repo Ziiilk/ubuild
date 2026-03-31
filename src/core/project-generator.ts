@@ -1,21 +1,49 @@
+/**
+ * Project generator for IDE project files.
+ *
+ * Generates IDE-specific project files (Visual Studio, VSCode, CLion, Xcode)
+ * using UnrealBuildTool to enable development workflow integration.
+ *
+ * @module core/project-generator
+ */
+
 import { execa } from 'execa';
 import path from 'path';
 import fs from 'fs-extra';
-import { GenerateOptions, GenerateResult, IDE } from '../types/generate';
+import type { GenerateOptions, GenerateResult, IDE } from '../types/generate';
 import { EngineResolver } from './engine-resolver';
 import { Logger } from '../utils/logger';
-import { Platform } from '../utils/platform';
+import { formatError } from '../utils/error';
 import { ProjectPathResolver } from './project-path-resolver';
+import { DEFAULTS } from '../utils/constants';
+import { resolveUnrealBuildToolPath } from '../utils/unreal-paths';
 
+/**
+ * Represents a VSCode task definition in tasks.json.
+ * Used for parsing and validating VSCode workspace task configurations.
+ */
 interface VSCodeTaskDefinition {
+  /** The display label for the task */
   label?: string;
 }
 
+/**
+ * Represents the structure of a VSCode tasks.json file.
+ * Used for reading and validating VSCode workspace task configurations.
+ */
 interface VSCodeTasksFile {
+  /** The version of the tasks file format */
   version?: string;
+  /** Array of task definitions */
   tasks?: VSCodeTaskDefinition[];
 }
 
+/**
+ * Type guard to check if a value is a valid VSCodeTaskDefinition.
+ * Validates that the task has the expected structure with optional label property.
+ * @param task - The value to check
+ * @returns True if the value is a valid VSCodeTaskDefinition
+ */
 function isVSCodeTaskDefinition(task: unknown): task is VSCodeTaskDefinition {
   if (typeof task !== 'object' || task === null) {
     return false;
@@ -25,6 +53,12 @@ function isVSCodeTaskDefinition(task: unknown): task is VSCodeTaskDefinition {
   return candidate.label === undefined || typeof candidate.label === 'string';
 }
 
+/**
+ * Type guard to check if a value is a valid VSCodeTasksFile.
+ * Validates that the file has the expected structure with optional version and tasks array.
+ * @param value - The value to check
+ * @returns True if the value is a valid VSCodeTasksFile
+ */
 function isVSCodeTasksFile(value: unknown): value is VSCodeTasksFile {
   if (typeof value !== 'object' || value === null) {
     return false;
@@ -37,40 +71,46 @@ function isVSCodeTasksFile(value: unknown): value is VSCodeTasksFile {
   );
 }
 
+/**
+ * Generates IDE project files for Unreal Engine projects.
+ * Supports Visual Studio, VSCode, CLion, and Xcode through UBT integration.
+ */
 export class ProjectGenerator {
+  /**
+   * Generates project files for the specified IDE.
+   * @param options - Generation options including IDE type and project path
+   * @returns Promise resolving to generation result with list of created files
+   */
   static async generate(options: GenerateOptions): Promise<GenerateResult> {
     const generatedFiles: string[] = [];
+    const silent = options.silent || false;
+    const logger = new Logger({ silent });
 
     try {
       const validatedOptions = await this.validateOptions(options);
       const { ide, projectPath, enginePath, force } = validatedOptions;
 
-      Logger.info(`Generating ${ide.toUpperCase()} project files`);
-      Logger.info(`Project: ${projectPath}`);
-      Logger.info(`Engine: ${enginePath}`);
+      logger.info(`Generating ${ide.toUpperCase()} project files`);
+      logger.info(`Project: ${projectPath}`);
+      logger.info(`Engine: ${enginePath}`);
 
-      if (ide === 'sln' || ide === 'vs2022') {
-        await this.generateWithUBT(enginePath, projectPath, force, ide);
-        generatedFiles.push(...(await this.findGeneratedSolutionFiles(projectPath)));
-      } else if (ide === 'vscode') {
-        await this.generateWithUBT(enginePath, projectPath, force, ide);
-        generatedFiles.push(...(await this.findGeneratedSolutionFiles(projectPath)));
+      await this.generateWithUBT(enginePath, projectPath, force, ide, logger);
+
+      // Collect IDE-specific generated files
+      generatedFiles.push(...(await this.findGeneratedSolutionFiles(projectPath)));
+
+      if (ide === 'vscode') {
         generatedFiles.push(...(await this.findVSCodeWorkspaceFiles(projectPath)));
         generatedFiles.push(...(await this.findVSCodeConfigFiles(projectPath)));
 
-        const tasksFile = await this.generateVSCodeTasks(projectPath);
+        const tasksFile = await this.generateVSCodeTasks(projectPath, logger);
         if (tasksFile) {
           generatedFiles.push(tasksFile);
         }
       } else if (ide === 'clion') {
-        await this.generateWithUBT(enginePath, projectPath, force, ide);
         generatedFiles.push(...(await this.findGeneratedCLionFiles(projectPath)));
       } else if (ide === 'xcode') {
-        await this.generateWithUBT(enginePath, projectPath, force, ide);
         generatedFiles.push(...(await this.findGeneratedXcodeFiles(projectPath)));
-      } else {
-        await this.generateWithUBT(enginePath, projectPath, force, ide);
-        generatedFiles.push(...(await this.findGeneratedSolutionFiles(projectPath)));
       }
 
       return {
@@ -81,15 +121,22 @@ export class ProjectGenerator {
       return {
         success: false,
         generatedFiles,
-        error: error instanceof Error ? error.message : String(error),
+        error: formatError(error),
       };
     }
   }
 
+  /**
+   * Validates and normalizes generation options.
+   * @param options - Raw generation options from user input
+   * @returns Promise resolving to validated and normalized options with defaults applied
+   * @throws Error if project path cannot be resolved
+   * @throws Error if engine path cannot be resolved
+   */
   private static async validateOptions(
     options: GenerateOptions
   ): Promise<Required<GenerateOptions>> {
-    const ide: IDE = options.ide || 'sln';
+    const ide: IDE = options.ide || DEFAULTS.IDE;
     const force = options.force || false;
 
     const projectPath = await ProjectPathResolver.resolveOrThrow(
@@ -101,32 +148,35 @@ export class ProjectGenerator {
       enginePath: options.enginePath,
     });
 
+    const silent = options.silent || false;
+
     return {
       ide,
       projectPath,
       enginePath,
       force,
+      silent,
     };
   }
 
+  /**
+   * Generates project files using UnrealBuildTool.
+   * @param enginePath - Path to the Unreal Engine installation
+   * @param projectPath - Path to the .uproject file
+   * @param force - Whether to force regeneration
+   * @param ide - IDE type to generate files for
+   * @returns Promise resolving when generation is complete
+   * @throws Error if UnrealBuildTool is not found
+   * @throws Error if generation fails
+   */
   private static async generateWithUBT(
     enginePath: string,
     projectPath: string,
     force: boolean,
-    ide: IDE
+    ide: IDE,
+    logger: Logger
   ): Promise<void> {
-    const ubtPath = path.join(
-      enginePath,
-      'Engine',
-      'Binaries',
-      'DotNET',
-      'UnrealBuildTool',
-      `UnrealBuildTool${Platform.exeExtension()}`
-    );
-
-    if (!(await fs.pathExists(ubtPath))) {
-      throw new Error(`UnrealBuildTool not found at: ${ubtPath}`);
-    }
+    const ubtPath = await resolveUnrealBuildToolPath(enginePath);
 
     const args = ['-projectfiles', `-project="${projectPath}"`, '-game', '-engine'];
 
@@ -142,64 +192,59 @@ export class ProjectGenerator {
       args.push('-force');
     }
 
-    Logger.debug(`Executing: ${ubtPath} ${args.join(' ')}`);
+    logger.debug(`Executing: ${ubtPath} ${args.join(' ')}`);
 
-    const command = `"${ubtPath}" ${args.join(' ')}`;
-    const childProcess = execa(command, {
+    const childProcess = execa(ubtPath, args, {
       stdio: 'pipe',
       cwd: path.dirname(ubtPath),
-      shell: true,
+      reject: false,
     });
 
     if (childProcess.stdout) {
       childProcess.stdout.on('data', (data: Buffer) => {
         const output = data.toString();
         if (!output.includes('Log file created')) {
-          process.stdout.write(output);
+          logger.write(output);
         }
       });
     }
 
     if (childProcess.stderr) {
       childProcess.stderr.on('data', (data: Buffer) => {
-        process.stderr.write(data.toString());
+        logger.writeError(data.toString());
       });
     }
 
     const result = await childProcess;
 
-    if (result.exitCode !== 0) {
-      throw new Error(`Project generation failed with exit code ${result.exitCode}`);
+    if (!result || result.exitCode !== 0) {
+      throw new Error(`Project generation failed with exit code ${result?.exitCode ?? 'unknown'}`);
     }
 
-    Logger.success('Project files generated successfully');
+    logger.success('Project files generated successfully');
   }
 
+  /**
+   * Finds generated Visual Studio solution files.
+   * @param projectPath - Path to the .uproject file
+   * @returns Promise resolving to array of generated solution file paths
+   */
   private static async findGeneratedSolutionFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
-    const solutionFiles: string[] = [];
 
-    const slnFiles = await fs
-      .readdir(projectDir)
-      .then((files) => files.filter((f) => f.endsWith('.sln')));
+    const allFiles = await fs.readdir(projectDir);
+    const solutionFiles = allFiles.filter(
+      (f) => f.endsWith('.sln') || f.endsWith('.vcxproj.filters') || f.endsWith('.vcxproj')
+    );
 
-    solutionFiles.push(...slnFiles.map((f) => path.join(projectDir, f)));
-
-    const filterFiles = await fs
-      .readdir(projectDir)
-      .then((files) => files.filter((f) => f.endsWith('.vcxproj.filters')));
-
-    solutionFiles.push(...filterFiles.map((f) => path.join(projectDir, f)));
-
-    const vcxprojFiles = await fs
-      .readdir(projectDir)
-      .then((files) => files.filter((f) => f.endsWith('.vcxproj')));
-
-    solutionFiles.push(...vcxprojFiles.map((f) => path.join(projectDir, f)));
-
-    return solutionFiles;
+    return solutionFiles.map((f) => path.join(projectDir, f));
   }
 
+  /**
+   * Finds generated CLion/CMake files.
+   * @param projectPath - Path to the .uproject file
+   * @returns Promise resolving to array of generated CLion file paths
+   */
   private static async findGeneratedCLionFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
     const cmakePath = path.join(projectDir, 'CMakeLists.txt');
@@ -209,6 +254,11 @@ export class ProjectGenerator {
     return [];
   }
 
+  /**
+   * Finds generated Xcode project files.
+   * @param projectPath - Path to the .uproject file
+   * @returns Promise resolving to array of generated Xcode file paths
+   */
   private static async findGeneratedXcodeFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
     const entries = await fs.readdir(projectDir, { withFileTypes: true });
@@ -218,6 +268,11 @@ export class ProjectGenerator {
     return files;
   }
 
+  /**
+   * Finds generated VSCode workspace files.
+   * @param projectPath - Path to the .uproject file
+   * @returns Promise resolving to array of generated workspace file paths
+   */
   private static async findVSCodeWorkspaceFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
     const files = await fs
@@ -228,6 +283,11 @@ export class ProjectGenerator {
     return files;
   }
 
+  /**
+   * Finds VSCode configuration files in the .vscode directory.
+   * @param projectPath - Path to the .uproject file
+   * @returns Promise resolving to array of VSCode config file paths
+   */
   private static async findVSCodeConfigFiles(projectPath: string): Promise<string[]> {
     const projectDir = path.dirname(projectPath);
     const vscodeDir = path.join(projectDir, '.vscode');
@@ -243,7 +303,15 @@ export class ProjectGenerator {
     return vscodeFiles;
   }
 
-  private static async generateVSCodeTasks(projectPath: string): Promise<string | null> {
+  /**
+   * Generates or updates VSCode tasks.json with ubuild tasks.
+   * @param projectPath - Path to the .uproject file
+   * @returns Promise resolving to the tasks.json path, or null if not generated
+   */
+  private static async generateVSCodeTasks(
+    projectPath: string,
+    logger: Logger
+  ): Promise<string | null> {
     const projectDir = path.dirname(projectPath);
     const vscodeDir = path.join(projectDir, '.vscode');
     const tasksPath = path.join(vscodeDir, 'tasks.json');
@@ -284,8 +352,10 @@ export class ProjectGenerator {
           await fs.writeJson(tasksPath, existingContent, { spaces: 2 });
           return tasksPath;
         }
-      } catch {
-        // Ignore invalid existing tasks.json and overwrite it below.
+      } catch (parseError) {
+        logger.debug(
+          `Failed to parse existing tasks.json, regenerating: ${formatError(parseError)}`
+        );
       }
     }
 

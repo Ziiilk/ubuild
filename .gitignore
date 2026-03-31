@@ -11,6 +11,7 @@ dist/
 # Coverage
 coverage/
 .nyc_output
+*coverage_report.txt
 
 # Environment
 .env
@@ -55,3 +56,5 @@ temp/
 .yarn/
 .yarn-cache/
 .cache/
+
+nul

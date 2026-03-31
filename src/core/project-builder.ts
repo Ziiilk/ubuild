@@ -1,32 +1,64 @@
+/**
+ * Project builder for Unreal Engine projects.
+ *
+ * High-level builder interface that validates build options, executes builds,
+ * and provides formatted output for build operations.
+ *
+ * @module core/project-builder
+ */
+
 import chalk from 'chalk';
 import { Writable } from 'stream';
-import { BuildConfiguration, BuildPlatform } from '../types/build';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
+import { formatError } from '../utils/error';
 import { BuildExecutor } from './build-executor';
 import { EngineResolver } from './engine-resolver';
 
+/** Options for the build command. */
 export interface BuildCommandOptions {
+  /** Build target (Editor, Game, Client, Server) */
   target?: string;
+  /** Build configuration (Debug, DebugGame, Development, Shipping, Test) */
   config?: string;
+  /** Target platform (Win64, Win32, Linux, Mac, Android, IOS) */
   platform?: string;
+  /** Path to project directory or .uproject file */
   project?: string;
+  /** Path to Unreal Engine installation */
   enginePath?: string;
+  /** Whether to perform a clean build */
   clean?: boolean;
+  /** Whether to enable verbose output */
   verbose?: boolean;
+  /** Show what would be built without actually building */
   dryRun?: boolean;
+  /** List available build targets for project */
   listTargets?: boolean;
+  /** Logger instance for output */
   logger?: Logger;
+  /** Writable stream for stdout */
   stdout?: Writable;
+  /** Writable stream for stderr */
   stderr?: Writable;
+  /** Suppress all output */
   silent?: boolean;
 }
 
+/**
+ * High-level builder for Unreal Engine projects.
+ * Provides a convenient interface for building projects with validation,
+ * dry-run support, and detailed output formatting.
+ */
 export class ProjectBuilder {
   private logger: Logger;
   private stdout: Writable;
   private stderr: Writable;
 
+  /**
+   * Creates a new ProjectBuilder instance.
+   * @param options - Configuration options for logging and output streams
+   */
   constructor(
     options: { logger?: Logger; stdout?: Writable; stderr?: Writable; silent?: boolean } = {}
   ) {
@@ -41,10 +73,21 @@ export class ProjectBuilder {
       });
   }
 
+  /**
+   * Gets the logger instance used by this builder.
+   * @returns The Logger instance
+   */
   getLogger(): Logger {
     return this.logger;
   }
 
+  /**
+   * Executes a build with the specified options.
+   * Validates options, performs dry-run if requested, and executes the build.
+   * @param options - Build configuration options
+   * @returns Promise that resolves when build completes or rejects on failure
+   * @throws Error if validation fails or build fails
+   */
   async build(options: BuildCommandOptions): Promise<void> {
     this.logger.title('Unreal Engine Build');
 
@@ -53,32 +96,16 @@ export class ProjectBuilder {
       return;
     }
 
-    if (!Validator.isValidBuildTarget(this.getTarget(options))) {
-      this.logger.error(`Invalid build target: ${options.target}`);
-      this.logger.info('Valid generic targets: Editor, Game, Client, Server');
-      this.logger.info('Use --list-targets to see available project-specific targets');
-      throw new Error('Invalid target');
-    }
-
-    if (!Validator.isValidBuildConfig(this.getConfigValue(options))) {
-      this.logger.error(`Invalid build configuration: ${options.config}`);
-      this.logger.info('Valid configurations: Debug, DebugGame, Development, Shipping, Test');
-      throw new Error('Invalid config');
-    }
-
-    if (!Validator.isValidBuildPlatform(this.getPlatformValue(options))) {
-      this.logger.error(`Invalid build platform: ${options.platform}`);
-      this.logger.info('Valid platforms: Win64, Win32, Linux, Mac, Android, IOS');
-      throw new Error('Invalid platform');
-    }
+    // Validate and apply defaults for build options
+    const { target, config, platform } = Validator.validateBuildOptions(options, this.logger);
 
     if (options.dryRun) {
-      await this.dryRunBuild(options);
+      await this.dryRunBuild({ ...options, target, config, platform });
       return;
     }
 
     this.logger.info(
-      `Preparing to build: ${chalk.bold(this.getTarget(options))} | ${chalk.bold(this.getPlatformValue(options))} | ${chalk.bold(this.getConfigValue(options))}`
+      `Preparing to build: ${chalk.bold(target)} | ${chalk.bold(platform)} | ${chalk.bold(config)}`
     );
     this.logger.divider();
 
@@ -90,9 +117,9 @@ export class ProjectBuilder {
     });
 
     const result = await buildExecutor.execute({
-      target: this.getTarget(options),
-      config: this.getConfig(options),
-      platform: this.getPlatform(options),
+      target,
+      config,
+      platform,
       projectPath: options.project,
       enginePath: options.enginePath,
       clean: options.clean,
@@ -141,26 +168,6 @@ export class ProjectBuilder {
     throw new Error(`Build failed with exit code ${result.exitCode}`);
   }
 
-  private getTarget(options: BuildCommandOptions): string {
-    return options.target || 'Editor';
-  }
-
-  private getConfigValue(options: BuildCommandOptions): string {
-    return options.config || 'Development';
-  }
-
-  private getPlatformValue(options: BuildCommandOptions): string {
-    return options.platform || 'Win64';
-  }
-
-  private getConfig(options: BuildCommandOptions): BuildConfiguration {
-    return this.getConfigValue(options) as BuildConfiguration;
-  }
-
-  private getPlatform(options: BuildCommandOptions): BuildPlatform {
-    return this.getPlatformValue(options) as BuildPlatform;
-  }
-
   private async listAvailableTargets(projectPath?: string): Promise<void> {
     try {
       const cwd = projectPath || process.cwd();
@@ -188,9 +195,7 @@ export class ProjectBuilder {
       this.stdout.write('\n');
       this.stdout.write('Use: ubuild build --target <target>\n');
     } catch (error) {
-      this.logger.error(
-        `Failed to list targets: ${error instanceof Error ? error.message : String(error)}`
-      );
+      this.logger.error(`Failed to list targets: ${formatError(error)}`);
     }
   }
 
@@ -215,7 +220,8 @@ export class ProjectBuilder {
           `  Engine: ${chalk.yellow('Not detected - specify with --engine-path')}\n`
         );
       }
-    } catch {
+    } catch (error) {
+      this.logger.debug(`Engine resolution failed: ${formatError(error)}`);
       this.stdout.write(
         `  Engine: ${chalk.yellow('Detection failed - specify with --engine-path')}\n`
       );
@@ -227,6 +233,11 @@ export class ProjectBuilder {
   }
 }
 
+/**
+ * Convenience function to execute a build without creating a ProjectBuilder instance.
+ * @param options - Build configuration options
+ * @returns Promise that resolves when build completes
+ */
 export async function executeBuild(options: BuildCommandOptions): Promise<void> {
   const builder = new ProjectBuilder({
     logger: options.logger,

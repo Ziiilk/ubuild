@@ -1,9 +1,41 @@
+/**
+ * Build command for ubuild CLI
+ *
+ * Builds Unreal Engine projects with various targets,
+ * configurations, and platforms.
+ *
+ * @module commands/build
+ */
+
 import { Command } from 'commander';
+import { handleCommandError } from '../utils/error';
 import { ProjectBuilder } from '../core/project-builder';
 
-export { ProjectBuilder, executeBuild } from '../core/project-builder';
+/**
+ * Project builder class for executing builds.
+ * Re-exported from {@link ../core/project-builder}.
+ * @see {@link ProjectBuilder} for implementation details
+ */
+export { ProjectBuilder } from '../core/project-builder';
+
+/**
+ * Execute a build operation.
+ * Re-exported from {@link ../core/project-builder}.
+ * @see {@link executeBuild} for implementation details
+ */
+export { executeBuild } from '../core/project-builder';
+
+/**
+ * Options for the build command.
+ * Re-exported from {@link ../core/project-builder}.
+ * @see {@link BuildCommandOptions} for details
+ */
 export type { BuildCommandOptions } from '../core/project-builder';
 
+/**
+ * Registers the build command with the Commander program.
+ * @param program - The Commander program instance
+ */
 export function buildCommand(program: Command): void {
   program
     .command('build')
@@ -26,14 +58,11 @@ export function buildCommand(program: Command): void {
     .option('--dry-run', 'Show what would be built without actually building')
     .option('--list-targets', 'List available build targets for project')
     .action(async (options) => {
-      const builder = new ProjectBuilder();
       try {
+        const builder = new ProjectBuilder();
         await builder.build(options);
       } catch (error) {
-        builder
-          .getLogger()
-          .error(`Build failed: ${error instanceof Error ? error.message : String(error)}`);
-        process.exit(1);
+        handleCommandError(error);
       }
     });
 }

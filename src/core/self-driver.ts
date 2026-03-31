@@ -1,417 +1,856 @@
+/**
+ * Self-driving evolution engine for ubuild.
+ *
+ * Automated codebase improvement system that continuously analyzes
+ * and applies changes through OpenCode. Runs in an infinite loop
+ * until interrupted by user.
+ *
+ * @module core/self-driver
+ */
+
 import { execa } from 'execa';
-import { Logger } from '../utils/logger';
+import { Logger, formatTimestamp } from '../utils/logger';
+import { formatErrorWithPrefix } from '../utils/error';
+import fs from 'fs-extra';
+import path from 'path';
 
-export interface SelfEvolverOptions {
-  interval?: number;
-  apiKey?: string;
-  model?: string;
-  logger?: (msg: string) => void;
-}
+import { EVOLUTION_VERIFY_COMMANDS } from '../types/evolve';
+import type { SelfEvolverOptions } from '../types/evolve';
 
-export interface Diagnosis {
-  testFailures: string[];
-  lintErrors: string[];
-  timestamp: string;
-}
+export type { SelfEvolverOptions };
 
-export interface EvolutionResult {
-  success: boolean;
-  iterations: number;
-  improvements: string[];
-  errors: string[];
-}
+/** Default sleep duration between iterations in milliseconds */
+const DEFAULT_SLEEP_MS = 5000;
+/** Default timeout for verification checks in milliseconds */
+const VERIFY_TIMEOUT_MS = 60000;
+/** Default timeout for OpenCode execution in milliseconds */
+const OPENCODE_TIMEOUT_MS = 600000;
+/** Default maximum retry attempts on consecutive failures (-1 for unlimited) */
+const DEFAULT_MAX_RETRIES = 5;
+/** Maximum length for OpenCode stderr preview in log output */
+const OPENCODE_STDERR_PREVIEW_LIMIT = 5000;
+/** Maximum length for verification error output preview in log output */
+const VERIFY_ERROR_PREVIEW_LIMIT = 2000;
+/** Minimum max listeners for process events (increased to handle concurrent test runs) */
+const MIN_MAX_LISTENERS = 50;
 
 export class SelfDriver {
-  private interval: number;
-  private apiKey?: string;
-  private model: string;
   private log: (msg: string) => void;
   private projectRoot: string;
+  private interrupted = false;
+  private once: boolean;
+  private dryRun: boolean;
+  private verifyTimeoutMs: number;
+  private opencodeTimeoutMs: number;
+  private sleepMs: number;
+  private useTsNode: boolean;
+  private maxRetries: number;
+  private consecutiveFailures = 0;
   private iterationCount = 0;
-  private improvementCount = 0;
+  private sigintHandler: (() => void) | null = null;
+  private sigtermHandler: (() => void) | null = null;
+  private originalMaxListeners: number | null = null;
+  private sleepTimer: NodeJS.Timeout | null = null;
+  private sleepResolve: (() => void) | null = null;
+  private cleanedUp = false;
+  private sleepCancelled = false;
+  private increasedMaxListeners = false;
+  private keepUntracked: boolean;
 
+  /**
+   * Creates a new SelfDriver instance.
+   * @param options - Configuration options for the evolution process
+   */
   constructor(options: SelfEvolverOptions = {}) {
-    this.interval = options.interval || 5000; // 失败后等待5秒
-    this.apiKey = options.apiKey;
-    this.model = options.model || '';
-    this.log = options.logger || ((msg: string) => Logger.info(msg));
-    this.projectRoot = process.cwd();
+    this.log = options.logger || ((msg: string) => Logger.info(`[${formatTimestamp()}] ${msg}`));
+    this.projectRoot = options.projectRoot ?? process.cwd();
+    this.once = options.once || false;
+    this.dryRun = options.dryRun || false;
+    this.verifyTimeoutMs = options.verifyTimeoutMs ?? VERIFY_TIMEOUT_MS;
+    this.opencodeTimeoutMs = options.opencodeTimeoutMs ?? OPENCODE_TIMEOUT_MS;
+    this.sleepMs = options.sleepMs ?? DEFAULT_SLEEP_MS;
+    this.useTsNode = options.useTsNode || false;
+    this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.keepUntracked = options.keepUntracked || false;
+
+    // Validate options
+    if (this.sleepMs <= 0) {
+      throw new Error(`Invalid sleepMs: ${this.sleepMs}. Must be a positive number.`);
+    }
+    if (this.maxRetries < -1) {
+      throw new Error(`Invalid maxRetries: ${this.maxRetries}. Must be >= -1 (-1 for unlimited).`);
+    }
+    if (this.verifyTimeoutMs <= 0) {
+      throw new Error(
+        `Invalid verifyTimeoutMs: ${this.verifyTimeoutMs}. Must be a positive number.`
+      );
+    }
+    if (this.opencodeTimeoutMs <= 0) {
+      throw new Error(
+        `Invalid opencodeTimeoutMs: ${this.opencodeTimeoutMs}. Must be a positive number.`
+      );
+    }
+
+    this.setupSignalHandlers();
   }
 
   /**
-   * 运行自进化循环 - 无限循环，直到用户中断
-   * 失败则重试，成功则提交，永不停止
+   * Truncates output to the specified maximum length for log display.
+   * @param output - The string to potentially truncate
+   * @param maxLength - Maximum character length before truncation
+   * @returns The original string or truncated version with ellipsis
    */
-  async run(): Promise<EvolutionResult> {
+  private truncateOutput(output: string, maxLength: number): string {
+    return output.length > maxLength ? output.slice(0, maxLength) + '...(truncated)' : output;
+  }
+
+  /**
+   * Safely executes a command with execa, catching errors and returning null on failure.
+   * Logs errors with context for debugging.
+   */
+  private async safeExeca(
+    command: string,
+    args: string[],
+    options?: { cwd?: string; reject?: boolean; timeout?: number }
+  ): Promise<{ exitCode: number; stdout: string; stderr: string } | null> {
+    try {
+      const result = await execa(command, args, {
+        cwd: this.projectRoot,
+        reject: false,
+        ...options,
+      });
+      return result;
+    } catch (error) {
+      this.log(`⚠️  ${formatErrorWithPrefix(`${command} failed`, error)}`);
+      return null;
+    }
+  }
+
+  /**
+   * Sets up signal handlers for graceful interruption (Ctrl+C, SIGTERM).
+   */
+  private setupSignalHandlers(): void {
+    // If handlers already exist, don't re-register
+    if (this.sigintHandler && this.sigtermHandler) {
+      return;
+    }
+
+    this.sigintHandler = (): void => {
+      this.interrupted = true;
+      this.log('\n\n⚠️  Interrupted by user (Ctrl+C)');
+      this.interruptSleep();
+    };
+    this.sigtermHandler = (): void => {
+      this.interrupted = true;
+      this.log('\n\n⚠️  Interrupted by SIGTERM');
+      this.interruptSleep();
+    };
+
+    // Increase max listeners once to prevent memory leak warnings with multiple handlers
+    // Track whether THIS instance increased it so we only restore if we did
+    const currentMax = process.getMaxListeners();
+    if (currentMax < MIN_MAX_LISTENERS) {
+      this.originalMaxListeners = currentMax;
+      this.increasedMaxListeners = true;
+      process.setMaxListeners(MIN_MAX_LISTENERS);
+    }
+
+    process.on('SIGINT', this.sigintHandler);
+    process.on('SIGTERM', this.sigtermHandler);
+  }
+
+  /**
+   * Immediately resolves any pending sleep promise and clears the timer.
+   * Used by signal handlers to provide responsive Ctrl+C behavior.
+   */
+  private interruptSleep(): void {
+    if (this.sleepTimer) {
+      clearTimeout(this.sleepTimer);
+      this.sleepTimer = null;
+    }
+    if (this.sleepResolve) {
+      this.sleepResolve();
+      this.sleepResolve = null;
+    }
+  }
+
+  /**
+   * Cleans up signal handlers to prevent memory leaks.
+   * Should be called when the driver is no longer needed.
+   */
+  cleanup(): void {
+    if (this.cleanedUp) return; // Prevent double-cleanup
+    this.cleanedUp = true;
+    this.interrupted = true;
+    this.sleepCancelled = true;
+    this.log('🧹 Cleaning up signal handlers and timers...');
+
+    if (this.sigintHandler) {
+      process.removeListener('SIGINT', this.sigintHandler);
+      this.sigintHandler = null;
+    }
+    if (this.sigtermHandler) {
+      process.removeListener('SIGTERM', this.sigtermHandler);
+      this.sigtermHandler = null;
+    }
+    // Restore original max listeners only if THIS instance increased it
+    // This prevents multiple instances from corrupting each other's state
+    if (this.increasedMaxListeners && this.originalMaxListeners !== null) {
+      process.setMaxListeners(this.originalMaxListeners);
+      this.originalMaxListeners = null;
+      this.increasedMaxListeners = false;
+    }
+    // Interrupt any pending sleep for responsive cleanup
+    this.interruptSleep();
+    this.log('✅ Cleanup completed');
+  }
+
+  /**
+   * Checks if current directory is a git repository.
+   */
+  private async isGitRepository(): Promise<boolean> {
+    const result = await this.safeExeca('git', ['rev-parse', '--git-dir']);
+    return result?.exitCode === 0;
+  }
+
+  /**
+   * Checks if OpenCode CLI is installed and available in PATH.
+   */
+  private async isOpenCodeInstalled(): Promise<boolean> {
+    const result = await this.safeExeca('opencode', ['--version']);
+    return result?.exitCode === 0;
+  }
+
+  /**
+   * Runs pre-flight checks before starting evolution.
+   * @returns true if all checks pass, false otherwise
+   */
+  private async runPreFlightChecks(): Promise<boolean> {
+    const isGitRepo = await this.isGitRepository();
+    if (!isGitRepo) {
+      this.log('❌ Error: Not a git repository');
+      this.log('   Self-evolution requires a git repository to track and revert changes.');
+      this.log(`   Current directory: ${this.projectRoot}`);
+      return false;
+    }
+
+    const isClean = await this.isWorkingTreeClean();
+    if (!isClean) {
+      this.log('❌ Error: Working tree has uncommitted changes');
+      this.log('   Self-evolution may revert changes using `git checkout .`');
+      this.log('   Commit or stash your changes before running evolve.');
+      return false;
+    }
+
+    const isOpenCodeInstalled = await this.isOpenCodeInstalled();
+    if (!isOpenCodeInstalled) {
+      this.log('❌ Error: OpenCode is not installed or not in PATH');
+      this.log('   Self-evolution requires OpenCode CLI to run.');
+      this.log('   Install it with: npm install -g opencode');
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Resets internal state for a fresh run.
+   * Called at the start of `run()` to support re-running after cleanup.
+   */
+  private resetState(): void {
+    this.sleepCancelled = false;
+    this.interrupted = false;
+    this.cleanedUp = false;
+    this.consecutiveFailures = 0;
+    this.iterationCount = 0;
+  }
+
+  /**
+   * Displays dry-run information showing what would be done without executing.
+   */
+  private displayDryRunInfo(): void {
+    this.log('🔍 Dry run mode - showing what would be done');
+    this.log(`📁 Project: ${this.projectRoot}`);
+    this.log('\n📝 Would perform the following actions:');
+    this.log('  1. Read EVOLVE.md constitution file');
+    this.log('  2. Execute OpenCode with the evolution prompt');
+    this.log('  3. Verify changes (build, test, lint, commands)');
+    this.log('  4. Check if changes are committed');
+    this.log('  5. Revert if verification fails or changes not committed');
+    if (this.once) {
+      this.log('\n  Mode: Single iteration (--once)');
+    } else {
+      this.log('\n  Mode: Continuous (runs until Ctrl+C)');
+      this.log(`  Would loop every ${this.sleepMs / 1000} seconds`);
+    }
+    this.log('\n✨ Dry run complete - no changes made');
+  }
+
+  /**
+   * Displays the start banner for the evolution process.
+   */
+  private logStartBanner(): void {
     this.log('🔄 Starting self-evolution...');
     this.log(`📁 Project: ${this.projectRoot}`);
     this.log('💡 Press Ctrl+C to stop\n');
-    this.log('═══════════════════════════════════════');
-
-    const improvements: string[] = [];
-    const errors: string[] = [];
-
-    // 无限循环，直到用户中断
-    while (true) {
-      this.iterationCount++;
-
-      // 检查用户是否中断
-      if (this.isInterrupted()) {
-        this.log('\n\n⚠️  Evolution stopped by user');
-        break;
-      }
-
-      this.log(`\n📍 Iteration ${this.iterationCount}`);
-      this.log('───────────────────────────────────────');
-
-      // Step 1: 诊断当前状态
-      const diagnosis = await this.diagnose();
-      const hasIssues = diagnosis.testFailures.length > 0 || diagnosis.lintErrors.length > 0;
-
-      if (hasIssues) {
-        this.log('📊 Issues found:');
-        diagnosis.testFailures.forEach((f) => this.log(`  ❌ Test: ${f}`));
-        diagnosis.lintErrors.forEach((e) => this.log(`  ⚠️  Lint: ${e}`));
-      } else {
-        this.log('✅ No issues found, seeking improvements...');
-      }
-
-      // Step 2: 调用 OpenCode 进行改进
-      this.log('\n🤖 Asking OpenCode for improvements...');
-      const executed = await this.evolveWithOpenCode(diagnosis);
-
-      if (!executed) {
-        this.log('❌ OpenCode execution failed, retrying next iteration...');
-        await this.sleep(this.interval);
-        continue; // 直接进入下一轮
-      }
-
-      // Step 3: 验证
-      const verified = await this.verify();
-
-      if (verified) {
-        // 检查是否有实际改动
-        const hasChanges = await this.hasChanges();
-
-        if (hasChanges) {
-          this.log('✅ Verified: all tests pass, lint clean');
-
-          // Step 4: 提交 (不 push)
-          const commitMsg = this.generateCommitMessage(diagnosis);
-          await this.commit(commitMsg);
-          improvements.push(commitMsg);
-          this.improvementCount++;
-
-          this.log(`\n📈 Total improvements: ${this.improvementCount}`);
-        } else {
-          this.log('ℹ️  No changes made this iteration');
-        }
-      } else {
-        this.log('❌ Verification failed, reverting and retrying...');
-        await this.revert();
-      }
-
-      // 短暂等待后继续下一轮
-      this.log(`\n💤 Waiting 5s before next iteration...`);
-      await this.sleep(this.interval);
-    }
-
-    this.log(`\n✨ Evolution stopped`);
-    this.log(`📊 Total iterations: ${this.iterationCount}`);
-    this.log(`📊 Total improvements: ${improvements.length}`);
-
-    return {
-      success: improvements.length > 0,
-      iterations: this.iterationCount,
-      improvements,
-      errors,
-    };
   }
 
   /**
-   * 检查是否被用户中断
+   * Runs a single evolution iteration: execute → verify → commit check.
+   * @returns 'stop' if evolution should stop entirely, 'retry' if the iteration
+   *   failed and should be retried (skipping the --once check), or 'completed'
+   *   if the iteration finished and the --once check should apply.
    */
-  private isInterrupted(): boolean {
-    // 检查是否收到 SIGINT 信号
-    // 在实际运行时，用户按 Ctrl+C 会触发
-    return false; // 让循环自然继续
+  private async runIteration(): Promise<'stop' | 'retry' | 'completed'> {
+    this.iterationCount++;
+    this.log(`\n📊 Iteration ${this.iterationCount} starting...`);
+
+    // Capture git commit hash before evolution to detect if changes were committed
+    const beforeCommitHash = await this.getHeadCommitHash();
+
+    // 1. Read constitution file
+    const constitution = await this.readConstitution();
+
+    // 2. AI analyzes, executes, and commits autonomously
+    this.log('\n🤖 AI analyzing and evolving...');
+    const executed = await this.evolveWithOpenCode(constitution);
+
+    if (!executed) {
+      const shouldStop = this.handleEvolutionFailure('Evolution execution issue');
+      return shouldStop ? 'stop' : 'retry';
+    }
+
+    // 3. Verify (the only gate)
+    this.log('\n🔍 Verifying changes...');
+    const verified = await this.verify();
+
+    if (!verified) {
+      this.log('❌ Verification failed, reverting...');
+      const revertSuccess = await this.revert();
+      return this.handleRevertFailure(revertSuccess, 'Verification failed') ? 'completed' : 'stop';
+    }
+
+    // Verification passed, check if AI has committed by comparing commit hashes
+    const isClean = await this.isWorkingTreeClean();
+    const afterCommitHash = await this.getHeadCommitHash();
+
+    // Track hash comparison state - null means we couldn't determine the hash
+    const beforeHashError = beforeCommitHash === null;
+    const afterHashError = afterCommitHash === null;
+    const hashChanged = !beforeHashError && !afterHashError && beforeCommitHash !== afterCommitHash;
+
+    const shouldContinue = await this.handlePostVerificationState(
+      isClean,
+      hashChanged,
+      beforeHashError || afterHashError
+    );
+    return shouldContinue ? 'completed' : 'stop';
   }
 
   /**
-   * 诊断当前问题
+   * Runs the self-evolution loop - continues indefinitely until interrupted by user.
    */
-  private async diagnose(): Promise<Diagnosis> {
-    const diagnosis: Diagnosis = {
-      testFailures: [],
-      lintErrors: [],
-      timestamp: new Date().toISOString(),
-    };
+  async run(): Promise<void> {
+    this.resetState();
 
-    // 运行测试
-    try {
-      const testResult = await execa('npm', ['test'], {
-        cwd: this.projectRoot,
-        reject: false,
-      });
+    // Re-register signal handlers if they were cleaned up (allows re-run after cleanup)
+    this.setupSignalHandlers();
 
-      if (testResult.exitCode !== 0) {
-        const output = testResult.stdout + testResult.stderr;
-        const lines = output.split('\n');
-        for (const line of lines) {
-          if (line.includes('FAIL') || line.includes('✕') || line.includes('failed')) {
-            const match = line.match(/(\S+\.test\.ts)/);
-            if (match) {
-              diagnosis.testFailures.push(match[1]);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      diagnosis.testFailures.push(
-        `Test execution failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+    const preFlightPassed = await this.runPreFlightChecks();
+    if (!preFlightPassed) {
+      this.cleanup();
+      return;
     }
 
-    // 运行 lint
-    try {
-      const lintResult = await execa('npm', ['run', 'lint'], {
-        cwd: this.projectRoot,
-        reject: false,
-      });
-
-      if (lintResult.exitCode !== 0) {
-        const output = lintResult.stdout + lintResult.stderr;
-        const lines = output.split('\n');
-        for (const line of lines) {
-          if (line.includes('error') && !line.includes('warning')) {
-            const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('>') && !trimmed.includes('MODULE_TYPELESS')) {
-              diagnosis.lintErrors.push(trimmed.substring(0, 150));
-            }
-          }
-        }
-      }
-    } catch (error) {
-      diagnosis.lintErrors.push(
-        `Lint execution failed: ${error instanceof Error ? error.message : String(error)}`
-      );
+    if (this.dryRun) {
+      this.displayDryRunInfo();
+      this.cleanup();
+      return;
     }
 
-    return diagnosis;
-  }
+    this.logStartBanner();
 
-  /**
-   * 调用 OpenCode 进行改进
-   */
-  private async evolveWithOpenCode(diagnosis: Diagnosis): Promise<boolean> {
-    const prompt = this.buildPrompt(diagnosis);
-
-    try {
-      const args: string[] = ['run'];
-
-      if (this.apiKey) {
-        args.push('--api-key', this.apiKey);
-      }
-
-      if (this.model) {
-        args.push('--model', this.model);
-      }
-
-      args.push(prompt);
-
-      this.log('🤖 Executing OpenCode...');
-
-      const result = await execa('opencode', args, {
-        cwd: this.projectRoot,
-        stdio: 'inherit',
-        env: this.buildEnv(),
-      });
-
-      return result.exitCode === 0;
-    } catch (error) {
-      this.log(`⚠️  OpenCode exited: ${error instanceof Error ? error.message : String(error)}`);
-      return true; // 让验证阶段判断
-    }
-  }
-
-  /**
-   * 构建环境变量
-   */
-  private buildEnv(): Record<string, string> {
-    const env: Record<string, string> = {};
-
-    for (const [key, value] of Object.entries(process.env)) {
-      if (value !== undefined) {
-        env[key] = value;
-      }
-    }
-
-    if (this.model) {
-      env.OPENCODE_MODEL = this.model;
-    }
-
-    return env;
-  }
-
-  /**
-   * 构建发送给 OpenCode 的 prompt
-   */
-  private buildPrompt(diagnosis: Diagnosis): string {
-    const issues: string[] = [];
-
-    if (diagnosis.testFailures.length > 0) {
-      issues.push('Current test failures:');
-      diagnosis.testFailures.forEach((f) => issues.push(`  - ${f}`));
-    }
-
-    if (diagnosis.lintErrors.length > 0) {
-      issues.push('Current lint errors:');
-      diagnosis.lintErrors.forEach((e) => issues.push(`  - ${e}`));
-    }
-
-    const issueSection = issues.length > 0 ? issues.join('\n') : 'No current issues found.';
-
-    return `You are an expert software engineer helping to evolve this ubuild project.
-
-## Current Project Status
-${issueSection}
-
-## Your Task
-1. Analyze the codebase thoroughly
-2. Look for improvements: code quality, type safety, test coverage, architecture, dead code, etc.
-3. If there are issues, fix them
-4. If there are no issues, find and implement at least one improvement
-5. After making changes, run 'npm test' to verify all tests pass
-6. Run 'npm run lint' to verify no lint errors
-7. Do NOT commit - just fix/improve the code
-
-## Constraints
-- Do NOT use 'as any' or '@ts-ignore' to suppress errors
-- Fix root causes, not symptoms
-- Maintain existing code style and architecture
-
-Your goal: Make meaningful improvements. If no issues, find at least one improvement to make.`;
-  }
-
-  /**
-   * 验证修复是否成功
-   */
-  private async verify(): Promise<boolean> {
-    try {
-      const testResult = await execa('npm', ['test'], {
-        cwd: this.projectRoot,
-        reject: false,
-      });
-
-      if (testResult.exitCode !== 0) {
-        this.log(`❌ Tests failed`);
-        return false;
-      }
-
-      const lintResult = await execa('npm', ['run', 'lint'], {
-        cwd: this.projectRoot,
-        reject: false,
-      });
-
-      if (lintResult.exitCode !== 0) {
-        this.log(`❌ Lint failed`);
-        return false;
-      }
-
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * 检查是否有未提交的更改
-   */
-  private async hasChanges(): Promise<boolean> {
-    try {
-      const status = await execa('git', ['status', '--porcelain'], {
-        cwd: this.projectRoot,
-        reject: false,
-      });
-      return status.stdout.trim().length > 0;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * 提交更改 (不 push)
-   */
-  private async commit(message: string): Promise<void> {
-    try {
-      const status = await execa('git', ['status', '--porcelain'], {
-        cwd: this.projectRoot,
-        reject: false,
-      });
-
-      if (!status.stdout.trim()) {
-        this.log('⚠️  No changes to commit');
+    while (!this.interrupted) {
+      const result = await this.runIteration();
+      if (result === 'stop') {
         return;
       }
 
-      await execa('git', ['add', '-A'], { cwd: this.projectRoot });
+      // Only check --once for completed iterations (not retries from execution failure)
+      if (result === 'completed' && this.once) {
+        this.log('\n✨ Single iteration complete (--once flag set)');
+        this.cleanup();
+        return;
+      }
 
-      await execa('git', ['commit', '-m', message], {
-        cwd: this.projectRoot,
-        reject: false,
-      });
-
-      this.log(`📝 Committed: ${message}`);
-    } catch (error) {
-      this.log(`⚠️  Commit failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.log(`\n💤 Waiting ${this.sleepMs / 1000}s before next iteration...`);
+      await this.sleep(this.sleepMs);
     }
+
+    this.log('\n✨ Evolution stopped');
+    this.cleanup();
   }
 
   /**
-   * 回滚更改
+   * Reads the constitution file (EVOLVE.md).
    */
-  private async revert(): Promise<void> {
+  private async readConstitution(): Promise<string> {
     try {
-      await execa('git', ['checkout', '.'], { cwd: this.projectRoot });
-      this.log('🔄 Reverted changes');
+      const constitutionPath = path.join(this.projectRoot, 'EVOLVE.md');
+      if (await fs.pathExists(constitutionPath)) {
+        return await fs.readFile(constitutionPath, 'utf-8');
+      }
+      this.log('⚠️  No EVOLVE.md constitution file found - AI will operate without guidance');
     } catch (error) {
-      this.log(`⚠️  Revert failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.log(`⚠️  ${formatErrorWithPrefix('Could not read EVOLVE.md', error)}`);
     }
+    return '';
   }
 
   /**
-   * 生成提交消息
+   * Gets the file tree for context, including source files, config files, and documentation.
+   * Includes both tracked and untracked files to provide complete context for evolution.
+   * Uses a single git ls-files call with multiple pathspecs for efficiency.
    */
-  private generateCommitMessage(diagnosis: Diagnosis): string {
+  private async getFileTree(): Promise<string> {
+    // Single git ls-files call with all pathspecs for efficiency
+    const result = await this.safeExeca('git', [
+      'ls-files',
+      '--others',
+      '--exclude-standard',
+      '--cached',
+      '--',
+      '*.json',
+      '*.js',
+      '*.md',
+      '*.yml',
+      '*.yaml',
+      'bin/',
+      'src/',
+    ]);
+
+    if (!result || !result.stdout.trim()) {
+      const exitCode = result?.exitCode ?? 'unknown';
+      return `Project files (unable to list - git exit code ${exitCode})`;
+    }
+
+    // Categorize files by type
+    const files = result.stdout.split('\n').filter((f) => f.trim());
+    const configFiles: string[] = [];
+    const binFiles: string[] = [];
+    const srcFiles: string[] = [];
+
+    for (const file of files) {
+      if (file.startsWith('src/')) {
+        srcFiles.push(file);
+      } else if (file.startsWith('bin/')) {
+        binFiles.push(file);
+      } else if (
+        file.endsWith('.json') ||
+        file.endsWith('.js') ||
+        file.endsWith('.md') ||
+        file.endsWith('.yml') ||
+        file.endsWith('.yaml')
+      ) {
+        configFiles.push(file);
+      }
+    }
+
     const parts: string[] = [];
 
-    if (diagnosis.testFailures.length > 0) {
-      parts.push(`fix: ${diagnosis.testFailures.length} test failure(s)`);
+    if (configFiles.length > 0) {
+      parts.push('## Configuration Files\n' + configFiles.join('\n'));
     }
 
-    if (diagnosis.lintErrors.length > 0) {
-      parts.push(`fix: ${diagnosis.lintErrors.length} lint error(s)`);
+    if (binFiles.length > 0) {
+      parts.push('## Bin Files\n' + binFiles.join('\n'));
+    }
+
+    if (srcFiles.length > 0) {
+      parts.push('## Source Files\n' + srcFiles.join('\n'));
     }
 
     if (parts.length === 0) {
-      parts.push('refactor: improve code quality');
+      return 'Project files (unable to list)';
     }
 
-    return parts.join(', ');
+    return parts.join('\n\n');
   }
 
   /**
-   * 休眠
+   * Builds the evolution prompt for OpenCode with constitution and file tree.
+   */
+  private buildEvolutionPrompt(constitution: string, fileTree: string): string {
+    const runner = this.getCommandRunner();
+    const cliVerifyCommands = EVOLUTION_VERIFY_COMMANDS.map(
+      (cmd) => `   - ${runner.file} ${runner.prefixArgs.join(' ')} ${cmd} --help`
+    ).join('\n');
+
+    return `${constitution}
+## Current Codebase
+
+Source files:
+${fileTree}
+
+## Your Task
+
+Read and analyze the codebase, then decide:
+
+1. FIX - Fix bugs, errors, or broken functionality
+2. TEST - Add tests for uncovered code
+3. REFACTOR - Simplify complex code
+4. FEATURE - Add small, useful new functionality (only if base is solid)
+5. SKIP - Codebase is healthy, no changes needed this round
+
+Execute your decision. Make minimal, focused changes.
+
+## After Changes
+
+1. **Verify** all pass:
+   - npm run build
+   - npm test
+   - npm run lint
+${cliVerifyCommands}
+
+2. **Commit** if verification passes:
+   \`\`\`bash
+   git add -A
+   git commit -m "type: description"
+   \`\`\`
+
+    Use conventional commit types:
+    - \`fix:\` - bug fixes
+    - \`test:\` - adding tests
+    - \`refactor:\` - code improvements
+    - \`feat:\` - new features
+
+If verification fails, do NOT commit - the system will revert automatically.`;
+  }
+
+  /**
+   * Invokes OpenCode to apply improvements.
+   */
+  private async evolveWithOpenCode(constitution: string): Promise<boolean> {
+    const fileTree = await this.getFileTree();
+    const prompt = this.buildEvolutionPrompt(constitution, fileTree);
+
+    try {
+      this.log('🚀 Executing OpenCode...');
+
+      const result = await execa('opencode', ['run', prompt], {
+        cwd: this.projectRoot,
+        stdio: ['inherit', 'pipe', 'pipe'], // Capture stdout/stderr for debugging
+        reject: false,
+        timeout: this.opencodeTimeoutMs, // 10 minutes timeout to prevent indefinite hangs
+      });
+
+      // Log stderr if present for debugging
+      if (result.stderr && result.stderr.trim()) {
+        const stderrPreview = this.truncateOutput(result.stderr, OPENCODE_STDERR_PREVIEW_LIMIT);
+        this.log(`OpenCode stderr: ${stderrPreview}`);
+      }
+
+      // Check if OpenCode timed out - revert any partial changes
+      if (result.timedOut) {
+        this.log('⚠️  OpenCode timed out, reverting any partial changes...');
+        const reverted = await this.revert();
+        if (!reverted) {
+          this.log('❌ Revert after timeout failed - manual intervention may be required');
+        }
+        return false;
+      }
+
+      if (result.exitCode !== 0) {
+        this.log(`⚠️  OpenCode exited with code ${result.exitCode}`);
+        return false;
+      }
+
+      this.log('✅ OpenCode execution completed');
+      return true;
+    } catch (error) {
+      this.log(`⚠️  ${formatErrorWithPrefix('OpenCode execution failed', error)}`);
+      return false;
+    }
+  }
+
+  /**
+   * Returns the command runner configuration based on the useTsNode setting.
+   * Centralizes the ts-node vs dist branching used by both verify() and buildEvolutionPrompt().
+   */
+  private getCommandRunner(): { file: string; prefixArgs: string[] } {
+    return this.useTsNode
+      ? { file: 'npx', prefixArgs: ['ts-node', 'src/cli/index.ts'] }
+      : { file: 'node', prefixArgs: ['dist/cli/index.js'] };
+  }
+
+  /**
+   * Comprehensive verification - includes self-verification.
+   * Uses EVOLUTION_VERIFY_COMMANDS to dynamically check all CLI commands.
+   * When adding new commands, add them to EVOLUTION_VERIFY_COMMANDS in types/evolve.ts.
+   */
+  private async verify(): Promise<boolean> {
+    const runner = this.getCommandRunner();
+    const commandChecks = EVOLUTION_VERIFY_COMMANDS.map((cmd) => ({
+      name: `${cmd.charAt(0).toUpperCase() + cmd.slice(1)} command`,
+      file: runner.file,
+      args: [...runner.prefixArgs, cmd, '--help'],
+    }));
+
+    const checks: Array<{ name: string; file: string; args: string[] }> = [
+      { name: 'Build', file: 'npm', args: ['run', 'build'] },
+      { name: 'Tests', file: 'npm', args: ['test'] },
+      { name: 'Lint', file: 'npm', args: ['run', 'lint'] },
+      ...commandChecks,
+    ];
+
+    for (const check of checks) {
+      this.log(`  Checking ${check.name}...`);
+      const result = await this.safeExeca(check.file, check.args, {
+        timeout: this.verifyTimeoutMs,
+      });
+
+      if (!result || result.exitCode !== 0) {
+        this.log(`  ❌ ${check.name} failed`);
+        // Show error output for debugging
+        if (result?.stderr) {
+          const stderrPreview = this.truncateOutput(result.stderr, VERIFY_ERROR_PREVIEW_LIMIT);
+          this.log(`     Error: ${stderrPreview}`);
+        }
+        if (result?.stdout) {
+          const stdoutPreview = this.truncateOutput(result.stdout, VERIFY_ERROR_PREVIEW_LIMIT);
+          if (stdoutPreview) {
+            this.log(`     Output: ${stdoutPreview}`);
+          }
+        }
+        return false;
+      }
+      this.log(`  ✅ ${check.name} passed`);
+    }
+
+    return true;
+  }
+
+  /**
+   * Handles evolution failure by incrementing failure counter and checking max retries.
+   * @param reason - The reason for the failure (for logging)
+   * @returns true if evolution should stop (max retries reached), false to continue
+   */
+  private handleEvolutionFailure(reason: string): boolean {
+    this.consecutiveFailures++;
+    const shouldStop = this.maxRetries >= 0 && this.consecutiveFailures >= this.maxRetries;
+
+    if (shouldStop) {
+      this.log(`❌ ${reason} - Max retries (${this.maxRetries}) reached, stopping evolution`);
+      this.cleanup();
+    } else {
+      const retryLabel = this.maxRetries === -1 ? '∞' : this.maxRetries;
+      this.log(
+        `⚠️  ${reason} (${this.consecutiveFailures}/${retryLabel}), retrying next iteration...`
+      );
+    }
+
+    return shouldStop;
+  }
+
+  /**
+   * Handles revert failure by logging error and cleaning up if necessary.
+   * @param revertSuccess - Whether the revert operation succeeded
+   * @param reason - The reason for the revert (for logging)
+   * @returns true if evolution should continue, false if it should stop
+   */
+  private handleRevertFailure(revertSuccess: boolean, reason: string): boolean {
+    if (!revertSuccess) {
+      this.log('❌ Revert failed - manual intervention may be required');
+      this.cleanup();
+      return false;
+    }
+    const shouldStop = this.handleEvolutionFailure(reason);
+    return !shouldStop;
+  }
+
+  /**
+   * Attempts to revert changes and reset the consecutive failure counter on success.
+   * @returns true if revert succeeded (failure counter reset), false if revert failed (stops evolution)
+   */
+  private async revertOrFailOrResetFailures(): Promise<boolean> {
+    const revertSuccess = await this.revert();
+    if (!revertSuccess) {
+      this.log('❌ Revert failed - manual intervention may be required');
+      this.cleanup();
+      return false;
+    }
+    this.consecutiveFailures = 0;
+    return true;
+  }
+
+  /**
+   * Handles post-verification state by checking working tree cleanliness and commit status.
+   * @param isClean - Whether the working tree is clean
+   * @param hashChanged - Whether the commit hash changed (indicating AI committed)
+   * @param hashError - Whether there was an error getting commit hashes
+   * @returns true if evolution should continue, false if it should stop
+   */
+  private async handlePostVerificationState(
+    isClean: boolean,
+    hashChanged: boolean,
+    hashError: boolean
+  ): Promise<boolean> {
+    // If we couldn't determine commit hashes, log a warning but continue
+    if (hashError) {
+      this.log('⚠️  Could not determine commit hash status (git error)');
+      if (isClean) {
+        this.log('ℹ️  Working tree is clean, assuming no changes made');
+        this.consecutiveFailures = 0;
+        return true;
+      }
+      // Not clean but can't verify commit - revert to be safe
+      this.log('⚠️  Working tree is not clean, reverting to be safe...');
+      return this.revertOrFailOrResetFailures();
+    }
+
+    if (isClean && hashChanged) {
+      this.log('✅ Changes committed by AI');
+      this.consecutiveFailures = 0; // Reset on success
+      return true;
+    }
+
+    if (isClean && !hashChanged) {
+      this.log('ℹ️  AI made no changes this iteration (SKIP)');
+      this.consecutiveFailures = 0; // Not a failure
+      return true;
+    }
+
+    // Not clean = some changes left uncommitted
+    if (hashChanged) {
+      this.log('⚠️  Verification passed but AI left uncommitted changes after partial commit');
+    } else {
+      this.log('⚠️  Verification passed but AI did not commit changes');
+    }
+    this.log('🔄 Reverting uncommitted changes...');
+    const result = await this.revertOrFailOrResetFailures();
+    if (result) {
+      this.log('ℹ️  Reset failure counter (verification passed, commit missed)');
+    }
+    return result;
+  }
+
+  /**
+   * Checks if working tree is clean (all changes committed).
+   */
+  private async isWorkingTreeClean(): Promise<boolean> {
+    const result = await this.safeExeca('git', ['status', '--porcelain']);
+    return result ? result.stdout.trim().length === 0 : false;
+  }
+
+  /**
+   * Gets the current HEAD commit hash.
+   * @returns The commit hash string, or null if not in a git repo or on error
+   */
+  private async getHeadCommitHash(): Promise<string | null> {
+    const result = await this.safeExeca('git', ['rev-parse', 'HEAD']);
+    if (!result || result.exitCode !== 0) {
+      return null;
+    }
+    const hash = result.stdout.trim();
+    return hash.length > 0 ? hash : null;
+  }
+
+  /**
+   * Reverts changes (both staged and unstaged).
+   * @returns true if revert succeeded, false otherwise
+   */
+  private async revert(): Promise<boolean> {
+    // First reset any staged changes, then revert working tree
+    const resetResult = await this.safeExeca('git', ['reset']);
+    if (!resetResult || resetResult.exitCode !== 0) {
+      this.log('⚠️  Git reset failed');
+      return false;
+    }
+
+    const checkoutResult = await this.safeExeca('git', ['checkout', '.']);
+    if (!checkoutResult || checkoutResult.exitCode !== 0) {
+      this.log('⚠️  Git checkout failed');
+      return false;
+    }
+
+    // Remove untracked files and directories to prevent accumulation across iterations
+    // Skip if keepUntracked is true to preserve new files created during evolution
+    if (!this.keepUntracked) {
+      const cleanResult = await this.safeExeca('git', ['clean', '-fd']);
+      if (!cleanResult || cleanResult.exitCode !== 0) {
+        this.log('⚠️  Git clean failed');
+        return false;
+      }
+    } else {
+      this.log('ℹ️  Preserving untracked files (--keep-untracked)');
+    }
+
+    this.log('🔄 Reverted changes');
+    return true;
+  }
+
+  /**
+   * Sleeps for the specified duration.
+   * Clears the timer if interrupted to prevent memory leaks.
+   * Resolves immediately if cleanup has been called.
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    // If already cleaned up, resolve immediately to prevent hanging
+    if (this.cleanedUp) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      // Store the resolve function so cleanup can call it
+      this.sleepResolve = resolve;
+
+      this.sleepTimer = setTimeout(() => {
+        this.sleepTimer = null;
+        // Only resolve if not cancelled and resolve still exists
+        if (!this.sleepCancelled && this.sleepResolve) {
+          this.sleepResolve = null;
+          resolve();
+        }
+      }, ms);
+    });
+  }
+
+  /**
+   * Gets the current status of the driver for debugging purposes.
+   * @returns Object containing driver state information
+   */
+  getStatus(): {
+    interrupted: boolean;
+    cleanedUp: boolean;
+    projectRoot: string;
+    dryRun: boolean;
+    once: boolean;
+    consecutiveFailures: number;
+    iterationCount: number;
+    keepUntracked: boolean;
+  } {
+    return {
+      interrupted: this.interrupted,
+      cleanedUp: this.cleanedUp,
+      projectRoot: this.projectRoot,
+      dryRun: this.dryRun,
+      once: this.once,
+      consecutiveFailures: this.consecutiveFailures,
+      iterationCount: this.iterationCount,
+      keepUntracked: this.keepUntracked,
+    };
   }
 }
 
 /**
- * 便捷函数：运行自进化
+ * Convenience function to run the self-evolution process.
+ * @param options - Optional configuration for the self-evolution process
  */
-export async function runSelfEvolution(options?: SelfEvolverOptions): Promise<EvolutionResult> {
+export async function runSelfEvolution(options?: SelfEvolverOptions): Promise<void> {
   const driver = new SelfDriver(options);
-  return driver.run();
+  try {
+    await driver.run();
+  } finally {
+    driver.cleanup();
+  }
 }

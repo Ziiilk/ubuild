@@ -1,11 +1,113 @@
 import path from 'path';
 import fs from 'fs-extra';
+import { Logger } from './logger';
+import { formatError } from './error';
+import {
+  BUILD_TARGETS,
+  BUILD_CONFIGS,
+  BUILD_PLATFORMS,
+  IDE_TYPES,
+  PROJECT_TYPES,
+  DEFAULTS,
+  type BuildTarget,
+  type BuildConfig,
+  type BuildPlatform,
+  type IDEType,
+  type ProjectType,
+} from './constants';
 
+/**
+ * Validation utilities for ubuild
+ *
+ * Provides standardized validation functions for project names, engine paths,
+ * build configurations, and project files. Ensures consistent validation
+ * across all commands and operations.
+ *
+ * @module utils/validator
+ * @example
+ * ```typescript
+ * import { Validator } from '@zitool/ubuild';
+ *
+ * // Validate project name
+ * if (Validator.isValidProjectName('MyProject')) {
+ *   console.log('Valid project name');
+ * }
+ *
+ * // Validate engine path
+ * const isValid = await Validator.isValidEnginePath('/path/to/UE5');
+ *
+ * // Validate .uproject file
+ * const isProject = await Validator.isValidUProjectFile('./MyProject.uproject');
+ * ```
+ */
 export class Validator {
+  /**
+   * Parses and validates a positive integer option value.
+   * @param value - The raw string value to parse
+   * @param optionName - The name of the option for error messages
+   * @param maxValue - Optional maximum allowed value
+   * @returns The parsed positive integer
+   * @throws Error if value is not a valid positive integer or exceeds maximum
+   */
+  static parsePositiveInt(value: string, optionName: string, maxValue?: number): number {
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      throw new Error(`${optionName} must be a positive integer, got: ${value}`);
+    }
+    if (parsed !== parseFloat(value)) {
+      throw new Error(`${optionName} must be an integer, got: ${value}`);
+    }
+    if (maxValue !== undefined && parsed > maxValue) {
+      throw new Error(`${optionName} must be <= ${maxValue}, got: ${value}`);
+    }
+    return parsed;
+  }
+
+  /**
+   * Parses and validates an integer option value within specified bounds.
+   * @param value - The raw string value to parse
+   * @param optionName - The name of the option for error messages
+   * @param options - Optional bounds configuration
+   * @param options.min - Minimum allowed value (inclusive)
+   * @param options.max - Maximum allowed value (inclusive)
+   * @returns The parsed integer
+   * @throws Error if value is not a valid integer or is outside bounds
+   */
+  static parseBoundedInt(
+    value: string,
+    optionName: string,
+    options?: { min?: number; max?: number }
+  ): number {
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed)) {
+      throw new Error(`${optionName} must be a number, got: ${value}`);
+    }
+    if (parsed !== parseFloat(value)) {
+      throw new Error(`${optionName} must be an integer, got: ${value}`);
+    }
+    if (options?.min !== undefined && parsed < options.min) {
+      throw new Error(`${optionName} must be >= ${options.min}, got: ${value}`);
+    }
+    if (options?.max !== undefined && parsed > options.max) {
+      throw new Error(`${optionName} must be <= ${options.max}, got: ${value}`);
+    }
+    return parsed;
+  }
+
+  /**
+   * Validates a project name format (alphanumeric, underscores, hyphens).
+   * @param name - The project name to validate
+   * @returns True if the name is valid
+   */
   static isValidProjectName(name: string): boolean {
     return /^[a-zA-Z0-9_-]+$/.test(name);
   }
 
+  /**
+   * Validates that an engine path exists and contains required directories.
+   * @param enginePath - The path to validate
+   * @returns Promise resolving to true if the path is a valid engine installation
+   */
   static async isValidEnginePath(enginePath: string): Promise<boolean> {
     try {
       const normalizedPath = path.normalize(enginePath);
@@ -16,7 +118,7 @@ export class Validator {
 
       const requiredDirs = [
         path.join(normalizedPath, 'Engine'),
-        path.join(normalizedPath, 'Engine', 'Binaries')
+        path.join(normalizedPath, 'Engine', 'Binaries'),
       ];
 
       for (const dir of requiredDirs) {
@@ -26,36 +128,65 @@ export class Validator {
       }
 
       return true;
-    } catch {
+    } catch (error) {
+      Logger.debug(`isValidEnginePath failed: ${formatError(error)}`);
       return false;
     }
   }
 
-  static isValidBuildTarget(target: string): boolean {
-    const validTargets = ['Editor', 'Game', 'Client', 'Server'];
-    return validTargets.includes(target) || target.trim().length > 0;
+  /**
+   * Validates a build target name.
+   * @param target - The target to validate
+   * @returns True if valid or non-empty string for custom targets
+   */
+  static isValidBuildTarget(target: string): target is BuildTarget | string {
+    // Accept known targets or any non-empty string (for custom targets)
+    return (
+      BUILD_TARGETS.includes(target as (typeof BUILD_TARGETS)[number]) || target.trim().length > 0
+    );
   }
 
-  static isValidBuildConfig(config: string): boolean {
-    const validConfigs = ['Debug', 'DebugGame', 'Development', 'Shipping', 'Test'];
-    return validConfigs.includes(config);
+  /**
+   * Validates a build configuration string.
+   * @param config - The configuration to validate
+   * @returns True if the configuration is valid
+   */
+  static isValidBuildConfig(config: string): config is BuildConfig {
+    return BUILD_CONFIGS.includes(config as (typeof BUILD_CONFIGS)[number]);
   }
 
-  static isValidBuildPlatform(platform: string): boolean {
-    const validPlatforms = ['Win64', 'Win32', 'Linux', 'Mac', 'Android', 'IOS'];
-    return validPlatforms.includes(platform);
+  /**
+   * Validates a build platform string.
+   * @param platform - The platform to validate
+   * @returns True if the platform is valid
+   */
+  static isValidBuildPlatform(platform: string): platform is BuildPlatform {
+    return BUILD_PLATFORMS.includes(platform as (typeof BUILD_PLATFORMS)[number]);
   }
 
-  static isValidIDE(ide: string): boolean {
-    const validIDEs = ['sln', 'vscode', 'clion', 'xcode', 'vs2022'];
-    return validIDEs.includes(ide);
+  /**
+   * Validates an IDE type string.
+   * @param ide - The IDE type to validate
+   * @returns True if the IDE type is valid
+   */
+  static isValidIDE(ide: string): ide is IDEType {
+    return IDE_TYPES.includes(ide as (typeof IDE_TYPES)[number]);
   }
 
-  static isValidProjectType(type: string): boolean {
-    const validTypes = ['cpp', 'blueprint', 'blank'];
-    return validTypes.includes(type);
+  /**
+   * Validates a project type string.
+   * @param type - The project type to validate
+   * @returns True if the project type is valid
+   */
+  static isValidProjectType(type: string): type is ProjectType {
+    return PROJECT_TYPES.includes(type as (typeof PROJECT_TYPES)[number]);
   }
 
+  /**
+   * Validates that a file is a valid .uproject file.
+   * @param uprojectPath - Path to the .uproject file
+   * @returns Promise resolving to true if the file is a valid project file
+   */
   static async isValidUProjectFile(uprojectPath: string): Promise<boolean> {
     try {
       if (!uprojectPath.endsWith('.uproject')) {
@@ -69,13 +200,82 @@ export class Validator {
       const content = await fs.readFile(uprojectPath, 'utf-8');
       const uproject = JSON.parse(content);
 
-      return uproject.FileVersion === 3 && uproject.EngineAssociation && Array.isArray(uproject.Modules);
-    } catch {
+      // Blueprint projects may not have Modules array, so make it optional
+      const hasValidFileVersion = uproject.FileVersion === 3;
+      const hasEngineAssociation =
+        typeof uproject.EngineAssociation === 'string' && uproject.EngineAssociation.length > 0;
+      const hasValidModules = !uproject.Modules || Array.isArray(uproject.Modules);
+
+      return Boolean(hasValidFileVersion && hasEngineAssociation && hasValidModules);
+    } catch (error) {
+      Logger.debug(`isValidUProjectFile failed for ${uprojectPath}: ${formatError(error)}`);
       return false;
     }
   }
 
-  static async isSafeForInit(directory: string, force = false): Promise<{ safe: boolean; message: string }> {
+  /**
+   * Validates build options (target, config, platform) with defaults and error logging.
+   * Consolidates the validation pattern used across ProjectBuilder and ProjectRunner.
+   *
+   * @param options - Raw build options to validate
+   * @param options.target - Build target (defaults to 'Editor')
+   * @param options.config - Build configuration (defaults to 'Development')
+   * @param options.platform - Build platform (defaults to 'Win64')
+   * @param logger - Optional logger for error output
+   * @returns Validated options with defaults applied
+   * @throws Error if any validation fails
+   *
+   * @example
+   * ```typescript
+   * const validated = Validator.validateBuildOptions({
+   *   target: 'Game',
+   *   config: 'Shipping',
+   * }, logger);
+   * // validated.target = 'Game', validated.config = 'Shipping', validated.platform = 'Win64'
+   * ```
+   */
+  static validateBuildOptions(
+    options: { target?: string; config?: string; platform?: string },
+    logger?: { error: (msg: string) => void; info: (msg: string) => void }
+  ): { target: string; config: string; platform: string } {
+    // Validate provided values BEFORE applying defaults
+    // Empty string is explicitly invalid, undefined gets default
+    if (options.target !== undefined && !this.isValidBuildTarget(options.target)) {
+      logger?.error(`Invalid build target: ${options.target}`);
+      logger?.info('Valid generic targets: Editor, Game, Client, Server');
+      throw new Error('Invalid target');
+    }
+
+    if (options.config !== undefined && !this.isValidBuildConfig(options.config)) {
+      logger?.error(`Invalid build configuration: ${options.config}`);
+      logger?.info('Valid configurations: Debug, DebugGame, Development, Shipping, Test');
+      throw new Error('Invalid config');
+    }
+
+    if (options.platform !== undefined && !this.isValidBuildPlatform(options.platform)) {
+      logger?.error(`Invalid build platform: ${options.platform}`);
+      logger?.info('Valid platforms: Win64, Win32, Linux, Mac, Android, IOS');
+      throw new Error('Invalid platform');
+    }
+
+    // Apply defaults only for undefined values
+    const target = options.target ?? DEFAULTS.BUILD_TARGET;
+    const config = options.config ?? DEFAULTS.BUILD_CONFIG;
+    const platform = options.platform ?? DEFAULTS.BUILD_PLATFORM;
+
+    return { target, config, platform };
+  }
+
+  /**
+   * Checks if a directory is safe for project initialization.
+   * @param directory - The directory to check
+   * @param force - Whether to override safety checks
+   * @returns Promise resolving to safety check result with message
+   */
+  static async isSafeForInit(
+    directory: string,
+    force = false
+  ): Promise<{ safe: boolean; message: string }> {
     try {
       if (!(await fs.pathExists(directory))) {
         return { safe: true, message: 'Directory does not exist, will be created' };
@@ -87,35 +287,35 @@ export class Validator {
       }
 
       const files = await fs.readdir(directory);
-      const filteredFiles = files.filter(f => !f.startsWith('.') && f !== '.git');
+      const filteredFiles = files.filter((f) => !f.startsWith('.') && f !== '.git');
 
       if (filteredFiles.length === 0) {
         return { safe: true, message: 'Directory is empty or contains only hidden files' };
       }
 
-      const uprojectFiles = files.filter(f => f.endsWith('.uproject'));
+      const uprojectFiles = files.filter((f) => f.endsWith('.uproject'));
       if (uprojectFiles.length > 0) {
         return {
           safe: false,
-          message: `Directory already contains Unreal Engine project: ${uprojectFiles[0]}`
+          message: `Directory already contains Unreal Engine project: ${uprojectFiles[0]}`,
         };
       }
 
       if (force) {
         return {
           safe: true,
-          message: 'Directory is not empty, but force flag is set - proceeding anyway'
+          message: 'Directory is not empty, but force flag is set - proceeding anyway',
         };
       }
 
       return {
         safe: false,
-        message: 'Directory is not empty. Use --force to override.'
+        message: 'Directory is not empty. Use --force to override.',
       };
     } catch (error) {
       return {
         safe: false,
-        message: `Failed to check directory: ${error instanceof Error ? error.message : String(error)}`
+        message: `Failed to check directory: ${formatError(error)}`,
       };
     }
   }

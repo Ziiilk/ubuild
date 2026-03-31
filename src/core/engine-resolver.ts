@@ -1,3 +1,13 @@
+/**
+ * Engine resolver module for ubuild
+ *
+ * Resolves Unreal Engine installations from various sources including
+ * Windows Registry, Epic Launcher, environment variables, and manual paths.
+ * Provides engine version detection and project association resolution.
+ *
+ * @module core/engine-resolver
+ */
+
 import fs from 'fs-extra';
 import path from 'path';
 import { execa } from 'execa';
@@ -11,8 +21,89 @@ import {
 import { Platform } from '../utils/platform';
 import { Logger } from '../utils/logger';
 import { ProjectPathResolver } from './project-path-resolver';
+import { formatError } from '../utils/error';
+import { compareVersions as compareVersionStrings } from '../utils/version';
 
+/**
+ * Registry key locations to search for Unreal Engine installations.
+ * Ordered by likelihood of finding relevant entries.
+ */
+const REGISTRY_LOCATIONS: string[] = [
+  'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds',
+  'HKEY_LOCAL_MACHINE\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds',
+  'HKEY_CURRENT_USER\\SOFTWARE\\EpicGames\\Unreal Engine',
+  'HKEY_LOCAL_MACHINE\\SOFTWARE\\EpicGames\\Unreal Engine',
+  'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\UE_5',
+  'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\UE_4',
+  'HKEY_LOCAL_MACHINE\\SOFTWARE\\Epic Games\\UE_5',
+  'HKEY_LOCAL_MACHINE\\SOFTWARE\\Epic Games\\UE_4',
+];
+
+/**
+ * Gets launcher manifest file paths to search for Unreal Engine installations.
+ * Covers various Epic Games Launcher installation locations.
+ * @returns Array of manifest file paths (computed at call time for testability)
+ */
+function getLauncherManifestPaths(): string[] {
+  return [
+    path.join(process.env.LOCALAPPDATA || '', 'UnrealEngine', 'Common', 'LauncherInstalled.dat'),
+    path.join(
+      process.env.PROGRAMDATA || '',
+      'Epic',
+      'UnrealEngineLauncher',
+      'LauncherInstalled.dat'
+    ),
+    path.join(
+      process.env.PROGRAMDATA || '',
+      'Epic',
+      'EpicGamesLauncher',
+      'Data',
+      'LauncherInstalled.dat'
+    ),
+    path.join(process.env.APPDATA || '', 'Epic', 'UnrealEngineLauncher', 'LauncherInstalled.dat'),
+    path.join(
+      process.env.APPDATA || '',
+      'Epic',
+      'EpicGamesLauncher',
+      'Data',
+      'LauncherInstalled.dat'
+    ),
+    path.join(process.env.LOCALAPPDATA || '', 'EpicGamesLauncher', 'Data', 'LauncherInstalled.dat'),
+    path.join(
+      process.env.LOCALAPPDATA || '',
+      'Epic',
+      'UnrealEngineLauncher',
+      'LauncherInstalled.dat'
+    ),
+    path.join(process.env.APPDATA || '', 'Epic Games', 'Launcher', 'Data', 'LauncherInstalled.dat'),
+    path.join(
+      process.env.PROGRAMFILES || 'C:\\Program Files',
+      'Epic Games',
+      'Launcher',
+      'Data',
+      'LauncherInstalled.dat'
+    ),
+    path.join(
+      process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)',
+      'Epic Games',
+      'Launcher',
+      'Data',
+      'LauncherInstalled.dat'
+    ),
+  ];
+}
+
+/**
+ * Resolves Unreal Engine installations from various sources including
+ * Windows Registry, Epic Launcher, environment variables, and manual paths.
+ */
 export class EngineResolver {
+  /**
+   * Resolves the engine path using the provided options or auto-detection.
+   * @param options - Path resolution options including project path and engine path override
+   * @returns Promise resolving to the resolved engine installation path
+   * @throws Error if engine path cannot be resolved or does not exist
+   */
   static async resolveEnginePath(options: EnginePathResolutionOptions = {}): Promise<string> {
     const { projectPath, enginePath } = options;
 
@@ -36,6 +127,11 @@ export class EngineResolver {
     return engineResult.engine.path;
   }
 
+  /**
+   * Resolves the engine installation for a given project.
+   * @param projectPath - Optional path to the project to find associated engine
+   * @returns Promise resolving to engine detection result with matched engine info
+   */
   static async resolveEngine(projectPath?: string): Promise<EngineDetectionResult> {
     const warnings: string[] = [];
 
@@ -60,7 +156,7 @@ export class EngineResolver {
           matchedEngine = engineInstallations.find((engine) => {
             if (engine.associationId && engine.associationId.startsWith('UE_')) {
               const engineVersion = engine.associationId.replace('UE_', '').replace(/_/g, '.');
-              return this.compareVersionString(engineVersion, association) === 0;
+              return compareVersionStrings(engineVersion, association) === 0;
             }
             return false;
           });
@@ -83,6 +179,12 @@ export class EngineResolver {
         );
       }
 
+      if (!matchedEngine && engineInstallations.length === 0) {
+        warnings.push(
+          'No Unreal Engine installations found. Checked Windows Registry, Epic Launcher, and environment variables. Specify --engine-path manually.'
+        );
+      }
+
       return {
         engine: matchedEngine,
         uprojectEngine,
@@ -90,12 +192,17 @@ export class EngineResolver {
       };
     } catch (error) {
       return {
-        error: error instanceof Error ? error.message : String(error),
+        error: formatError(error),
         warnings,
       };
     }
   }
 
+  /**
+   * Extracts the engine association from a project's .uproject file.
+   * @param projectPath - Path to the project directory or .uproject file
+   * @returns Promise resolving to the engine association and any warnings
+   */
   private static async getEngineAssociationFromProject(projectPath: string): Promise<{
     association?: EngineAssociation;
     warnings: string[];
@@ -135,13 +242,15 @@ export class EngineResolver {
 
       return { association, warnings };
     } catch (error) {
-      warnings.push(
-        `Failed to read project file: ${error instanceof Error ? error.message : String(error)}`
-      );
+      warnings.push(`Failed to read project file: ${formatError(error)}`);
       return { warnings };
     }
   }
 
+  /**
+   * Finds all Unreal Engine installations from registry, launcher, and environment.
+   * @returns Promise resolving to array of detected engine installations
+   */
   public static async findEngineInstallations(): Promise<EngineInstallation[]> {
     const installations: EngineInstallation[] = [];
 
@@ -167,36 +276,29 @@ export class EngineResolver {
     return uniqueInstallations;
   }
 
+  /**
+   * Searches Windows registry for Unreal Engine installations.
+   * @returns Promise resolving to array of engine installations found in registry
+   */
   private static async getEnginesFromRegistry(): Promise<EngineInstallation[]> {
     const installations: EngineInstallation[] = [];
 
-    const registryLocations = [
-      'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds',
-      'HKEY_LOCAL_MACHINE\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds',
-      'HKEY_CURRENT_USER\\SOFTWARE\\EpicGames\\Unreal Engine',
-      'HKEY_LOCAL_MACHINE\\SOFTWARE\\EpicGames\\Unreal Engine',
-      'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\UE_5',
-      'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\UE_4',
-      'HKEY_LOCAL_MACHINE\\SOFTWARE\\Epic Games\\UE_5',
-      'HKEY_LOCAL_MACHINE\\SOFTWARE\\Epic Games\\UE_4',
-    ];
-
     Logger.debug(
-      'Querying registry for UE engines from locations: ' + JSON.stringify(registryLocations)
+      'Querying registry for UE engines from locations: ' + JSON.stringify(REGISTRY_LOCATIONS)
     );
 
-    for (const registryLocation of registryLocations) {
+    for (const registryLocation of REGISTRY_LOCATIONS) {
       try {
         Logger.debug(`Querying registry location: ${registryLocation}`);
         const locationEngines = await this.queryRegistryKey(registryLocation);
         installations.push(...locationEngines);
         Logger.debug(`Found ${locationEngines.length} engines at ${registryLocation}`);
       } catch (error) {
-        const err = error as Error;
-        if (err.message && err.message.includes('unable to find the specified registry key')) {
+        const errorMessage = formatError(error);
+        if (errorMessage.includes('unable to find the specified registry key')) {
           Logger.debug(`Registry key not found: ${registryLocation}`);
         } else {
-          Logger.debug(`Failed to query registry location ${registryLocation}: ${err.message}`);
+          Logger.debug(`Failed to query registry location ${registryLocation}: ${errorMessage}`);
         }
       }
     }
@@ -205,146 +307,187 @@ export class EngineResolver {
     return installations;
   }
 
+  /**
+   * Queries a specific registry key for Unreal Engine entries.
+   * @param registryKey - The registry key path to query
+   * @returns Promise resolving to array of engine installations found
+   */
   private static async queryRegistryKey(registryKey: string): Promise<EngineInstallation[]> {
-    const installations: EngineInstallation[] = [];
-
     const { stdout } = await execa('reg', ['query', registryKey, '/s']);
-
     const lines = stdout.split('\n');
+    const installations: EngineInstallation[] = [];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (!line) continue;
+      if (!line || line.includes(registryKey)) continue;
 
-      const fullMatch = line.match(/{([^}]+)}\s+REG_SZ\s+(.+)$/);
-      if (fullMatch) {
-        const guid = `{${fullMatch[1]}}`;
-        const enginePath = fullMatch[2].trim();
-
-        installations.push({
-          path: enginePath,
-          associationId: guid,
-          displayName: `UE Engine ${guid}`,
-          version: undefined,
-          source: 'registry',
-        });
-        continue;
-      }
-
-      if (line.startsWith('{')) {
-        const guidMatch = line.match(/^({[^}]+})/);
-        if (guidMatch) {
-          const guid = guidMatch[1];
-          let enginePath: string | undefined;
-
-          const regSzMatch = line.match(/REG_SZ\s+(.+)$/);
-          if (regSzMatch) {
-            enginePath = regSzMatch[1].trim();
-          } else {
-            for (let j = i + 1; j < lines.length; j++) {
-              const nextLine = lines[j].trim();
-              if (nextLine.includes('REG_SZ')) {
-                const pathMatch = nextLine.match(/REG_SZ\s+(.+)$/);
-                if (pathMatch) {
-                  enginePath = pathMatch[1].trim();
-                  break;
-                }
-              } else if (nextLine.startsWith('{') || nextLine.includes(registryKey)) {
-                break;
-              }
-            }
-          }
-
-          if (enginePath) {
-            installations.push({
-              path: enginePath,
-              associationId: guid,
-              displayName: `UE Engine ${guid}`,
-              version: undefined,
-              source: 'registry',
-            });
-          } else {
-            Logger.debug(`Found GUID ${guid} but could not extract engine path`);
-          }
-        }
+      const installation = this.parseRegistryLine(line, lines, i, registryKey);
+      if (installation) {
+        installations.push(installation);
       }
     }
 
     return installations;
   }
 
+  /**
+   * Parses a single registry line and extracts engine installation if present.
+   * Handles both single-line and multi-line formats.
+   * @param line - Current line being parsed
+   * @param lines - All lines for forward-scanning multi-line entries
+   * @param currentIndex - Index of current line in lines array
+   * @param registryKey - Registry key for boundary detection
+   * @returns EngineInstallation if found, undefined otherwise
+   */
+  private static parseRegistryLine(
+    line: string,
+    lines: string[],
+    currentIndex: number,
+    registryKey: string
+  ): EngineInstallation | undefined {
+    // Try single-line format first: {GUID} REG_SZ path
+    const singleLineResult = this.parseSingleLineEntry(line);
+    if (singleLineResult) {
+      return singleLineResult;
+    }
+
+    // Try multi-line format: {GUID} on one line, REG_SZ path on next
+    return this.parseMultiLineEntry(line, lines, currentIndex, registryKey);
+  }
+
+  /**
+   * Parses single-line registry entries in format: {GUID} REG_SZ path
+   * @param line - Registry line to parse
+   * @returns EngineInstallation if matched, undefined otherwise
+   */
+  private static parseSingleLineEntry(line: string): EngineInstallation | undefined {
+    const fullMatch = line.match(/{([^}]+)}\s+REG_SZ\s+(.+)$/);
+    if (!fullMatch) {
+      return undefined;
+    }
+
+    const guid = `{${fullMatch[1]}}`;
+    const enginePath = fullMatch[2].trim();
+
+    return {
+      path: enginePath,
+      associationId: guid,
+      displayName: `UE Engine ${guid}`,
+      version: undefined,
+      source: 'registry',
+    };
+  }
+
+  /**
+   * Parses multi-line registry entries where GUID and path are on separate lines.
+   * @param line - Current line (should start with { for GUID entries)
+   * @param lines - All lines for forward-scanning
+   * @param currentIndex - Index of current line
+   * @param registryKey - Registry key for boundary detection
+   * @returns EngineInstallation if found, undefined otherwise
+   */
+  private static parseMultiLineEntry(
+    line: string,
+    lines: string[],
+    currentIndex: number,
+    registryKey: string
+  ): EngineInstallation | undefined {
+    if (!line.startsWith('{')) {
+      return undefined;
+    }
+
+    const guidMatch = line.match(/^({[^}]+})/);
+    if (!guidMatch) {
+      return undefined;
+    }
+
+    const guid = guidMatch[1];
+    const enginePath = this.extractEnginePathFromLineOrSubsequent(
+      line,
+      lines,
+      currentIndex,
+      registryKey
+    );
+
+    if (!enginePath) {
+      Logger.debug(`Found GUID ${guid} but could not extract engine path`);
+      return undefined;
+    }
+
+    return {
+      path: enginePath,
+      associationId: guid,
+      displayName: `UE Engine ${guid}`,
+      version: undefined,
+      source: 'registry',
+    };
+  }
+
+  /**
+   * Extracts engine path from current line or scans subsequent lines.
+   * @param line - Current line to check first
+   * @param lines - All lines for forward-scanning
+   * @param currentIndex - Index of current line
+   * @param registryKey - Registry key for boundary detection
+   * @returns Engine path if found, undefined otherwise
+   */
+  private static extractEnginePathFromLineOrSubsequent(
+    line: string,
+    lines: string[],
+    currentIndex: number,
+    registryKey: string
+  ): string | undefined {
+    // Check current line first for REG_SZ
+    const regSzMatch = line.match(/REG_SZ\s+(.+)$/);
+    if (regSzMatch) {
+      return regSzMatch[1].trim();
+    }
+
+    // Scan subsequent lines for REG_SZ entry
+    return this.findEnginePathInSubsequentLines(lines, currentIndex, registryKey);
+  }
+
+  /**
+   * Scans subsequent lines to find REG_SZ engine path entry.
+   * Stops at next GUID or registry key header.
+   * @param lines - All lines to scan
+   * @param startIndex - Index to start scanning from (exclusive)
+   * @param registryKey - Registry key for boundary detection
+   * @returns Engine path if found, undefined otherwise
+   */
+  private static findEnginePathInSubsequentLines(
+    lines: string[],
+    startIndex: number,
+    registryKey: string
+  ): string | undefined {
+    for (let j = startIndex + 1; j < lines.length; j++) {
+      const nextLine = lines[j].trim();
+
+      if (nextLine.includes('REG_SZ')) {
+        const pathMatch = nextLine.match(/REG_SZ\s+(.+)$/);
+        if (pathMatch) {
+          return pathMatch[1].trim();
+        }
+      }
+
+      // Stop scanning at boundaries
+      if (nextLine.startsWith('{') || nextLine.includes(registryKey)) {
+        break;
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Searches Epic Games Launcher manifest files for Unreal Engine installations.
+   * @returns Promise resolving to array of engine installations found in launcher manifests
+   */
   private static async getEnginesFromLauncher(): Promise<EngineInstallation[]> {
     const installations: EngineInstallation[] = [];
 
     try {
-      const manifestPaths = [
-        path.join(
-          process.env.LOCALAPPDATA || '',
-          'UnrealEngine',
-          'Common',
-          'LauncherInstalled.dat'
-        ),
-        path.join(
-          process.env.PROGRAMDATA || '',
-          'Epic',
-          'UnrealEngineLauncher',
-          'LauncherInstalled.dat'
-        ),
-        path.join(
-          process.env.PROGRAMDATA || '',
-          'Epic',
-          'EpicGamesLauncher',
-          'Data',
-          'LauncherInstalled.dat'
-        ),
-        path.join(
-          process.env.APPDATA || '',
-          'Epic',
-          'UnrealEngineLauncher',
-          'LauncherInstalled.dat'
-        ),
-        path.join(
-          process.env.APPDATA || '',
-          'Epic',
-          'EpicGamesLauncher',
-          'Data',
-          'LauncherInstalled.dat'
-        ),
-        path.join(
-          process.env.LOCALAPPDATA || '',
-          'EpicGamesLauncher',
-          'Data',
-          'LauncherInstalled.dat'
-        ),
-        path.join(
-          process.env.LOCALAPPDATA || '',
-          'Epic',
-          'UnrealEngineLauncher',
-          'LauncherInstalled.dat'
-        ),
-        path.join(
-          process.env.APPDATA || '',
-          'Epic Games',
-          'Launcher',
-          'Data',
-          'LauncherInstalled.dat'
-        ),
-        path.join(
-          process.env.PROGRAMFILES || 'C:\\Program Files',
-          'Epic Games',
-          'Launcher',
-          'Data',
-          'LauncherInstalled.dat'
-        ),
-        path.join(
-          process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)',
-          'Epic Games',
-          'Launcher',
-          'Data',
-          'LauncherInstalled.dat'
-        ),
-      ];
-
+      const manifestPaths = getLauncherManifestPaths();
       Logger.debug('Searching for launcher manifests in: ' + JSON.stringify(manifestPaths));
 
       for (const manifestPath of manifestPaths) {
@@ -386,10 +529,7 @@ export class EngineResolver {
               Logger.debug('No InstallationList found in manifest or it is not an array');
             }
           } catch (parseError) {
-            Logger.debug(
-              'Failed to parse launcher manifest: ' +
-                (parseError instanceof Error ? parseError.message : String(parseError))
-            );
+            Logger.debug('Failed to parse launcher manifest: ' + formatError(parseError));
             Logger.debug('Manifest path: ' + manifestPath);
           }
         } else {
@@ -397,16 +537,17 @@ export class EngineResolver {
         }
       }
     } catch (error) {
-      Logger.debug(
-        'Failed to read launcher manifest: ' +
-          (error instanceof Error ? error.message : String(error))
-      );
+      Logger.warning('Failed to read launcher manifest: ' + formatError(error));
     }
 
     Logger.debug(`Total launcher engines found: ${installations.length}`);
     return installations;
   }
 
+  /**
+   * Checks environment variables for Unreal Engine path.
+   * @returns Promise resolving to engine installation from environment, or undefined if not found
+   */
   private static async getEngineFromEnvironment(): Promise<EngineInstallation | undefined> {
     const envVars = ['UE_ENGINE_PATH', 'UE_ROOT', 'UNREAL_ENGINE_PATH'];
 
@@ -426,6 +567,11 @@ export class EngineResolver {
     return undefined;
   }
 
+  /**
+   * Loads version information for an engine installation from version files.
+   * @param installation - The engine installation to load version info for
+   * @returns Promise resolving when version info is loaded (mutates installation object)
+   */
   private static async loadEngineVersionInfo(installation: EngineInstallation): Promise<void> {
     try {
       const versionFilePaths = [
@@ -444,17 +590,14 @@ export class EngineResolver {
 
             return;
           } catch (parseError) {
-            Logger.debug(
-              'Failed to parse version file: ' +
-                (parseError instanceof Error ? parseError.message : String(parseError))
-            );
+            Logger.debug('Failed to parse version file: ' + formatError(parseError));
           }
         }
       }
 
-      const pathMatch = installation.path.match(/UE_(?:5|4)[._]?(\d+(?:[._]\d+)*)/i);
+      const pathMatch = installation.path.match(/UE_((?:5|4)[._]\d+(?:[._]\d+)*)/i);
       if (pathMatch) {
-        const versionStr = pathMatch[1].replace('_', '.');
+        const versionStr = pathMatch[1].replace(/_/g, '.');
         installation.version = {
           MajorVersion: parseInt(versionStr.split('.')[0]) || 5,
           MinorVersion: parseInt(versionStr.split('.')[1]) || 0,
@@ -469,13 +612,15 @@ export class EngineResolver {
         installation.displayName = `UE ${versionStr}`;
       }
     } catch (error) {
-      Logger.debug(
-        'Failed to load engine version info: ' +
-          (error instanceof Error ? error.message : String(error))
-      );
+      Logger.warning('Failed to load engine version info: ' + formatError(error));
     }
   }
 
+  /**
+   * Removes duplicate engine installations, preferring launcher sources.
+   * @param installations - Array of engine installations that may contain duplicates
+   * @returns Array of unique engine installations sorted by version
+   */
   private static removeDuplicateEngines(installations: EngineInstallation[]): EngineInstallation[] {
     const pathMap = new Map<string, EngineInstallation>();
 
@@ -504,6 +649,12 @@ export class EngineResolver {
     return unique;
   }
 
+  /**
+   * Compares two engine version info objects.
+   * @param a - First engine version info
+   * @param b - Second engine version info
+   * @returns Negative if a < b, positive if a > b, 0 if equal
+   */
   private static compareVersions(a?: EngineVersionInfo, b?: EngineVersionInfo): number {
     if (!a && !b) return 0;
     if (!a) return -1;
@@ -519,26 +670,5 @@ export class EngineResolver {
       return a.PatchVersion - b.PatchVersion;
     }
     return a.Changelist - b.Changelist;
-  }
-
-  private static compareVersionString(a: string, b: string): number {
-    if (a === b || a.startsWith(b + '.') || a.startsWith(b + '_')) {
-      return 0;
-    }
-
-    const parseVersion = (v: string): number[] => {
-      return v.split('.').map((part) => parseInt(part, 10) || 0);
-    };
-    const partsA = parseVersion(a);
-    const partsB = parseVersion(b);
-
-    for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-      const partA = partsA[i] || 0;
-      const partB = partsB[i] || 0;
-      if (partA !== partB) {
-        return partA - partB;
-      }
-    }
-    return 0;
   }
 }

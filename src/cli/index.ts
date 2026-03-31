@@ -1,7 +1,29 @@
 #!/usr/bin/env node
 
+/**
+ * ubuild CLI entry point
+ *
+ * Main command-line interface for the ubuild tool. Registers all commands
+ * and handles program initialization, argument parsing, and execution.
+ *
+ * @module cli/index
+ * @example
+ * ```bash
+ * # Show help
+ * ubuild --help
+ *
+ * # Detect project
+ * ubuild list
+ *
+ * # Build project
+ * ubuild build --target Editor --config Development
+ * ```
+ */
+
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { Logger } from '../utils/logger';
+import { formatError } from '../utils/error';
 import { listCommand } from '../commands/list';
 import { engineCommand } from '../commands/engine';
 import { buildCommand } from '../commands/build';
@@ -10,7 +32,10 @@ import { initCommand } from '../commands/init';
 import { runCommand } from '../commands/run';
 import { updateCommand } from '../commands/update';
 import { gencodebaseCommand } from '../commands/gencodebase';
+import { cleanCommand } from '../commands/clean';
+import { versionCommand } from '../commands/version';
 import { version, description } from '../../package.json';
+import { evolveCommand } from '../commands/evolve';
 
 const program = new Command();
 
@@ -30,33 +55,22 @@ initCommand(program);
 runCommand(program);
 updateCommand(program);
 gencodebaseCommand(program);
-
-// Conditionally register evolve command (development only or when evolve is requested)
-const isEvolveRequested = process.argv.slice(2).includes('evolve');
-const isDevMode =
-  process.env.NODE_ENV === 'development' || process.env.UBUILD_EVOLVE_ENABLED === 'true';
-
-// console.log('[DEBUG] isEvolveRequested:', isEvolveRequested, 'isDevMode:', isDevMode, 'argv:', process.argv);
-
-if (isEvolveRequested || isDevMode) {
-  // Require synchronously to register command before parsing
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { evolveCommand } = require('../commands/evolve');
-    evolveCommand(program);
-  } catch {
-    // Ignore if module not available
-  }
-}
+cleanCommand(program);
+versionCommand(program);
+evolveCommand(program);
 
 program.configureHelp({
   sortSubcommands: true,
   subcommandTerm: (cmd) => cmd.name(),
 });
 
-try {
-  program.parse(process.argv);
-} catch (error) {
-  console.error(chalk.red('Error:'), error instanceof Error ? error.message : String(error));
-  process.exit(1);
+async function main(): Promise<void> {
+  try {
+    await program.parseAsync(process.argv);
+  } catch (error) {
+    Logger.error(`Error: ${formatError(error)}`);
+    process.exit(1);
+  }
 }
+
+main();

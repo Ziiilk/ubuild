@@ -219,4 +219,257 @@ describe('ProjectDetector', () => {
       },
     ]);
   });
+
+  it('returns error when no .uproject files are found in directory', async () => {
+    const cwd = await createTempDir();
+
+    const result = await ProjectDetector.detectProject({ cwd, recursive: false });
+
+    expect(result.isValid).toBe(false);
+    expect(result.error).toBe('No Unreal Engine project (.uproject) file found');
+    expect(result.project).toBeUndefined();
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('returns error when .uproject file has missing FileVersion', async () => {
+    const cwd = await createTempDir();
+    const projectFilePath = path.join(cwd, 'TestProject.uproject');
+
+    await writeJsonFile(projectFilePath, {
+      EngineAssociation: '5.3',
+      Modules: [{ Name: 'Test', Type: 'Runtime', LoadingPhase: 'Default' }],
+    });
+
+    const result = await ProjectDetector.detectProject({ cwd, recursive: false });
+
+    expect(result.isValid).toBe(false);
+    expect(result.error).toBe('Invalid .uproject file: Missing FileVersion field');
+    expect(result.project).toBeUndefined();
+  });
+
+  it('returns error when .uproject file has missing EngineAssociation', async () => {
+    const cwd = await createTempDir();
+    const projectFilePath = path.join(cwd, 'TestProject.uproject');
+
+    await writeJsonFile(projectFilePath, {
+      FileVersion: 3,
+      Modules: [{ Name: 'Test', Type: 'Runtime', LoadingPhase: 'Default' }],
+    });
+
+    const result = await ProjectDetector.detectProject({ cwd, recursive: false });
+
+    expect(result.isValid).toBe(false);
+    expect(result.error).toBe('Invalid .uproject file: Missing EngineAssociation field');
+    expect(result.project).toBeUndefined();
+  });
+
+  it('detects Client target type from target filename', async () => {
+    const cwd = await createTempDir();
+    const projectName = 'ClientTestProject';
+    const projectFilePath = path.join(cwd, `${projectName}.uproject`);
+    const sourceDir = path.join(cwd, 'Source');
+
+    await writeJsonFile(projectFilePath, createValidUProject());
+    await fs.ensureDir(sourceDir);
+    await writeTextFile(path.join(sourceDir, `${projectName}Client.Target.cs`), '// client target');
+
+    const result = await ProjectDetector.detectProject({ cwd, recursive: false });
+
+    expect(result.isValid).toBe(true);
+    expect(result.project).toBeDefined();
+
+    if (!result.project) {
+      throw new Error('Expected project details');
+    }
+
+    expect(result.project.targets).toHaveLength(1);
+    expect(result.project.targets[0].type).toBe('Client');
+  });
+
+  it('accepts project with unexpected FileVersion without error', async () => {
+    const cwd = await createTempDir();
+    const projectName = 'OldVersionProject';
+    const projectFilePath = path.join(cwd, `${projectName}.uproject`);
+
+    await writeJsonFile(projectFilePath, {
+      FileVersion: 2,
+      EngineAssociation: '4.27',
+      Modules: [{ Name: 'Test', Type: 'Runtime', LoadingPhase: 'Default' }],
+    });
+    await fs.ensureDir(path.join(cwd, 'Source'));
+
+    const result = await ProjectDetector.detectProject({ cwd, recursive: false });
+
+    // Project is accepted despite unexpected FileVersion
+    expect(result.isValid).toBe(true);
+    expect(result.project).toBeDefined();
+    expect(result.error).toBeUndefined();
+    // FileVersion warnings from validation are propagated to the final result
+    expect(result.warnings).toContain('Unexpected FileVersion: 2. Expected 3.');
+  });
+
+  it('handles invalid JSON in .uproject file gracefully', async () => {
+    const cwd = await createTempDir();
+    const projectFilePath = path.join(cwd, 'InvalidProject.uproject');
+
+    await fs.writeFile(projectFilePath, 'this is not valid json', 'utf-8');
+
+    const result = await ProjectDetector.detectProject({ cwd, recursive: false });
+
+    expect(result.isValid).toBe(false);
+    expect(result.error).toContain('Unexpected token');
+    expect(result.project).toBeUndefined();
+  });
+
+  it('uses default cwd when options.cwd is not provided', async () => {
+    const result = await ProjectDetector.detectProject({ recursive: false });
+
+    // Since we can't predict the actual result, we just verify the method works
+    // and returns a valid result structure (either valid or invalid depending on cwd)
+    expect(typeof result.isValid).toBe('boolean');
+    if (!result.isValid) {
+      expect(result.error).toBeDefined();
+    }
+  });
+
+  it('detects multiple modules at different nesting levels', async () => {
+    const cwd = await createTempDir();
+    const projectName = 'MultiModuleProject';
+    const projectFilePath = path.join(cwd, `${projectName}.uproject`);
+    const sourceDir = path.join(cwd, 'Source');
+
+    await writeJsonFile(projectFilePath, createValidUProject());
+    await fs.ensureDir(sourceDir);
+
+    await writeTextFile(path.join(sourceDir, 'Core', 'Core.Build.cs'), '// core module');
+    await writeTextFile(
+      path.join(sourceDir, 'Gameplay', 'Gameplay.Build.cs'),
+      '// gameplay module'
+    );
+    await writeTextFile(
+      path.join(sourceDir, 'Gameplay', 'Abilities', 'Abilities.Build.cs'),
+      '// abilities module'
+    );
+
+    const result = await ProjectDetector.detectProject({ cwd, recursive: false });
+
+    expect(result.isValid).toBe(true);
+    expect(result.project).toBeDefined();
+
+    if (!result.project) {
+      throw new Error('Expected project details');
+    }
+
+    expect(result.project.modules).toHaveLength(3);
+    const moduleNames = result.project.modules.map((m) => m.name).sort();
+    expect(moduleNames).toEqual(['Abilities', 'Core', 'Gameplay']);
+  });
+
+  it('uses first .uproject file when multiple are found', async () => {
+    const cwd = await createTempDir();
+
+    await writeJsonFile(path.join(cwd, 'Alpha.uproject'), createValidUProject());
+    await writeJsonFile(path.join(cwd, 'Beta.uproject'), createValidUProject());
+    await fs.ensureDir(path.join(cwd, 'Source'));
+
+    const result = await ProjectDetector.detectProject({ cwd, recursive: false });
+
+    expect(result.isValid).toBe(true);
+    expect(result.project).toBeDefined();
+
+    if (!result.project) {
+      throw new Error('Expected project details');
+    }
+
+    // Should use one of the valid projects (glob order may vary)
+    expect(['Alpha', 'Beta']).toContain(result.project.name);
+  });
+
+  it('correctly identifies all target types in mixed project', async () => {
+    const cwd = await createTempDir();
+    const projectName = 'MixedTargetProject';
+    const projectFilePath = path.join(cwd, `${projectName}.uproject`);
+    const sourceDir = path.join(cwd, 'Source');
+
+    await writeJsonFile(projectFilePath, createValidUProject());
+    await fs.ensureDir(sourceDir);
+
+    await writeTextFile(path.join(sourceDir, `${projectName}.Target.cs`), '// game target');
+    await writeTextFile(path.join(sourceDir, `${projectName}Editor.Target.cs`), '// editor target');
+    await writeTextFile(path.join(sourceDir, `${projectName}Client.Target.cs`), '// client target');
+    await writeTextFile(path.join(sourceDir, `${projectName}Server.Target.cs`), '// server target');
+
+    const result = await ProjectDetector.detectProject({ cwd, recursive: false });
+
+    expect(result.isValid).toBe(true);
+    expect(result.project).toBeDefined();
+
+    if (!result.project) {
+      throw new Error('Expected project details');
+    }
+
+    const targetTypes = result.project.targets.map((t) => t.type).sort();
+    expect(targetTypes).toEqual(['Client', 'Editor', 'Game', 'Server']);
+  });
+
+  it('handles project with empty Modules array', async () => {
+    const cwd = await createTempDir();
+    const projectFilePath = path.join(cwd, 'EmptyModulesProject.uproject');
+
+    await writeJsonFile(projectFilePath, {
+      FileVersion: 3,
+      EngineAssociation: '5.3',
+      Modules: [],
+    });
+    await fs.ensureDir(path.join(cwd, 'Source'));
+
+    const result = await ProjectDetector.detectProject({ cwd, recursive: false });
+
+    expect(result.isValid).toBe(true);
+    expect(result.project).toBeDefined();
+
+    if (!result.project) {
+      throw new Error('Expected project details');
+    }
+
+    expect(result.project.modules).toEqual([]);
+  });
+
+  it('handles case-insensitive target type detection', async () => {
+    const cwd = await createTempDir();
+    const projectName = 'CaseTest';
+    const projectFilePath = path.join(cwd, `${projectName}.uproject`);
+    const sourceDir = path.join(cwd, 'Source');
+
+    await writeJsonFile(projectFilePath, createValidUProject());
+    await fs.ensureDir(sourceDir);
+
+    await writeTextFile(
+      path.join(sourceDir, `${projectName}EDITOR.Target.cs`),
+      '// EDITOR in caps'
+    );
+    await writeTextFile(
+      path.join(sourceDir, `${projectName}CLIENT.Target.cs`),
+      '// CLIENT in caps'
+    );
+
+    const result = await ProjectDetector.detectProject({ cwd, recursive: false });
+
+    expect(result.isValid).toBe(true);
+    expect(result.project).toBeDefined();
+
+    if (!result.project) {
+      throw new Error('Expected project details');
+    }
+
+    expect(result.project.targets).toHaveLength(2);
+    const editorTarget = result.project.targets.find((t) =>
+      t.name.toLowerCase().includes('editor')
+    );
+    const clientTarget = result.project.targets.find((t) =>
+      t.name.toLowerCase().includes('client')
+    );
+    expect(editorTarget?.type).toBe('Editor');
+    expect(clientTarget?.type).toBe('Client');
+  });
 });

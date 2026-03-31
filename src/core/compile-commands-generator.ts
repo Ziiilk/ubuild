@@ -1,29 +1,61 @@
+/**
+ * Compile commands generator for IDE integration.
+ *
+ * Generates compile_commands.json files for clangd-based IDEs (VSCode, CLion, etc.)
+ * to enable code completion, navigation, and IntelliSense for Unreal Engine projects.
+ *
+ * @module core/compile-commands-generator
+ */
+
 import chalk from 'chalk';
 import path from 'path';
 import fs from 'fs-extra';
 import { execa } from 'execa';
 import { EngineResolver } from './engine-resolver';
-import { BuildExecutor } from './build-executor';
 import { ProjectPathResolver } from './project-path-resolver';
-import { Platform } from '../utils/platform';
 import { Logger } from '../utils/logger';
+import { TargetResolver } from './target-resolver';
+import { formatError } from '../utils/error';
+import { DEFAULTS } from '../utils/constants';
+import { resolveUnrealBuildToolPath } from '../utils/unreal-paths';
 
+/** Options for generating compile commands database. */
 export interface CompileCommandsGenerateOptions {
+  /** Build target (Editor, Game, Client, Server) */
   target?: string;
+  /** Build configuration (Debug, DebugGame, Development, Shipping, Test) */
   config?: string;
+  /** Target platform (Win64, Win32, Linux, Mac) */
   platform?: string;
+  /** Path to project directory or .uproject file */
   project?: string;
+  /** Path to Unreal Engine installation */
   enginePath?: string;
+  /** Whether to include plugin sources in compile commands */
   includePluginSources?: boolean;
+  /** Whether to include engine sources in compile commands */
   includeEngineSources?: boolean;
+  /** Whether to use engine includes in compile commands */
   useEngineIncludes?: boolean;
+  /** Suppress all output */
   silent?: boolean;
 }
 
+/**
+ * Generates compile_commands.json for IDE integration (VSCode, CLion, etc.).
+ * Uses UnrealBuildTool to generate the clang database for code completion and IntelliSense.
+ */
 export class CompileCommandsGenerator {
+  /**
+   * Generates compile_commands.json for the specified project and options.
+   * @param options - Generation options including target, config, platform, and paths
+   * @returns Promise resolving to the path of the generated compile_commands.json file
+   * @throws Error if project file not found, UBT not found, or generation fails
+   */
   static async generate(options: CompileCommandsGenerateOptions): Promise<string> {
     const projectPath = await ProjectPathResolver.resolveOrThrow(options.project || process.cwd());
     const silent = options.silent || false;
+    const logger = new Logger({ silent });
 
     if (!(await fs.pathExists(projectPath))) {
       throw new Error(`Project file not found: ${projectPath}`);
@@ -35,23 +67,12 @@ export class CompileCommandsGenerator {
     });
 
     const projectDir = path.dirname(projectPath);
-    const target = options.target || 'Editor';
-    const platform = options.platform || 'Win64';
-    const config = options.config || 'Development';
+    const target = options.target || DEFAULTS.BUILD_TARGET;
+    const platform = options.platform || DEFAULTS.BUILD_PLATFORM;
+    const config = options.config || DEFAULTS.BUILD_CONFIG;
     const targetName = await this.resolveTargetName(projectPath, target);
 
-    const ubtPath = path.join(
-      enginePath,
-      'Engine',
-      'Binaries',
-      'DotNET',
-      'UnrealBuildTool',
-      `UnrealBuildTool${Platform.exeExtension()}`
-    );
-
-    if (!(await fs.pathExists(ubtPath))) {
-      throw new Error(`UnrealBuildTool not found at: ${ubtPath}`);
-    }
+    const ubtPath = await resolveUnrealBuildToolPath(enginePath);
 
     const targetNames = targetName.split(' ').filter(Boolean);
 
@@ -73,42 +94,39 @@ export class CompileCommandsGenerator {
       args.push('-UseEngineIncludes');
     }
 
-    if (!silent) {
-      Logger.info(
-        `Generating compile commands for: ${chalk.bold(targetNames.join(', '))} | ${chalk.bold(platform)} | ${chalk.bold(config)}`
-      );
-      Logger.info(`Project: ${projectPath}`);
-      Logger.info(`Engine: ${enginePath}`);
-      Logger.divider();
-    }
+    logger.info(
+      `Generating compile commands for: ${chalk.bold(targetNames.join(', '))} | ${chalk.bold(platform)} | ${chalk.bold(config)}`
+    );
+    logger.info(`Project: ${projectPath}`);
+    logger.info(`Engine: ${enginePath}`);
+    logger.divider();
 
-    const command = `"${ubtPath}" ${args.join(' ')}`;
-    if (!silent) {
-      Logger.debug(`Executing: ${command}`);
-    }
+    logger.debug(`Executing: ${ubtPath} ${args.join(' ')}`);
 
-    const childProcess = execa(command, {
+    const childProcess = execa(ubtPath, args, {
       stdio: 'pipe',
       cwd: path.dirname(ubtPath),
-      shell: true,
+      reject: false,
     });
 
     if (childProcess.stdout) {
       childProcess.stdout.on('data', (data: Buffer) => {
-        process.stdout.write(data.toString());
+        logger.info(data.toString().trim());
       });
     }
 
     if (childProcess.stderr) {
       childProcess.stderr.on('data', (data: Buffer) => {
-        process.stderr.write(data.toString());
+        logger.error(data.toString().trim());
       });
     }
 
     const result = await childProcess;
 
-    if (result.exitCode !== 0) {
-      throw new Error(`Generate compile commands failed with exit code ${result.exitCode}`);
+    if (!result || result.exitCode !== 0) {
+      throw new Error(
+        `Generate compile commands failed with exit code ${result?.exitCode ?? 'unknown'}`
+      );
     }
 
     const vscodeDir = path.join(projectDir, '.vscode');
@@ -120,7 +138,7 @@ export class CompileCommandsGenerator {
     let actualCompileCommandsPath = targetCompileCommandsPath;
 
     if (await fs.pathExists(engineCompileCommandsPath)) {
-      Logger.debug(
+      logger.debug(
         'Found compile_commands.json at engine directory, copying to project .vscode directory'
       );
       await fs.copy(engineCompileCommandsPath, targetCompileCommandsPath);
@@ -134,62 +152,32 @@ export class CompileCommandsGenerator {
       );
     }
 
-    await this.updateVSCodeSettings(projectDir, silent);
+    await this.updateVSCodeSettings(projectDir, logger);
 
     return actualCompileCommandsPath;
   }
 
+  /**
+   * Resolves a generic target name (e.g., 'Editor', 'Game') to a specific project target.
+   * Falls back to a default target if resolution fails.
+   * @param projectPath - Path to the .uproject file
+   * @param target - Generic target name to resolve
+   * @returns Promise resolving to the resolved target name or a default target
+   */
   private static async resolveTargetName(projectPath: string, target: string): Promise<string> {
-    const availableTargets = await BuildExecutor.getAvailableTargets(projectPath);
-
-    if (availableTargets.length === 0) {
-      return target;
-    }
-
-    const targetList = target.split(' ').filter(Boolean);
-    const resolvedTargets: string[] = [];
-
-    const genericTypes = ['Editor', 'Game', 'Client', 'Server'];
-
-    for (const requestedTarget of targetList) {
-      const isGenericType = genericTypes.includes(requestedTarget);
-
-      if (isGenericType) {
-        const matchingTarget = availableTargets.find(
-          (availableTarget) => availableTarget.type === requestedTarget
-        );
-        if (matchingTarget) {
-          resolvedTargets.push(matchingTarget.name);
-          continue;
-        }
-
-        const fallbackTarget = availableTargets.find((availableTarget) =>
-          availableTarget.name.toLowerCase().includes(requestedTarget.toLowerCase())
-        );
-        if (fallbackTarget) {
-          resolvedTargets.push(fallbackTarget.name);
-          continue;
-        }
-      }
-
-      const targetExists = availableTargets.some(
-        (availableTarget) => availableTarget.name === requestedTarget
-      );
-      if (targetExists) {
-        resolvedTargets.push(requestedTarget);
-      } else if (availableTargets.length > 0) {
-        resolvedTargets.push(availableTargets[0].name);
-      }
-    }
-
-    if (resolvedTargets.length === 0) {
-      return 'Editor Game';
-    }
-
-    return resolvedTargets.join(' ');
+    const resolved = await TargetResolver.resolveTargetName(projectPath, target);
+    // If resolution fails (returns undefined), fall back to the original target
+    return resolved ?? target;
   }
 
-  private static async updateVSCodeSettings(projectDir: string, silent = false): Promise<void> {
+  /**
+   * Updates VSCode settings to configure clangd and C/C++ extension for Unreal Engine development.
+   * Creates or merges settings.json in the .vscode directory to point to the compile commands database.
+   * @param projectDir - Path to the project directory
+   * @param logger - Logger instance for output
+   * @returns Promise resolving when settings have been updated
+   */
+  private static async updateVSCodeSettings(projectDir: string, logger: Logger): Promise<void> {
     const vscodeDir = path.join(projectDir, '.vscode');
     const settingsPath = path.join(vscodeDir, 'settings.json');
 
@@ -207,7 +195,10 @@ export class CompileCommandsGenerator {
       try {
         const content = await fs.readFile(settingsPath, 'utf-8');
         settings = JSON.parse(content);
-      } catch {
+      } catch (error) {
+        logger.debug(
+          `Failed to parse existing settings.json, starting fresh: ${formatError(error)}`
+        );
         settings = {};
       }
     }
@@ -215,8 +206,6 @@ export class CompileCommandsGenerator {
     settings = { ...settings, ...clangdConfig, ...cppConfig };
 
     await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
-    if (!silent) {
-      Logger.success(`Updated VSCode settings: ${settingsPath}`);
-    }
+    logger.success(`Updated VSCode settings: ${settingsPath}`);
   }
 }

@@ -1,0 +1,3888 @@
+import { SelfDriver, SelfEvolverOptions, runSelfEvolution } from './self-driver';
+
+const mockExeca = jest.fn<
+  Promise<{ exitCode: number; stdout: string; stderr: string }>,
+  [string, string[]?, Record<string, unknown>?]
+>();
+
+const mockPathExists = jest.fn();
+const mockReadFile = jest.fn();
+
+jest.mock('execa', () => ({
+  execa: (...args: [string, string[]?, Record<string, unknown>?]) => mockExeca(...args),
+}));
+
+jest.mock('fs-extra', () => ({
+  pathExists: (...args: unknown[]) => mockPathExists(...args),
+  readFile: (...args: unknown[]) => mockReadFile(...args),
+}));
+
+let driver: SelfDriver;
+const originalCwd = process.cwd;
+const mockProjectRoot = 'C:\\Projects\\ubuild';
+
+const mockExecaResult = (
+  exitCode: number,
+  stdout = '',
+  stderr = ''
+): Promise<{
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}> =>
+  Promise.resolve({
+    exitCode,
+    stdout,
+    stderr,
+  });
+
+describe('SelfDriver', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+
+    // Default mock implementations - all passing
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      if (fullCommand.includes('npm test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (fullCommand.includes('npm run lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('evolve --help')) {
+        return mockExecaResult(0, 'Usage: evolve [options]', '');
+      }
+      if (
+        fullCommand.includes('list --help') ||
+        fullCommand.includes('engine --help') ||
+        fullCommand.includes('build --help')
+      ) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+      if (command === 'git') {
+        if (args?.includes('status')) {
+          return mockExecaResult(0, '', ''); // No changes
+        }
+        if (args?.includes('add') || args?.includes('commit') || args?.includes('checkout')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts\nsrc/commands/evolve.ts', '');
+        }
+      }
+      if (command === 'opencode') {
+        return mockExecaResult(0, '', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+    // Cleanup signal handlers to prevent memory leaks
+    if (driver) {
+      driver.cleanup();
+    }
+  });
+
+  describe('constructor', () => {
+    it('creates driver with default options', () => {
+      driver = new SelfDriver();
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with custom logger', () => {
+      const customLogger = jest.fn();
+      const options: SelfEvolverOptions = {
+        logger: customLogger,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with once option set to true', () => {
+      const options: SelfEvolverOptions = {
+        once: true,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with once option set to false', () => {
+      const options: SelfEvolverOptions = {
+        once: false,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with dryRun option set to true', () => {
+      const options: SelfEvolverOptions = {
+        dryRun: true,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with dryRun option set to false', () => {
+      const options: SelfEvolverOptions = {
+        dryRun: false,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with both once and dryRun options', () => {
+      const options: SelfEvolverOptions = {
+        once: true,
+        dryRun: true,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with custom verifyTimeoutMs', () => {
+      const options: SelfEvolverOptions = {
+        verifyTimeoutMs: 120000,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with custom opencodeTimeoutMs', () => {
+      const options: SelfEvolverOptions = {
+        opencodeTimeoutMs: 900000,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with both timeout options', () => {
+      const options: SelfEvolverOptions = {
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 900000,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with all options', () => {
+      const options: SelfEvolverOptions = {
+        logger: jest.fn(),
+        once: true,
+        dryRun: false,
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 900000,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with custom sleepMs', () => {
+      const options: SelfEvolverOptions = {
+        sleepMs: 10000,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with all options including sleepMs', () => {
+      const options: SelfEvolverOptions = {
+        logger: jest.fn(),
+        once: true,
+        dryRun: false,
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 900000,
+        sleepMs: 10000,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with useTsNode option set to true', () => {
+      const options: SelfEvolverOptions = {
+        useTsNode: true,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with useTsNode option set to false', () => {
+      const options: SelfEvolverOptions = {
+        useTsNode: false,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with all options including useTsNode', () => {
+      const options: SelfEvolverOptions = {
+        logger: jest.fn(),
+        once: true,
+        dryRun: false,
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 900000,
+        sleepMs: 10000,
+        useTsNode: true,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with maxRetries option', () => {
+      const options: SelfEvolverOptions = {
+        maxRetries: 10,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with unlimited retries (maxRetries = -1)', () => {
+      const options: SelfEvolverOptions = {
+        maxRetries: -1,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with all options including maxRetries', () => {
+      const options: SelfEvolverOptions = {
+        logger: jest.fn(),
+        once: true,
+        dryRun: false,
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 900000,
+        sleepMs: 10000,
+        useTsNode: true,
+        maxRetries: 3,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with custom projectRoot', () => {
+      const options: SelfEvolverOptions = {
+        projectRoot: '/custom/project/path',
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+      const status = driver.getStatus();
+      expect(status.projectRoot).toBe('/custom/project/path');
+    });
+
+    it('getStatus returns iterationCount starting at 0', () => {
+      driver = new SelfDriver();
+      const status = driver.getStatus();
+      expect(status.iterationCount).toBe(0);
+    });
+
+    it('creates driver with all options including projectRoot', () => {
+      const options: SelfEvolverOptions = {
+        logger: jest.fn(),
+        once: true,
+        dryRun: false,
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 900000,
+        sleepMs: 10000,
+        useTsNode: true,
+        maxRetries: 3,
+        projectRoot: '/custom/project/path',
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+      const status = driver.getStatus();
+      expect(status.projectRoot).toBe('/custom/project/path');
+    });
+
+    it('creates driver with keepUntracked option', () => {
+      const options: SelfEvolverOptions = {
+        keepUntracked: true,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+
+    it('creates driver with all options including keepUntracked', () => {
+      const options: SelfEvolverOptions = {
+        logger: jest.fn(),
+        once: true,
+        dryRun: false,
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 900000,
+        sleepMs: 10000,
+        useTsNode: true,
+        maxRetries: 3,
+        projectRoot: '/custom/project/path',
+        keepUntracked: true,
+      };
+      driver = new SelfDriver(options);
+      expect(driver).toBeDefined();
+    });
+  });
+
+  describe('constructor validation', () => {
+    it('throws error when sleepMs is zero', () => {
+      expect(() => {
+        driver = new SelfDriver({ sleepMs: 0 });
+      }).toThrow('Invalid sleepMs: 0. Must be a positive number.');
+    });
+
+    it('throws error when sleepMs is negative', () => {
+      expect(() => {
+        driver = new SelfDriver({ sleepMs: -1000 });
+      }).toThrow('Invalid sleepMs: -1000. Must be a positive number.');
+    });
+
+    it('throws error when maxRetries is less than -1', () => {
+      expect(() => {
+        driver = new SelfDriver({ maxRetries: -2 });
+      }).toThrow('Invalid maxRetries: -2. Must be >= -1 (-1 for unlimited).');
+    });
+
+    it('throws error when verifyTimeoutMs is zero', () => {
+      expect(() => {
+        driver = new SelfDriver({ verifyTimeoutMs: 0 });
+      }).toThrow('Invalid verifyTimeoutMs: 0. Must be a positive number.');
+    });
+
+    it('throws error when opencodeTimeoutMs is negative', () => {
+      expect(() => {
+        driver = new SelfDriver({ opencodeTimeoutMs: -100 });
+      }).toThrow('Invalid opencodeTimeoutMs: -100. Must be a positive number.');
+    });
+
+    it('accepts maxRetries of -1 for unlimited retries', () => {
+      expect(() => {
+        driver = new SelfDriver({ maxRetries: -1 });
+      }).not.toThrow();
+    });
+  });
+
+  describe('verify', () => {
+    beforeEach(() => {
+      driver = new SelfDriver();
+    });
+
+    it('returns true when all checks pass', async () => {
+      // Access private method via type assertion
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+      expect(result).toBe(true);
+    });
+
+    it('returns false when build fails', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(1, 'Build failed', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+      expect(result).toBe(false);
+    });
+
+    it('returns false when tests fail', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('test')) {
+          return mockExecaResult(1, 'Tests failed', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+      expect(result).toBe(false);
+    });
+
+    it('returns false when lint fails', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('run') && args?.includes('lint')) {
+          return mockExecaResult(1, 'Lint errors', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+      expect(result).toBe(false);
+    });
+
+    it('returns false when evolve command fails', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'node' && args?.includes('dist/cli/index.js') && args?.includes('evolve')) {
+          return mockExecaResult(1, 'Command failed', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+      expect(result).toBe(false);
+    });
+
+    it('returns false when list command fails', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'node' && args?.includes('dist/cli/index.js') && args?.includes('list')) {
+          return mockExecaResult(1, 'Command failed', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+      expect(result).toBe(false);
+    });
+
+    it('handles execution errors gracefully', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('test')) {
+          throw new Error('npm not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+      expect(result).toBe(false);
+    });
+
+    it('returns false when engine command --help fails while other commands pass', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'node' && args?.includes('engine')) {
+          return mockExecaResult(1, 'Command failed', 'Error: unknown command');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+      expect(result).toBe(false);
+    });
+
+    it('truncates long stderr in verification failure output', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      const longStderr = 'x'.repeat(3000);
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(1, '', longStderr);
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result).toBe(false);
+      // stderr should be truncated at 2000 chars
+      expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('...(truncated)'));
+    });
+
+    it('truncates long stdout in verification failure output', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      const longStdout = 'A'.repeat(3000);
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(1, longStdout, '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result).toBe(false);
+      // stdout should be truncated at 2000 chars
+      expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('...(truncated)'));
+    });
+
+    it('logs stderr and stdout when verification fails', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(1, 'Build output here', 'Build error: something went wrong');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith('     Error: Build error: something went wrong');
+      expect(mockLogger).toHaveBeenCalledWith('     Output: Build output here');
+    });
+
+    it('logs only stdout when verification fails without stderr', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          return mockExecaResult(1, 'Build failed with this output', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith('     Output: Build failed with this output');
+    });
+
+    it('skips stdout logging when failed check has empty stdout', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+          // Non-empty stderr but empty stdout to test the stdoutPreview truthiness branch
+          return mockExecaResult(1, '', 'Build error: something went wrong');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith('     Error: Build error: something went wrong');
+      // Should NOT log stdout since it's empty
+      expect(mockLogger).not.toHaveBeenCalledWith(expect.stringContaining('Output:'));
+    });
+
+    it('uses ts-node for verification when useTsNode is true', async () => {
+      driver = new SelfDriver({ useTsNode: true });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'npx' && args?.includes('ts-node')) {
+          return mockExecaResult(0, 'Usage: [command] [options]', '');
+        }
+        if (command === 'npm') {
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+      expect(result).toBe(true);
+      expect(mockExeca).toHaveBeenCalledWith(
+        'npx',
+        ['ts-node', 'src/cli/index.ts', 'list', '--help'],
+        expect.any(Object)
+      );
+    });
+  });
+
+  describe('isWorkingTreeClean', () => {
+    beforeEach(() => {
+      driver = new SelfDriver();
+    });
+
+    it('returns false when git status shows changes', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+          return mockExecaResult(0, 'M src/core/example.ts', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const isWorkingTreeClean = (
+        driver as unknown as { isWorkingTreeClean: () => Promise<boolean> }
+      ).isWorkingTreeClean;
+      const result = await isWorkingTreeClean.call(driver);
+
+      expect(result).toBe(false);
+    });
+
+    it('returns true when git status is empty', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const isWorkingTreeClean = (
+        driver as unknown as { isWorkingTreeClean: () => Promise<boolean> }
+      ).isWorkingTreeClean;
+      const result = await isWorkingTreeClean.call(driver);
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false when git command fails', async () => {
+      mockExeca.mockImplementation(async () => {
+        throw new Error('Not a git repository');
+      });
+
+      const isWorkingTreeClean = (
+        driver as unknown as { isWorkingTreeClean: () => Promise<boolean> }
+      ).isWorkingTreeClean;
+      const result = await isWorkingTreeClean.call(driver);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('revert', () => {
+    beforeEach(() => {
+      driver = new SelfDriver();
+    });
+
+    it('reverts changes successfully', async () => {
+      mockExeca.mockImplementation(async () => mockExecaResult(0, '', ''));
+
+      const revert = (driver as unknown as { revert: () => Promise<boolean> }).revert;
+      const result = await revert.call(driver);
+      expect(result).toBe(true);
+    });
+
+    it('handles revert failure gracefully', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('checkout')) {
+          throw new Error('Revert failed');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const revert = (driver as unknown as { revert: () => Promise<boolean> }).revert;
+      const result = await revert.call(driver);
+      expect(result).toBe(false);
+    });
+
+    it('skips git clean when keepUntracked is true', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ keepUntracked: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('reset')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'git' && args?.includes('checkout')) {
+          return mockExecaResult(0, '', '');
+        }
+        // git clean should NOT be called when keepUntracked is true
+        if (command === 'git' && args?.includes('clean')) {
+          throw new Error('git clean should not be called');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const revert = (driver as unknown as { revert: () => Promise<boolean> }).revert;
+      const result = await revert.call(driver);
+
+      expect(result).toBe(true);
+      expect(mockLogger).toHaveBeenCalledWith('ℹ️  Preserving untracked files (--keep-untracked)');
+    });
+
+    it('calls git clean when keepUntracked is false (default)', async () => {
+      driver = new SelfDriver({ keepUntracked: false });
+
+      let cleanCalled = false;
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('reset')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'git' && args?.includes('checkout')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'git' && args?.includes('clean')) {
+          cleanCalled = true;
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const revert = (driver as unknown as { revert: () => Promise<boolean> }).revert;
+      const result = await revert.call(driver);
+
+      expect(result).toBe(true);
+      expect(cleanCalled).toBe(true);
+    });
+  });
+
+  describe('evolveWithOpenCode', () => {
+    beforeEach(() => {
+      driver = new SelfDriver();
+    });
+
+    it('executes opencode successfully', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (command === 'opencode' && args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      const result = await evolveWithOpenCode.call(driver, '');
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false when opencode execution throws (e.g. not installed)', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts', '');
+        }
+        if (command === 'opencode') {
+          throw new Error('Command not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      const result = await evolveWithOpenCode.call(driver, '');
+
+      expect(result).toBe(false);
+    });
+
+    it('returns false when opencode run fails', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (command === 'opencode' && args?.includes('run')) {
+          return mockExecaResult(1, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      const result = await evolveWithOpenCode.call(driver, '');
+
+      expect(result).toBe(false);
+    });
+
+    it('handles opencode run execution errors', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (command === 'opencode' && args?.includes('run')) {
+          throw new Error('OpenCode execution failed');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      const result = await evolveWithOpenCode.call(driver, '');
+
+      expect(result).toBe(false);
+    });
+
+    it('handles opencode timeout and reverts changes', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (command === 'opencode' && args?.includes('run')) {
+          // Return a timed-out result
+          return {
+            exitCode: 0,
+            stdout: '',
+            stderr: '',
+            timedOut: true,
+          };
+        }
+        // Git commands for revert
+        if (command === 'git' && args?.includes('reset')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'git' && args?.includes('checkout')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'git' && args?.includes('clean')) {
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      const result = await evolveWithOpenCode.call(driver, '');
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith(
+        '⚠️  OpenCode timed out, reverting any partial changes...'
+      );
+      expect(mockLogger).toHaveBeenCalledWith('🔄 Reverted changes');
+    });
+
+    it('logs stderr output from opencode', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (command === 'opencode' && args?.includes('run')) {
+          return {
+            exitCode: 0,
+            stdout: '',
+            stderr: 'Some debug output from OpenCode',
+            timedOut: false,
+          };
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      const result = await evolveWithOpenCode.call(driver, '');
+
+      expect(result).toBe(true);
+      expect(mockLogger).toHaveBeenCalledWith('OpenCode stderr: Some debug output from OpenCode');
+    });
+
+    it('constructs prompt with constitution, file tree, and task instructions (useTsNode=true)', async () => {
+      driver = new SelfDriver({ useTsNode: true });
+      let capturedPrompt = '';
+      const constitution = '# Test Constitution';
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts\nsrc/commands/evolve.ts', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (command === 'opencode' && args?.includes('run')) {
+          capturedPrompt = args?.[1] ?? '';
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      await evolveWithOpenCode.call(driver, constitution);
+
+      // Verify prompt structure
+      expect(capturedPrompt).toContain('# Test Constitution');
+      expect(capturedPrompt).toContain('## Current Codebase');
+      expect(capturedPrompt).toContain('## Source Files');
+      expect(capturedPrompt).toContain('self-driver.ts');
+      expect(capturedPrompt).toContain('evolve.ts');
+      expect(capturedPrompt).toContain('## Your Task');
+      expect(capturedPrompt).toContain('1. FIX');
+      expect(capturedPrompt).toContain('2. TEST');
+      expect(capturedPrompt).toContain('3. REFACTOR');
+      expect(capturedPrompt).toContain('4. FEATURE');
+      expect(capturedPrompt).toContain('5. SKIP');
+      expect(capturedPrompt).toContain('## After Changes');
+      // useTsNode=true should use npx ts-node commands
+      expect(capturedPrompt).toContain('npx ts-node src/cli/index.ts list --help');
+      expect(capturedPrompt).toContain('npx ts-node src/cli/index.ts evolve --help');
+      expect(capturedPrompt).not.toContain('node dist/cli/index.js');
+      expect(capturedPrompt).toContain('git add -A');
+      expect(capturedPrompt).toContain('git commit -m');
+    });
+
+    it('constructs prompt with dist-based verification when useTsNode=false', async () => {
+      driver = new SelfDriver({ useTsNode: false });
+      let capturedPrompt = '';
+      const constitution = '# Test Constitution';
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts\nsrc/commands/evolve.ts', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (command === 'opencode' && args?.includes('run')) {
+          capturedPrompt = args?.[1] ?? '';
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const evolveWithOpenCode = (
+        driver as unknown as {
+          evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+        }
+      ).evolveWithOpenCode;
+      await evolveWithOpenCode.call(driver, constitution);
+
+      // useTsNode=false should use node dist commands
+      expect(capturedPrompt).toContain('node dist/cli/index.js list --help');
+      expect(capturedPrompt).toContain('node dist/cli/index.js evolve --help');
+      expect(capturedPrompt).not.toContain('npx ts-node');
+    });
+  });
+
+  describe('readConstitution', () => {
+    beforeEach(() => {
+      driver = new SelfDriver();
+    });
+
+    it('reads EVOLVE.md when it exists', async () => {
+      mockPathExists.mockResolvedValue(true);
+      mockReadFile.mockResolvedValue('# Evolution Guide');
+
+      const readConstitution = (
+        driver as unknown as {
+          readConstitution: () => Promise<string>;
+        }
+      ).readConstitution;
+      const result = await readConstitution.call(driver);
+
+      expect(result).toBe('# Evolution Guide');
+    });
+
+    it('returns empty string when EVOLVE.md does not exist', async () => {
+      mockPathExists.mockResolvedValue(false);
+
+      const readConstitution = (
+        driver as unknown as {
+          readConstitution: () => Promise<string>;
+        }
+      ).readConstitution;
+      const result = await readConstitution.call(driver);
+
+      expect(result).toBe('');
+    });
+
+    it('returns empty string when reading EVOLVE.md throws an error', async () => {
+      mockPathExists.mockResolvedValue(true);
+      mockReadFile.mockRejectedValue(new Error('Permission denied'));
+
+      const readConstitution = (
+        driver as unknown as {
+          readConstitution: () => Promise<string>;
+        }
+      ).readConstitution;
+      const result = await readConstitution.call(driver);
+
+      expect(result).toBe('');
+    });
+  });
+
+  describe('getFileTree', () => {
+    beforeEach(() => {
+      driver = new SelfDriver();
+    });
+
+    it('returns file list from git with all sections', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          // Single call returns all files together
+          return mockExecaResult(
+            0,
+            'package.json\ntsconfig.json\nbin/ubuild.js\nsrc/core/self-driver.ts\nsrc/commands/evolve.ts',
+            ''
+          );
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const getFileTree = (
+        driver as unknown as {
+          getFileTree: () => Promise<string>;
+        }
+      ).getFileTree;
+      const result = await getFileTree.call(driver);
+
+      expect(result).toContain('## Configuration Files');
+      expect(result).toContain('## Bin Files');
+      expect(result).toContain('## Source Files');
+      expect(result).toContain('self-driver.ts');
+      expect(result).toContain('evolve.ts');
+      expect(result).toContain('package.json');
+      expect(result).toContain('bin/ubuild.js');
+    });
+
+    it('returns message when no files are found', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const getFileTree = (
+        driver as unknown as {
+          getFileTree: () => Promise<string>;
+        }
+      ).getFileTree;
+      const result = await getFileTree.call(driver);
+
+      expect(result).toBe('Project files (unable to list - git exit code 0)');
+    });
+
+    it('returns error message when git fails', async () => {
+      mockExeca.mockImplementation(async () => {
+        throw new Error('Git error');
+      });
+
+      const getFileTree = (
+        driver as unknown as {
+          getFileTree: () => Promise<string>;
+        }
+      ).getFileTree;
+      const result = await getFileTree.call(driver);
+
+      expect(result).toBe('Project files (unable to list - git exit code unknown)');
+    });
+
+    it('returns unable-to-list message when files exist but none match categories', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('ls-files')) {
+          // Return files that don't match any category (no .json, .js, .md, .yml, .yaml, bin/, src/)
+          return mockExecaResult(0, 'some-random-file.txt\nanother-file.xml', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const getFileTree = (
+        driver as unknown as {
+          getFileTree: () => Promise<string>;
+        }
+      ).getFileTree;
+      const result = await getFileTree.call(driver);
+
+      expect(result).toBe('Project files (unable to list)');
+    });
+  });
+
+  describe('signal handling', () => {
+    const drivers: SelfDriver[] = [];
+
+    afterEach(() => {
+      // Clean up all drivers created in this test
+      drivers.forEach((d) => d.cleanup());
+      drivers.length = 0;
+    });
+
+    it('handles SIGINT signal', () => {
+      const d = new SelfDriver();
+      drivers.push(d);
+
+      // Emit SIGINT - should not throw
+      expect(() => process.emit('SIGINT' as NodeJS.Signals)).not.toThrow();
+    });
+
+    it('handles SIGTERM signal', () => {
+      const d = new SelfDriver();
+      drivers.push(d);
+
+      // Emit SIGTERM - should not throw
+      expect(() => process.emit('SIGTERM' as NodeJS.Signals)).not.toThrow();
+    });
+
+    it('cleans up signal handlers when cleanup is called', () => {
+      const d = new SelfDriver();
+      drivers.push(d);
+
+      // Cleanup should not throw
+      expect(() => d.cleanup()).not.toThrow();
+
+      // Emitting signals after cleanup should not affect the driver
+      expect(() => process.emit('SIGINT' as NodeJS.Signals)).not.toThrow();
+      expect(() => process.emit('SIGTERM' as NodeJS.Signals)).not.toThrow();
+    });
+
+    it('handles multiple cleanup calls gracefully', () => {
+      const d = new SelfDriver();
+      drivers.push(d);
+
+      // Multiple cleanups should not throw
+      expect(() => {
+        d.cleanup();
+        d.cleanup();
+      }).not.toThrow();
+    });
+
+    it('skips removeListener when handlers are already null after prior cleanup', () => {
+      const d = new SelfDriver();
+      drivers.push(d);
+
+      // First cleanup nullifies the handlers (sigintHandler = null, sigtermHandler = null)
+      d.cleanup();
+
+      // Second cleanup should safely skip removeListener since handlers are null
+      expect(() => d.cleanup()).not.toThrow();
+    });
+  });
+
+  describe('isGitRepository', () => {
+    beforeEach(() => {
+      driver = new SelfDriver();
+    });
+
+    it('returns true when git rev-parse succeeds', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(0, '.git', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const isGitRepository = (driver as unknown as { isGitRepository: () => Promise<boolean> })
+        .isGitRepository;
+      const result = await isGitRepository.call(driver);
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false when git rev-parse fails', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(128, '', 'fatal: not a git repository');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const isGitRepository = (driver as unknown as { isGitRepository: () => Promise<boolean> })
+        .isGitRepository;
+      const result = await isGitRepository.call(driver);
+
+      expect(result).toBe(false);
+    });
+
+    it('returns false when git command throws', async () => {
+      mockExeca.mockImplementation(async (command: string) => {
+        if (command === 'git') {
+          throw new Error('Command not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const isGitRepository = (driver as unknown as { isGitRepository: () => Promise<boolean> })
+        .isGitRepository;
+      const result = await isGitRepository.call(driver);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('isOpenCodeInstalled', () => {
+    beforeEach(() => {
+      driver = new SelfDriver();
+    });
+
+    it('returns true when opencode --version succeeds', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const isOpenCodeInstalled = (
+        driver as unknown as { isOpenCodeInstalled: () => Promise<boolean> }
+      ).isOpenCodeInstalled;
+      const result = await isOpenCodeInstalled.call(driver);
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false when opencode --version fails', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(127, '', 'command not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const isOpenCodeInstalled = (
+        driver as unknown as { isOpenCodeInstalled: () => Promise<boolean> }
+      ).isOpenCodeInstalled;
+      const result = await isOpenCodeInstalled.call(driver);
+
+      expect(result).toBe(false);
+    });
+
+    it('returns false when opencode command throws', async () => {
+      mockExeca.mockImplementation(async (command: string) => {
+        if (command === 'opencode') {
+          throw new Error('Command not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const isOpenCodeInstalled = (
+        driver as unknown as { isOpenCodeInstalled: () => Promise<boolean> }
+      ).isOpenCodeInstalled;
+      const result = await isOpenCodeInstalled.call(driver);
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('getHeadCommitHash', () => {
+    beforeEach(() => {
+      driver = new SelfDriver();
+    });
+
+    it('returns commit hash when git rev-parse HEAD succeeds', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+          return mockExecaResult(0, 'abc123def456', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const getHeadCommitHash = (
+        driver as unknown as { getHeadCommitHash: () => Promise<string | null> }
+      ).getHeadCommitHash;
+      const result = await getHeadCommitHash.call(driver);
+
+      expect(result).toBe('abc123def456');
+    });
+
+    it('returns null when git rev-parse HEAD fails', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+          return mockExecaResult(128, '', 'fatal: not a git repository');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const getHeadCommitHash = (
+        driver as unknown as { getHeadCommitHash: () => Promise<string | null> }
+      ).getHeadCommitHash;
+      const result = await getHeadCommitHash.call(driver);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null when git command throws', async () => {
+      mockExeca.mockImplementation(async (command: string) => {
+        if (command === 'git') {
+          throw new Error('Command not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const getHeadCommitHash = (
+        driver as unknown as { getHeadCommitHash: () => Promise<string | null> }
+      ).getHeadCommitHash;
+      const result = await getHeadCommitHash.call(driver);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null when git rev-parse HEAD returns empty output', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+          return mockExecaResult(0, '', ''); // Empty stdout
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const getHeadCommitHash = (
+        driver as unknown as { getHeadCommitHash: () => Promise<string | null> }
+      ).getHeadCommitHash;
+      const result = await getHeadCommitHash.call(driver);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('runPreFlightChecks', () => {
+    beforeEach(() => {
+      driver = new SelfDriver({ once: true });
+    });
+
+    it('returns true when all checks pass', async () => {
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(0, '.git', '');
+        }
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const runPreFlightChecks = (
+        driver as unknown as { runPreFlightChecks: () => Promise<boolean> }
+      ).runPreFlightChecks;
+      const result = await runPreFlightChecks.call(driver);
+
+      expect(result).toBe(true);
+    });
+
+    it('returns false when not in git repository', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ once: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(128, '', 'fatal: not a git repository');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const runPreFlightChecks = (
+        driver as unknown as { runPreFlightChecks: () => Promise<boolean> }
+      ).runPreFlightChecks;
+      const result = await runPreFlightChecks.call(driver);
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith('❌ Error: Not a git repository');
+    });
+
+    it('returns false when working tree has uncommitted changes', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ once: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(0, '.git', '');
+        }
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+          return mockExecaResult(0, 'M src/file.ts', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const runPreFlightChecks = (
+        driver as unknown as { runPreFlightChecks: () => Promise<boolean> }
+      ).runPreFlightChecks;
+      const result = await runPreFlightChecks.call(driver);
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith('❌ Error: Working tree has uncommitted changes');
+    });
+
+    it('returns false when opencode is not installed', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ once: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(0, '.git', '');
+        }
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(127, '', 'command not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const runPreFlightChecks = (
+        driver as unknown as { runPreFlightChecks: () => Promise<boolean> }
+      ).runPreFlightChecks;
+      const result = await runPreFlightChecks.call(driver);
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith('❌ Error: OpenCode is not installed or not in PATH');
+    });
+  });
+
+  describe('git repository validation in run', () => {
+    it('exits early when not in a git repository', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ once: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        // Git rev-parse fails - not a git repo
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(128, '', 'fatal: not a git repository');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const run = (driver as unknown as { run: () => Promise<void> }).run;
+      await run.call(driver);
+
+      expect(mockLogger).toHaveBeenCalledWith('❌ Error: Not a git repository');
+      expect(mockLogger).toHaveBeenCalledWith(
+        '   Self-evolution requires a git repository to track and revert changes.'
+      );
+      expect(mockLogger).toHaveBeenCalledWith(`   Current directory: ${mockProjectRoot}`);
+    });
+
+    it('exits early when working tree has uncommitted changes', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ once: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        // Git rev-parse succeeds - is a git repo
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(0, '.git', '');
+        }
+        // Git status shows uncommitted changes
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+          return mockExecaResult(0, 'M src/some-file.ts', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const run = (driver as unknown as { run: () => Promise<void> }).run;
+      await run.call(driver);
+
+      expect(mockLogger).toHaveBeenCalledWith('❌ Error: Working tree has uncommitted changes');
+      expect(mockLogger).toHaveBeenCalledWith(
+        '   Self-evolution may revert changes using `git checkout .`'
+      );
+      expect(mockLogger).toHaveBeenCalledWith(
+        '   Commit or stash your changes before running evolve.'
+      );
+    });
+
+    it('exits early when opencode is not installed', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ once: true, logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        // Git rev-parse succeeds - is a git repo
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(0, '.git', '');
+        }
+        // Git status returns clean
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+          return mockExecaResult(0, '', '');
+        }
+        // OpenCode is not installed
+        if (command === 'opencode' && args?.includes('--version')) {
+          return mockExecaResult(127, '', 'command not found');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const run = (driver as unknown as { run: () => Promise<void> }).run;
+      await run.call(driver);
+
+      expect(mockLogger).toHaveBeenCalledWith('❌ Error: OpenCode is not installed or not in PATH');
+      expect(mockLogger).toHaveBeenCalledWith('   Self-evolution requires OpenCode CLI to run.');
+      expect(mockLogger).toHaveBeenCalledWith('   Install it with: npm install -g opencode');
+    });
+
+    it('proceeds with evolution when in a git repository', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ once: true, logger: mockLogger });
+
+      let gitRevParseCallCount = 0;
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+        // Git rev-parse --git-dir succeeds (pre-flight check)
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+          return mockExecaResult(0, '.git', '');
+        }
+
+        // Git rev-parse HEAD - return different hashes to simulate a commit was made
+        if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+          gitRevParseCallCount++;
+          if (gitRevParseCallCount === 1) {
+            // Before evolution
+            return mockExecaResult(0, 'abc123', '');
+          } else {
+            // After evolution - different hash = commit made
+            return mockExecaResult(0, 'def456', '');
+          }
+        }
+
+        // Git status returns clean
+        if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+          return mockExecaResult(0, '', '');
+        }
+
+        // All verification checks pass
+        if (fullCommand.includes('npm run build')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (fullCommand.includes('npm test')) {
+          return mockExecaResult(0, 'Test Suites: 10 passed', '');
+        }
+        if (fullCommand.includes('npm run lint')) {
+          return mockExecaResult(0, '', '');
+        }
+        if (fullCommand.includes('evolve --help') || fullCommand.includes('list --help')) {
+          return mockExecaResult(0, 'Usage: [command] [options]', '');
+        }
+
+        // OpenCode executes successfully
+        if (command === 'opencode') {
+          if (args?.includes('--version')) {
+            return mockExecaResult(0, '1.0.0', '');
+          }
+          if (args?.includes('run')) {
+            return mockExecaResult(0, '', '');
+          }
+        }
+
+        if (command === 'git' && args?.includes('ls-files')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts', '');
+        }
+
+        return mockExecaResult(0, '', '');
+      });
+
+      const run = (driver as unknown as { run: () => Promise<void> }).run;
+      await run.call(driver);
+
+      // Should proceed with evolution
+      expect(mockLogger).toHaveBeenCalledWith('🔄 Starting self-evolution...');
+      expect(mockLogger).toHaveBeenCalledWith('✅ Changes committed by AI');
+    });
+  });
+
+  describe('dry-run behavior', () => {
+    it('logs dry run information and exits early', async () => {
+      const mockLogger = jest.fn();
+      const options: SelfEvolverOptions = {
+        logger: mockLogger,
+        dryRun: true,
+      };
+      driver = new SelfDriver(options);
+
+      const run = (driver as unknown as { run: () => Promise<void> }).run;
+      await run.call(driver);
+
+      expect(mockLogger).toHaveBeenCalledWith('🔍 Dry run mode - showing what would be done');
+      expect(mockLogger).toHaveBeenCalledWith(`📁 Project: ${mockProjectRoot}`);
+      expect(mockLogger).toHaveBeenCalledWith('\n📝 Would perform the following actions:');
+      expect(mockLogger).toHaveBeenCalledWith('\n✨ Dry run complete - no changes made');
+    });
+
+    it('shows single iteration mode in dry run with --once', async () => {
+      const mockLogger = jest.fn();
+      const options: SelfEvolverOptions = {
+        logger: mockLogger,
+        dryRun: true,
+        once: true,
+      };
+      driver = new SelfDriver(options);
+
+      const run = (driver as unknown as { run: () => Promise<void> }).run;
+      await run.call(driver);
+
+      expect(mockLogger).toHaveBeenCalledWith('\n  Mode: Single iteration (--once)');
+    });
+
+    it('shows continuous mode in dry run without --once', async () => {
+      const mockLogger = jest.fn();
+      const options: SelfEvolverOptions = {
+        logger: mockLogger,
+        dryRun: true,
+        once: false,
+      };
+      driver = new SelfDriver(options);
+
+      const run = (driver as unknown as { run: () => Promise<void> }).run;
+      await run.call(driver);
+
+      expect(mockLogger).toHaveBeenCalledWith('\n  Mode: Continuous (runs until Ctrl+C)');
+      expect(mockLogger).toHaveBeenCalledWith('  Would loop every 5 seconds');
+    });
+  });
+});
+
+describe('pre-existing dirty state handling', () => {
+  beforeEach(() => {
+    driver = new SelfDriver({ once: true });
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+  });
+
+  it('exits early when working tree has pre-existing uncommitted changes', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      // Git rev-parse succeeds - is a git repo
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+
+      // Git status always returns dirty (pre-existing changes)
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, 'M src/some-file.ts', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should exit early with dirty state error
+    expect(mockLogger).toHaveBeenCalledWith('❌ Error: Working tree has uncommitted changes');
+    expect(mockLogger).toHaveBeenCalledWith(
+      '   Self-evolution may revert changes using `git checkout .`'
+    );
+    expect(mockLogger).toHaveBeenCalledWith(
+      '   Commit or stash your changes before running evolve.'
+    );
+
+    // Should NOT proceed with evolution
+    expect(mockLogger).not.toHaveBeenCalledWith('🔄 Starting self-evolution...');
+  });
+
+  it('commits successfully when working tree is clean after evolution', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    let gitRevParseCallCount = 0;
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      // Git rev-parse --git-dir succeeds (pre-flight check)
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+
+      // Git rev-parse HEAD - return different hashes to simulate a commit was made
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+        gitRevParseCallCount++;
+        if (gitRevParseCallCount === 1) {
+          // Before evolution
+          return mockExecaResult(0, 'abc123', '');
+        } else {
+          // After evolution - different hash = commit made
+          return mockExecaResult(0, 'def456', '');
+        }
+      }
+
+      // Git status returns clean (AI committed changes)
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // All verification checks pass
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('npm test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (fullCommand.includes('npm run lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('evolve --help') || fullCommand.includes('list --help')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      // OpenCode executes successfully
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should confirm changes committed
+    expect(mockLogger).toHaveBeenCalledWith('✅ Changes committed by AI');
+
+    // Should NOT revert
+    expect(mockLogger).not.toHaveBeenCalledWith('🔄 Reverting...');
+  });
+});
+
+describe('runSelfEvolution', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('exports runSelfEvolution function', () => {
+    expect(typeof runSelfEvolution).toBe('function');
+  });
+
+  it('runs self-evolution with custom logger', async () => {
+    const mockLogger = jest.fn();
+
+    // We can't fully test this without mocking the SelfDriver class,
+    // but we can verify the function accepts the options
+    expect(() => runSelfEvolution({ logger: mockLogger })).not.toThrow();
+  });
+
+  it('runs self-evolution without options', async () => {
+    expect(() => runSelfEvolution()).not.toThrow();
+  });
+
+  it('runs self-evolution with once option set to true', async () => {
+    const mockLogger = jest.fn();
+    expect(() => runSelfEvolution({ logger: mockLogger, once: true })).not.toThrow();
+  });
+
+  it('runs self-evolution with once option set to false', async () => {
+    const mockLogger = jest.fn();
+    expect(() => runSelfEvolution({ logger: mockLogger, once: false })).not.toThrow();
+  });
+
+  it('runs self-evolution with dryRun option set to true', async () => {
+    const mockLogger = jest.fn();
+    expect(() => runSelfEvolution({ logger: mockLogger, dryRun: true })).not.toThrow();
+  });
+
+  it('runs self-evolution with dryRun option set to false', async () => {
+    const mockLogger = jest.fn();
+    expect(() => runSelfEvolution({ logger: mockLogger, dryRun: false })).not.toThrow();
+  });
+
+  it('runs self-evolution with all options', async () => {
+    const mockLogger = jest.fn();
+    expect(() => runSelfEvolution({ logger: mockLogger, once: true, dryRun: true })).not.toThrow();
+  });
+
+  it('runs self-evolution with sleepMs option', async () => {
+    const mockLogger = jest.fn();
+    expect(() => runSelfEvolution({ logger: mockLogger, sleepMs: 10000 })).not.toThrow();
+  });
+
+  it('runs self-evolution with all options including sleepMs', async () => {
+    const mockLogger = jest.fn();
+    expect(() =>
+      runSelfEvolution({ logger: mockLogger, once: true, dryRun: true, sleepMs: 10000 })
+    ).not.toThrow();
+  });
+});
+
+describe('sleep behavior after cleanup', () => {
+  it('resolves immediately when sleep is called after cleanup', async () => {
+    const d = new SelfDriver({ once: true });
+
+    // Cleanup first
+    d.cleanup();
+
+    // Access and call sleep after cleanup - should resolve immediately
+    const sleep = (d as unknown as { sleep: (ms: number) => Promise<void> }).sleep;
+    const startTime = Date.now();
+    await sleep.call(d, 1000); // Request 1 second sleep
+    const elapsed = Date.now() - startTime;
+
+    // Should resolve almost immediately (less than 100ms)
+    expect(elapsed).toBeLessThan(100);
+  });
+});
+
+describe('cleanup edge cases', () => {
+  it('clears pending sleep timer and resolves sleep promise', async () => {
+    const d = new SelfDriver({ once: true });
+
+    // Start a sleep
+    const sleep = (d as unknown as { sleep: (ms: number) => Promise<void> }).sleep;
+    const sleepPromise = sleep.call(d, 10000); // 10 second sleep
+
+    // Immediately cleanup - this should clear the timer and resolve the sleep
+    d.cleanup();
+
+    // Sleep should resolve quickly due to cleanup
+    const startTime = Date.now();
+    await sleepPromise;
+    const elapsed = Date.now() - startTime;
+
+    // Should resolve almost immediately after cleanup (less than 100ms)
+    expect(elapsed).toBeLessThan(100);
+  });
+
+  it('restores original max listeners when cleanup is called', () => {
+    const originalMaxListeners = process.getMaxListeners();
+
+    // Create driver which may increase max listeners
+    const d = new SelfDriver({ once: true });
+
+    // Cleanup should restore original
+    d.cleanup();
+
+    // Original should be restored (or remain the same if it wasn't changed)
+    expect(process.getMaxListeners()).toBe(originalMaxListeners);
+  });
+
+  it('does not resolve sleep via timer when sleepCancelled is true', async () => {
+    const d = new SelfDriver({ once: true });
+    const sleep = (d as unknown as { sleep: (ms: number) => Promise<void> }).sleep;
+
+    // Start a short sleep
+    const sleepPromise = sleep.call(d, 50);
+
+    // Call cleanup which sets sleepCancelled = true and resolves via interruptSleep
+    d.cleanup();
+
+    // The sleep should resolve from cleanup, not from the timer
+    // Wait for the timer to also fire (it fires after 50ms)
+    await sleepPromise;
+
+    // Verify driver is cleaned up (sleepCancelled was true when timer fired)
+    expect(d.getStatus().cleanedUp).toBe(true);
+  });
+});
+
+describe('evolution retry logic', () => {
+  it('retries when evolveWithOpenCode returns false', async () => {
+    const mockLogger = jest.fn();
+    // Use a very short sleep to avoid test timeout
+    driver = new SelfDriver({ once: true, logger: mockLogger, sleepMs: 50 });
+
+    let opencodeCallCount = 0;
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode fails first time, succeeds second time
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          opencodeCallCount++;
+          if (opencodeCallCount === 1) {
+            return mockExecaResult(1, '', 'Execution failed');
+          }
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // Verification checks
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('npm test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (fullCommand.includes('npm run lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('evolve --help') || fullCommand.includes('list --help')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should log retry message and opencode should be called twice (fail then succeed)
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Evolution execution issue'));
+    expect(opencodeCallCount).toBe(2);
+  });
+});
+
+describe('verification failure handling', () => {
+  it('reverts changes when verification fails', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    let revertCalled = false;
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode succeeds
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // Build fails
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(1, 'Build failed', '');
+      }
+
+      // Revert is called
+      if (command === 'git' && args?.includes('checkout') && args?.includes('.')) {
+        revertCalled = true;
+        return mockExecaResult(0, '', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should log verification failure
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Verifying changes'));
+    expect(mockLogger).toHaveBeenCalledWith('❌ Verification failed, reverting...');
+
+    // Should call revert
+    expect(revertCalled).toBe(true);
+  });
+
+  it('stops evolution when verification fails and revert also fails', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode succeeds
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // Build fails - verification fails
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(1, 'Build failed', '');
+      }
+
+      // Revert fails - git reset fails
+      if (command === 'git' && args?.includes('reset') && !args?.includes('--hard')) {
+        return mockExecaResult(1, '', 'reset failed');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should log verification failure
+    expect(mockLogger).toHaveBeenCalledWith('❌ Verification failed, reverting...');
+    // Should log revert failure and stop
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Revert failed - manual intervention may be required')
+    );
+    // Should have cleaned up (stopping evolution)
+    expect(driver.getStatus().cleanedUp).toBe(true);
+  });
+});
+
+describe('uncommitted changes after verification', () => {
+  it('reverts when working tree is not clean after verification', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    let statusCallCount = 0;
+    let revertCalled = false;
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      // Git checks pass initially
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+
+      // Git rev-parse HEAD - returns same commit hash before and after evolution (no commit made)
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+        return mockExecaResult(0, 'abc123def456789012345678901234567890abcd', '');
+      }
+
+      // Git status - first call is clean (pre-flight), second call shows uncommitted changes
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        statusCallCount++;
+        if (statusCallCount === 1) {
+          return mockExecaResult(0, '', ''); // Pre-flight check - clean
+        }
+        return mockExecaResult(0, 'M src/modified.ts', ''); // Post-evolution - dirty
+      }
+
+      // OpenCode succeeds
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // All verification checks pass
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('npm test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (fullCommand.includes('npm run lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('evolve --help') || fullCommand.includes('list --help')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      // Revert commands - git reset, git checkout, git clean
+      if (command === 'git' && args?.includes('reset') && !args?.includes('--hard')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout') && args?.includes('.')) {
+        revertCalled = true;
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean') && args?.includes('-fd')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should log warning about uncommitted changes
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Verification passed but AI did not commit changes')
+    );
+
+    // Should revert
+    expect(revertCalled).toBe(true);
+  });
+
+  it('stops evolution when post-verification revert of uncommitted changes fails', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    let statusCallCount = 0;
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      // Git checks pass initially
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+
+      // Git rev-parse HEAD - same hash before and after (no commit made)
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+        return mockExecaResult(0, 'abc123def456789012345678901234567890abcd', '');
+      }
+
+      // Git status - first call clean (pre-flight), second call dirty (post-evolution)
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        statusCallCount++;
+        if (statusCallCount === 1) {
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, 'M src/modified.ts', '');
+      }
+
+      // OpenCode succeeds
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // All verification checks pass
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('npm test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (fullCommand.includes('npm run lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('evolve --help') || fullCommand.includes('list --help')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      // Revert fails - git reset fails
+      if (command === 'git' && args?.includes('reset') && !args?.includes('--hard')) {
+        return mockExecaResult(1, '', 'reset failed');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should detect uncommitted changes
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Verification passed but AI did not commit changes')
+    );
+    // Should log revert failure
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Revert failed - manual intervention may be required')
+    );
+    // Should have cleaned up (stopping evolution)
+    expect(driver.getStatus().cleanedUp).toBe(true);
+  });
+});
+
+describe('once mode completion', () => {
+  it('completes single iteration and exits cleanly', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode succeeds
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // All verification checks pass
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('npm test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (fullCommand.includes('npm run lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('evolve --help') || fullCommand.includes('list --help')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should log single iteration completion
+    expect(mockLogger).toHaveBeenCalledWith('\n✨ Single iteration complete (--once flag set)');
+  });
+});
+
+describe('getStatus', () => {
+  beforeEach(() => {
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  it('returns current driver state with default options', () => {
+    driver = new SelfDriver();
+    const status = driver.getStatus();
+
+    expect(status).toEqual({
+      interrupted: false,
+      cleanedUp: false,
+      projectRoot: mockProjectRoot,
+      dryRun: false,
+      once: false,
+      consecutiveFailures: 0,
+      iterationCount: 0,
+      keepUntracked: false,
+    });
+  });
+
+  it('returns current driver state with once option', () => {
+    driver = new SelfDriver({ once: true });
+    const status = driver.getStatus();
+
+    expect(status.once).toBe(true);
+  });
+
+  it('returns current driver state with dryRun option', () => {
+    driver = new SelfDriver({ dryRun: true });
+    const status = driver.getStatus();
+
+    expect(status.dryRun).toBe(true);
+  });
+
+  it('returns current driver state with keepUntracked option', () => {
+    driver = new SelfDriver({ keepUntracked: true });
+    const status = driver.getStatus();
+
+    expect(status.keepUntracked).toBe(true);
+  });
+
+  it('returns custom project root', () => {
+    const customRoot = 'C:\\Custom\\Project';
+    process.cwd = jest.fn().mockReturnValue(customRoot);
+    driver = new SelfDriver();
+
+    const status = driver.getStatus();
+    expect(status.projectRoot).toBe(customRoot);
+  });
+
+  it('reflects interrupted state after signal', () => {
+    driver = new SelfDriver();
+    const statusBefore = driver.getStatus();
+    expect(statusBefore.interrupted).toBe(false);
+
+    // Simulate SIGINT
+    process.emit('SIGINT');
+
+    const statusAfter = driver.getStatus();
+    expect(statusAfter.interrupted).toBe(true);
+  });
+
+  it('reflects cleanedUp state after cleanup', () => {
+    driver = new SelfDriver();
+    const statusBefore = driver.getStatus();
+    expect(statusBefore.cleanedUp).toBe(false);
+
+    driver.cleanup();
+
+    const statusAfter = driver.getStatus();
+    expect(statusAfter.cleanedUp).toBe(true);
+  });
+
+  it('returns all options combined', () => {
+    const customRoot = 'C:\\Custom\\Project';
+    process.cwd = jest.fn().mockReturnValue(customRoot);
+
+    driver = new SelfDriver({
+      once: true,
+      dryRun: true,
+      keepUntracked: true,
+    });
+
+    const status = driver.getStatus();
+    expect(status).toEqual({
+      interrupted: false,
+      cleanedUp: false,
+      projectRoot: customRoot,
+      dryRun: true,
+      once: true,
+      consecutiveFailures: 0,
+      iterationCount: 0,
+      keepUntracked: true,
+    });
+  });
+});
+
+describe('unlimited retries (maxRetries = -1)', () => {
+  it('continues evolving despite consecutive failures when maxRetries is -1', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger, maxRetries: -1, sleepMs: 50 });
+
+    let opencodeCallCount = 0;
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode fails first 3 times, succeeds on 4th
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          opencodeCallCount++;
+          if (opencodeCallCount <= 3) {
+            return mockExecaResult(1, '', 'Execution failed');
+          }
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // Verification checks pass
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('npm test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (fullCommand.includes('npm run lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('evolve --help') || fullCommand.includes('list --help')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should retry multiple times and eventually succeed
+    expect(opencodeCallCount).toBe(4);
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Evolution execution issue'));
+  });
+});
+
+describe('max retries exhaustion', () => {
+  it('stops evolution when max retries is reached after consecutive failures', async () => {
+    const mockLogger = jest.fn();
+    const maxRetries = 3;
+    driver = new SelfDriver({ once: true, logger: mockLogger, maxRetries, sleepMs: 50 });
+
+    let opencodeCallCount = 0;
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode always fails
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          opencodeCallCount++;
+          return mockExecaResult(1, '', 'Execution failed');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should retry exactly maxRetries times
+    expect(opencodeCallCount).toBe(maxRetries);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining(`Max retries (${maxRetries}) reached, stopping evolution`)
+    );
+    // Should log each failure
+    expect(
+      mockLogger.mock.calls.filter((call) => call[0].includes('Evolution execution issue')).length
+    ).toBe(maxRetries);
+  });
+});
+
+describe('verification timeout behavior', () => {
+  it('handles verification timeout gracefully', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger, verifyTimeoutMs: 100 });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode succeeds
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // Build times out (simulated by throwing timeout error)
+      if (fullCommand.includes('npm run build')) {
+        const error: Error & { timedOut?: boolean } = new Error('Timeout');
+        error.timedOut = true;
+        throw error;
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should log verification failure due to timeout
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Verifying changes'));
+    expect(mockLogger).toHaveBeenCalledWith('❌ Verification failed, reverting...');
+  });
+
+  it('handles opencode execution failure gracefully', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger, sleepMs: 50 });
+
+    let opencodeCallCount = 0;
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode fails first time, succeeds second time
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          opencodeCallCount++;
+          if (opencodeCallCount === 1) {
+            return mockExecaResult(1, '', 'Execution failed');
+          }
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // Verification checks pass
+      const fullCommand = `${command} ${args?.join(' ') ?? ''}`;
+      if (fullCommand.includes('npm run build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('npm test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (fullCommand.includes('npm run lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (fullCommand.includes('evolve --help') || fullCommand.includes('list --help')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // Should log OpenCode failure and retry
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('OpenCode exited with code'));
+    expect(opencodeCallCount).toBe(2);
+  });
+});
+
+describe('handlePostVerificationState', () => {
+  beforeEach(() => {
+    driver = new SelfDriver({ once: true });
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+  });
+
+  it('handles SKIP scenario when isClean && !hashChanged && !hashError', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    // Access private method via type assertion
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    // Test the SKIP scenario: working tree is clean but hash didn't change
+    // This means AI made no changes this iteration
+    const result = await handlePostVerificationState.call(driver, true, false, false);
+
+    expect(result).toBe(true); // Should continue evolution
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('AI made no changes this iteration (SKIP)')
+    );
+  });
+
+  it('handles COMMITTED scenario when isClean && hashChanged', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, true, true, false);
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Changes committed by AI'));
+  });
+
+  it('handles hash error when working tree is clean', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, true, false, true);
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Could not determine commit hash status')
+    );
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Working tree is clean, assuming no changes made')
+    );
+  });
+
+  it('handles hash error when working tree is not clean (reverts)', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, false, false, true);
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Working tree is not clean, reverting to be safe')
+    );
+    // Verify failure counter is reset - successful revert in hash error case is not a real failure
+    expect(driver.getStatus().consecutiveFailures).toBe(0);
+  });
+
+  it('handles hash error when revert fails for dirty working tree', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    // Make all git commands fail to simulate revert failure
+    mockExeca.mockImplementation(async (command: string) => {
+      if (command === 'git') {
+        return mockExecaResult(1, '', 'fatal: error');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, false, false, true);
+
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Revert failed - manual intervention may be required')
+    );
+  });
+
+  it('handles uncommitted changes when revert fails', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    // Make all git commands fail to simulate revert failure
+    mockExeca.mockImplementation(async (command: string) => {
+      if (command === 'git') {
+        return mockExecaResult(1, '', 'fatal: error');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, false, false, false);
+
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Verification passed but AI did not commit changes')
+    );
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Revert failed - manual intervention may be required')
+    );
+  });
+
+  it('handles uncommitted changes after verification passes', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    // Test the case where verification passed but AI did not commit changes
+    // isClean=false, hashError=false means working tree is dirty and we can verify commits
+    const result = await handlePostVerificationState.call(driver, false, false, false);
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Verification passed but AI did not commit changes')
+    );
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Reverting uncommitted changes')
+    );
+
+    // Verify that consecutiveFailures is NOT incremented (verification passed)
+    const status = driver.getStatus();
+    expect(status.consecutiveFailures).toBe(0);
+  });
+
+  it('handles partial commit when hashChanged && !isClean', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    // AI committed some changes (hash changed) but left others uncommitted
+    const result = await handlePostVerificationState.call(driver, false, true, false);
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('AI left uncommitted changes after partial commit')
+    );
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Reverting uncommitted changes')
+    );
+
+    // Failure counter should be reset since verification passed
+    const status = driver.getStatus();
+    expect(status.consecutiveFailures).toBe(0);
+  });
+
+  it('logs info message about reset failure counter when reverting uncommitted changes', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    await handlePostVerificationState.call(driver, false, false, false);
+
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Reset failure counter'));
+  });
+
+  it('returns false when revert fails for hash error dirty tree', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    // Simulate revert failure - git reset succeeds but checkout fails
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout')) {
+        return mockExecaResult(1, '', 'fatal: checkout failed');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, false, false, true);
+
+    // Should return false when revert fails
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Revert failed - manual intervention may be required')
+    );
+  });
+
+  it('returns false and cleans up when revert fails in handleRevertFailure', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    const handleRevertFailure = (
+      driver as unknown as {
+        handleRevertFailure: (revertSuccess: boolean, reason: string) => boolean;
+      }
+    ).handleRevertFailure;
+
+    const result = handleRevertFailure.call(driver, false, 'Test revert failure');
+
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith(
+      '❌ Revert failed - manual intervention may be required'
+    );
+  });
+});
+
+describe('revert failure scenarios', () => {
+  beforeEach(() => {
+    driver = new SelfDriver();
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+  });
+
+  it('handles git reset failure', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(1, '', 'fatal: Cannot reset');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const revert = (driver as unknown as { revert: () => Promise<boolean> }).revert;
+    const result = await revert.call(driver);
+
+    expect(result).toBe(false); // Should return false on failure
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Git reset failed'));
+  });
+
+  it('handles git clean failure', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(1, '', 'fatal: Cannot clean');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const revert = (driver as unknown as { revert: () => Promise<boolean> }).revert;
+    const result = await revert.call(driver);
+
+    expect(result).toBe(false); // Should return false on failure
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Git clean failed'));
+  });
+});
+
+describe('handleEvolutionFailure direct tests', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('stops immediately when maxRetries is 0 (first failure triggers stop)', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ maxRetries: 0, logger: mockLogger });
+
+    const handleEvolutionFailure = (
+      driver as unknown as {
+        handleEvolutionFailure: (reason: string) => boolean;
+      }
+    ).handleEvolutionFailure;
+
+    const result = handleEvolutionFailure.call(driver, 'Test failure');
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      '❌ Test failure - Max retries (0) reached, stopping evolution'
+    );
+    expect(driver.getStatus().cleanedUp).toBe(true);
+  });
+
+  it('stops on first failure when maxRetries is 1', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ maxRetries: 1, logger: mockLogger });
+
+    const handleEvolutionFailure = (
+      driver as unknown as {
+        handleEvolutionFailure: (reason: string) => boolean;
+      }
+    ).handleEvolutionFailure;
+
+    const result = handleEvolutionFailure.call(driver, 'First failure');
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      '❌ First failure - Max retries (1) reached, stopping evolution'
+    );
+  });
+
+  it('continues on first failure then stops on second when maxRetries is 2', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ maxRetries: 2, logger: mockLogger });
+
+    const handleEvolutionFailure = (
+      driver as unknown as {
+        handleEvolutionFailure: (reason: string) => boolean;
+      }
+    ).handleEvolutionFailure;
+
+    // First failure: consecutiveFailures becomes 1, 1 >= 2 = false → continue
+    const result1 = handleEvolutionFailure.call(driver, 'First failure');
+    expect(result1).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith('⚠️  First failure (1/2), retrying next iteration...');
+
+    // Second failure: consecutiveFailures becomes 2, 2 >= 2 = true → stop
+    const result2 = handleEvolutionFailure.call(driver, 'Second failure');
+    expect(result2).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      '❌ Second failure - Max retries (2) reached, stopping evolution'
+    );
+  });
+
+  it('never stops and shows infinity symbol when maxRetries is -1', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ maxRetries: -1, logger: mockLogger });
+
+    const handleEvolutionFailure = (
+      driver as unknown as {
+        handleEvolutionFailure: (reason: string) => boolean;
+      }
+    ).handleEvolutionFailure;
+
+    // Call multiple times — should never stop
+    const result1 = handleEvolutionFailure.call(driver, 'Failure 1');
+    expect(result1).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith('⚠️  Failure 1 (1/∞), retrying next iteration...');
+
+    const result2 = handleEvolutionFailure.call(driver, 'Failure 2');
+    expect(result2).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith('⚠️  Failure 2 (2/∞), retrying next iteration...');
+
+    const result3 = handleEvolutionFailure.call(driver, 'Failure 3');
+    expect(result3).toBe(false);
+  });
+
+  it('increments consecutive failures counter correctly', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ maxRetries: 5, logger: mockLogger });
+
+    const handleEvolutionFailure = (
+      driver as unknown as {
+        handleEvolutionFailure: (reason: string) => boolean;
+      }
+    ).handleEvolutionFailure;
+
+    expect(driver.getStatus().consecutiveFailures).toBe(0);
+
+    handleEvolutionFailure.call(driver, 'Failure 1');
+    expect(driver.getStatus().consecutiveFailures).toBe(1);
+
+    handleEvolutionFailure.call(driver, 'Failure 2');
+    expect(driver.getStatus().consecutiveFailures).toBe(2);
+
+    handleEvolutionFailure.call(driver, 'Failure 3');
+    expect(driver.getStatus().consecutiveFailures).toBe(3);
+  });
+});
+
+describe('verify with useTsNode=false', () => {
+  beforeEach(() => {
+    driver = new SelfDriver({ useTsNode: false });
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+  });
+
+  it('uses dist mode for verification when useTsNode=false', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ useTsNode: false, logger: mockLogger });
+
+    let distCommandCalled = false;
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      // Check if dist mode is being used (node dist/cli/index.js)
+      if (command === 'node' && args?.includes('dist/cli/index.js')) {
+        distCommandCalled = true;
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      // npm commands should pass
+      if (command === 'npm') {
+        return mockExecaResult(0, '', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+
+    const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+    const result = await verify.call(driver);
+
+    expect(result).toBe(true);
+    expect(distCommandCalled).toBe(true); // Should use dist mode, not ts-node
+  });
+});
+
+describe('interrupted loop exit', () => {
+  const drivers: SelfDriver[] = [];
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode succeeds
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // Verification checks pass
+      if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'npm' && args?.includes('test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (command === 'npm' && args?.includes('run') && args?.includes('lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'node' && args?.includes('dist/cli/index.js') && args?.includes('evolve')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+      if (command === 'node' && args?.includes('dist/cli/index.js') && args?.includes('list')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+  });
+
+  afterEach(() => {
+    drivers.forEach((d) => d.cleanup());
+    drivers.length = 0;
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('exits loop gracefully when interrupted by SIGINT', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: false, logger: mockLogger, sleepMs: 50 });
+    drivers.push(driver);
+
+    // Access private run method
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+
+    // Start the run loop in the background
+    const runPromise = run.call(driver);
+
+    // Wait a bit for the loop to start
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Simulate SIGINT to interrupt the loop
+    process.emit('SIGINT' as NodeJS.Signals);
+
+    // Wait for the run to complete
+    await runPromise;
+
+    // Should log that evolution stopped
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Evolution stopped'));
+  });
+});
+
+describe('opencode timeout revert failure handling', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('logs error when revert fails after opencode timeout', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+      if (command === 'opencode' && args?.includes('run')) {
+        return {
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          timedOut: true,
+        };
+      }
+      // Make all git revert commands fail
+      if (command === 'git') {
+        return mockExecaResult(1, '', 'fatal: error');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const evolveWithOpenCode = (
+      driver as unknown as {
+        evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+      }
+    ).evolveWithOpenCode;
+    const result = await evolveWithOpenCode.call(driver, '');
+
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith(
+      '⚠️  OpenCode timed out, reverting any partial changes...'
+    );
+    expect(mockLogger).toHaveBeenCalledWith(
+      '❌ Revert after timeout failed - manual intervention may be required'
+    );
+  });
+
+  it('does not log revert failure when revert succeeds after timeout', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+      if (command === 'opencode' && args?.includes('run')) {
+        return {
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          timedOut: true,
+        };
+      }
+      // All git commands succeed for revert
+      if (command === 'git') {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const evolveWithOpenCode = (
+      driver as unknown as {
+        evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+      }
+    ).evolveWithOpenCode;
+    const result = await evolveWithOpenCode.call(driver, '');
+
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith(
+      '⚠️  OpenCode timed out, reverting any partial changes...'
+    );
+    expect(mockLogger).toHaveBeenCalledWith('🔄 Reverted changes');
+    // Should NOT log the revert failure message
+    expect(mockLogger).not.toHaveBeenCalledWith(
+      expect.stringContaining('Revert after timeout failed')
+    );
+  });
+});
+
+describe('EVOLVE.md absent warning', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('warns when EVOLVE.md does not exist', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockPathExists.mockResolvedValue(false);
+
+    const readConstitution = (
+      driver as unknown as {
+        readConstitution: () => Promise<string>;
+      }
+    ).readConstitution;
+    const result = await readConstitution.call(driver);
+
+    expect(result).toBe('');
+    expect(mockLogger).toHaveBeenCalledWith(
+      '⚠️  No EVOLVE.md constitution file found - AI will operate without guidance'
+    );
+  });
+
+  it('does not warn when EVOLVE.md exists', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockPathExists.mockResolvedValue(true);
+    mockReadFile.mockResolvedValue('# Evolution Guide');
+
+    const readConstitution = (
+      driver as unknown as {
+        readConstitution: () => Promise<string>;
+      }
+    ).readConstitution;
+    const result = await readConstitution.call(driver);
+
+    expect(result).toBe('# Evolution Guide');
+    expect(mockLogger).not.toHaveBeenCalledWith(
+      expect.stringContaining('No EVOLVE.md constitution file found')
+    );
+  });
+});
+
+describe('continuous loop behavior', () => {
+  const drivers: SelfDriver[] = [];
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      // Git checks pass
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+
+      // OpenCode succeeds
+      if (command === 'opencode') {
+        if (args?.includes('--version')) {
+          return mockExecaResult(0, '1.0.0', '');
+        }
+        if (args?.includes('run')) {
+          return mockExecaResult(0, '', '');
+        }
+      }
+
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+
+      // Verification checks pass
+      if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'npm' && args?.includes('test')) {
+        return mockExecaResult(0, 'Test Suites: 10 passed', '');
+      }
+      if (command === 'npm' && args?.includes('run') && args?.includes('lint')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'node' && args?.includes('dist/cli/index.js') && args?.includes('evolve')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+      if (command === 'node' && args?.includes('dist/cli/index.js') && args?.includes('list')) {
+        return mockExecaResult(0, 'Usage: [command] [options]', '');
+      }
+
+      return mockExecaResult(0, '', '');
+    });
+  });
+
+  afterEach(() => {
+    drivers.forEach((d) => d.cleanup());
+    drivers.length = 0;
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('runs multiple successful iterations and tracks iterationCount and sleep, and completion messages', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: false, logger: mockLogger, sleepMs: 50 });
+    drivers.push(driver);
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+
+    // Start the run loop in the background
+    const runPromise = run.call(driver);
+
+    // Wait for at least 2 iterations (sleep 50ms each + exec overhead)
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Interrupt the loop
+    process.emit('SIGINT' as NodeJS.Signals);
+
+    await runPromise;
+
+    const status = driver.getStatus();
+    expect(status.iterationCount).toBeGreaterThanOrEqual(2);
+
+    // Should log sleep/wait messages between iterations
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Waiting'));
+    // Should log iteration start messages
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Iteration'));
+    // Should log completion message
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Evolution stopped'));
+  });
+
+  it('interrupted during sleep exits gracefully', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: false, logger: mockLogger, sleepMs: 50 });
+    drivers.push(driver);
+
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+
+    // Start the run loop
+    const runPromise = run.call(driver);
+
+    // Wait for first iteration to complete and enter sleep
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Interrupt during sleep
+    process.emit('SIGINT' as NodeJS.Signals);
+
+    await runPromise;
+
+    // Should log graceful stop
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Evolution stopped'));
+    // Should have cleaned up
+    expect(driver.getStatus().cleanedUp).toBe(true);
+  });
+});
+
+describe('resetState', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('resets sleepCancelled, interrupted, cleanedUp, consecutiveFailures, and iterationCount', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    // Set dirty state via private field access
+    const internals = driver as unknown as {
+      sleepCancelled: boolean;
+      interrupted: boolean;
+      cleanedUp: boolean;
+      consecutiveFailures: number;
+      iterationCount: number;
+    };
+    internals.sleepCancelled = true;
+    internals.interrupted = true;
+    internals.cleanedUp = true;
+    internals.consecutiveFailures = 5;
+    internals.iterationCount = 10;
+
+    // Call resetState
+    const resetState = (driver as unknown as { resetState: () => void }).resetState;
+    resetState.call(driver);
+
+    // Verify all state is reset
+    expect(internals.sleepCancelled).toBe(false);
+    expect(internals.interrupted).toBe(false);
+    expect(internals.cleanedUp).toBe(false);
+    expect(internals.consecutiveFailures).toBe(0);
+    expect(internals.iterationCount).toBe(0);
+  });
+});
+
+describe('output truncation boundaries', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('truncates stderr at 5000 chars boundary', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    const longStderr = 'x'.repeat(6000);
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+      if (command === 'opencode' && args?.includes('run')) {
+        return mockExecaResult(0, '', longStderr);
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const evolveWithOpenCode = (
+      driver as unknown as {
+        evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+      }
+    ).evolveWithOpenCode;
+
+    const result = await evolveWithOpenCode.call(driver, '');
+
+    expect(result).toBe(true);
+
+    // The stderr should be truncated to exactly 5000 chars
+    const stderrCalls = mockLogger.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && (call[0] as string).includes('OpenCode stderr:')
+    );
+    expect(stderrCalls.length).toBeGreaterThan(0);
+    const loggedStderr = stderrCalls[0][0] as string;
+    expect(loggedStderr).toContain('OpenCode stderr: ');
+    expect(loggedStderr).toContain('...(truncated)');
+    expect(loggedStderr.length).toBe('OpenCode stderr: '.length + 5000 + '...(truncated)'.length);
+  });
+
+  it('truncates verify stdout/stderr at 2000 char boundary', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    const longOutput = 'y'.repeat(3000);
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      // Build check fails with long output
+      if (command === 'npm' && args?.includes('run') && args?.includes('build')) {
+        return mockExecaResult(1, longOutput, longOutput);
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const verify = (
+      driver as unknown as {
+        verify: () => Promise<boolean>;
+      }
+    ).verify;
+
+    const result = await verify.call(driver);
+
+    expect(result).toBe(false);
+
+    // Check stderr truncation at 2000 chars
+    const errorCalls = mockLogger.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && (call[0] as string).includes('Error: ')
+    );
+    expect(errorCalls.length).toBeGreaterThan(0);
+    const loggedError = errorCalls[0][0] as string;
+    expect(loggedError).toContain('...(truncated)');
+    expect(loggedError.length).toBe('     Error: '.length + 2000 + '...(truncated)'.length);
+
+    // Check stdout truncation at 2000 chars
+    const outputCalls = mockLogger.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && (call[0] as string).includes('Output: ')
+    );
+    expect(outputCalls.length).toBeGreaterThan(0);
+    const loggedOutput = outputCalls[0][0] as string;
+    expect(loggedOutput).toContain('...(truncated)');
+    expect(loggedOutput.length).toBe('     Output: '.length + 2000 + '...(truncated)'.length);
+  });
+});
+
+describe('revertOrFailOrResetFailures', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('resets consecutive failures to 0 when revert succeeds', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    // Set some failures via the private handleEvolutionFailure method
+    const handleEvolutionFailure = (
+      driver as unknown as {
+        handleEvolutionFailure: (reason: string) => boolean;
+      }
+    ).handleEvolutionFailure;
+    handleEvolutionFailure.call(driver, 'Simulated failure 1');
+    handleEvolutionFailure.call(driver, 'Simulated failure 2');
+    expect(driver.getStatus().consecutiveFailures).toBe(2);
+
+    // Mock successful revert (git reset, checkout, clean all succeed)
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('checkout')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const revertOrFailOrResetFailures = (
+      driver as unknown as {
+        revertOrFailOrResetFailures: () => Promise<boolean>;
+      }
+    ).revertOrFailOrResetFailures;
+    const result = await revertOrFailOrResetFailures.call(driver);
+
+    expect(result).toBe(true);
+    // The failure counter should be reset to 0
+    expect(driver.getStatus().consecutiveFailures).toBe(0);
+    // revert() logs this message on success
+    expect(mockLogger).toHaveBeenCalledWith('🔄 Reverted changes');
+  });
+
+  it('returns false and cleans up when revert fails', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    // Set some failures
+    const handleEvolutionFailure = (
+      driver as unknown as {
+        handleEvolutionFailure: (reason: string) => boolean;
+      }
+    ).handleEvolutionFailure;
+    handleEvolutionFailure.call(driver, 'Simulated failure');
+
+    // Mock failed revert (git reset fails)
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset')) {
+        return mockExecaResult(1, '', 'fatal: error');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const revertOrFailOrResetFailures = (
+      driver as unknown as {
+        revertOrFailOrResetFailures: () => Promise<boolean>;
+      }
+    ).revertOrFailOrResetFailures;
+    const result = await revertOrFailOrResetFailures.call(driver);
+
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith(
+      '❌ Revert failed - manual intervention may be required'
+    );
+    // Driver should be cleaned up
+    expect(driver.getStatus().cleanedUp).toBe(true);
+    // Failures should NOT be reset since revert failed
+    expect(driver.getStatus().consecutiveFailures).toBe(1);
+  });
+});
+
+describe('resetState allows re-run after cleanup', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('allows calling run() again after cleanup() when using dryRun', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ dryRun: true, logger: mockLogger });
+
+    // Setup mocks for pre-flight checks (run() calls resetState then runPreFlightChecks)
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'opencode' && args?.includes('--version')) {
+        return mockExecaResult(0, '1.0.0', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    // First run
+    const run = (driver as unknown as { run: () => Promise<void> }).run;
+    await run.call(driver);
+
+    // After first run, driver is cleaned up
+    expect(driver.getStatus().cleanedUp).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith('🔍 Dry run mode - showing what would be done');
+
+    // Clear logger to verify second run produces output
+    mockLogger.mockClear();
+
+    // Second run should work because resetState() is called at the start of run()
+    await run.call(driver);
+
+    expect(mockLogger).toHaveBeenCalledWith('🔍 Dry run mode - showing what would be done');
+    expect(driver.getStatus().cleanedUp).toBe(true);
+  });
+});
+
+describe('truncateOutput boundary cases', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('does not truncate when output length equals maxLength', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    // Create output exactly 5000 chars (the OPENCODE_STDERR_PREVIEW_LIMIT)
+    const exactLengthStderr = 'x'.repeat(5000);
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+      if (command === 'opencode' && args?.includes('run')) {
+        return mockExecaResult(0, '', exactLengthStderr);
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const evolveWithOpenCode = (
+      driver as unknown as {
+        evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+      }
+    ).evolveWithOpenCode;
+    await evolveWithOpenCode.call(driver, '');
+
+    // Should NOT contain truncation indicator
+    const stderrCalls = mockLogger.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && (call[0] as string).includes('OpenCode stderr:')
+    );
+    expect(stderrCalls.length).toBe(1);
+    const loggedStderr = stderrCalls[0][0] as string;
+    expect(loggedStderr).not.toContain('...(truncated)');
+  });
+
+  it('truncates when output length exceeds maxLength by 1', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    // Create output 5001 chars (1 more than OPENCODE_STDERR_PREVIEW_LIMIT)
+    const overLengthStderr = 'x'.repeat(5001);
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+      if (command === 'opencode' && args?.includes('run')) {
+        return mockExecaResult(0, '', overLengthStderr);
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const evolveWithOpenCode = (
+      driver as unknown as {
+        evolveWithOpenCode: (constitution: string) => Promise<boolean>;
+      }
+    ).evolveWithOpenCode;
+    await evolveWithOpenCode.call(driver, '');
+
+    // Should contain truncation indicator
+    const stderrCalls = mockLogger.mock.calls.filter(
+      (call) => typeof call[0] === 'string' && (call[0] as string).includes('OpenCode stderr:')
+    );
+    expect(stderrCalls.length).toBe(1);
+    const loggedStderr = stderrCalls[0][0] as string;
+    expect(loggedStderr).toContain('...(truncated)');
+    expect(loggedStderr.length).toBe('OpenCode stderr: '.length + 5000 + '...(truncated)'.length);
+  });
+});
