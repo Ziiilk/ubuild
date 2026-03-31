@@ -772,7 +772,7 @@ describe('CompileCommandsGenerator', () => {
       expect(newSettings['clangd.arguments']).toBeDefined();
       expect(newSettings['C_Cpp.default.compileCommands']).toBeDefined();
       // Should not have any remnants of the malformed settings
-      expect(Object.keys(newSettings).length).toBe(2);
+      expect(Object.keys(newSettings).length).toBe(3);
     });
   });
 

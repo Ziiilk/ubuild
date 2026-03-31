@@ -182,11 +182,20 @@ export class CompileCommandsGenerator {
     const settingsPath = path.join(vscodeDir, 'settings.json');
 
     const clangdConfig = {
-      'clangd.arguments': ['--compile-commands-dir=${workspaceFolder}/.vscode'],
+      'clangd.arguments': [
+        '--compile-commands-dir=${workspaceFolder}/.vscode',
+        '--background-index',
+        '--j=8',
+        '--index-store-path=.clangd/index',
+        '--pch-storage=disk',
+        '--limit-results=200',
+        '--header-insertion=iwyu',
+      ],
     };
 
     const cppConfig = {
       'C_Cpp.default.compileCommands': '${workspaceFolder}/.vscode/compile_commands.json',
+      'C_Cpp.intelliSenseEngine': 'disabled',
     };
 
     let settings: Record<string, unknown> = {};
