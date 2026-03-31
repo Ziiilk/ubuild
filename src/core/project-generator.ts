@@ -178,7 +178,7 @@ export class ProjectGenerator {
   ): Promise<void> {
     const ubtPath = await resolveUnrealBuildToolPath(enginePath);
 
-    const args = ['-projectfiles', `-project="${projectPath}"`, '-game', '-engine'];
+    const args = ['-projectfiles', `-project=${projectPath}`, '-game', '-engine'];
 
     if (ide === 'vscode') {
       args.push('-VSCode');

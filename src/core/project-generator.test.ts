@@ -451,7 +451,7 @@ describe('ProjectGenerator', () => {
         expect(result.success).toBe(true);
         expect(mockExeca).toHaveBeenCalledWith(
           expect.stringContaining('UnrealBuildTool'),
-          expect.arrayContaining([`-project="${project.uprojectPath}"`]),
+          expect.arrayContaining([`-project=${project.uprojectPath}`]),
           expect.anything()
         );
       });

@@ -76,10 +76,10 @@ export class CompileCommandsGenerator {
 
     const targetNames = targetName.split(' ').filter(Boolean);
 
-    const args = ['-mode=GenerateClangDatabase', `-Project="${projectPath}"`];
+    const args = ['-mode=GenerateClangDatabase', `-Project=${projectPath}`];
 
     for (const resolvedTarget of targetNames) {
-      args.push(`-Target="${resolvedTarget} ${platform} ${config}"`);
+      args.push(`-Target=${resolvedTarget} ${platform} ${config}`);
     }
 
     if (options.includePluginSources) {
