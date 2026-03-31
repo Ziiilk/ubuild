@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.9]
+
+- Extend `clangd.arguments` in generated `.vscode/settings.json` with `--background-index`, `--j=8`, `--index-store-path`, `--pch-storage=disk`, `--limit-results=200`, `--header-insertion=iwyu`
+- Disable Microsoft C/C++ IntelliSense (`C_Cpp.intelliSenseEngine: "disabled"`) to let clangd take over
+
 ## [0.0.8]
 
 - `gencodebase` command now automatically updates `.vscode/settings.json` with clangd configuration using portable `${workspaceFolder}` paths
