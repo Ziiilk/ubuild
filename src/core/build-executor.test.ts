@@ -621,6 +621,25 @@ describe('BuildExecutor', () => {
         fsReaddir.mockRestore();
       });
     });
+
+    it('returns empty array when Source directory exists but has no .Target.cs files', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, {
+          projectName: 'EmptySourceGame',
+          withSource: false,
+        });
+
+        // Create an empty Source directory (no .Target.cs files)
+        const sourceDir = path.join(project.projectDir, 'Source');
+        await fs.ensureDir(sourceDir);
+        // Add a non-target file to verify filtering works
+        await fs.writeFile(path.join(sourceDir, 'SomeModule.Build.cs'), '// not a target');
+
+        const targets = await BuildExecutor.getAvailableTargets(project.uprojectPath);
+
+        expect(targets).toEqual([]);
+      });
+    });
   });
 
   describe('getDefaultOptions', () => {
@@ -654,6 +673,21 @@ describe('BuildExecutor', () => {
         const options = await BuildExecutor.getDefaultOptions(project.uprojectPath);
 
         expect(options.target).toBe('Game');
+      });
+    });
+
+    it('returns Game target when project has no Source directory', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, {
+          projectName: 'BlueprintOnlyGame',
+          withSource: false,
+        });
+
+        const options = await BuildExecutor.getDefaultOptions(project.uprojectPath);
+
+        expect(options.target).toBe('Game');
+        expect(options.config).toBe('Development');
+        expect(options.platform).toBe('Win64');
       });
     });
   });
