@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.11]
+
+- Fix `build` command failing on Windows due to embedded quotes in `-project` argument causing UnrealBuildTool to misinterpret the project path
+
 ## [0.0.10]
 
 - Fix `generate` and `gencodebase` commands failing due to spurious quotes in UnrealBuildTool arguments passed via execa
