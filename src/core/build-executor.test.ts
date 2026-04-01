@@ -115,7 +115,7 @@ describe('BuildExecutor', () => {
           'FactoryGameEditor',
           'Win64',
           'Development',
-          `-project="${project.uprojectPath}"`,
+          `-project=${project.uprojectPath}`,
           '-NoMutex',
         ],
         {
@@ -164,7 +164,7 @@ describe('BuildExecutor', () => {
           'FallbackGame',
           'Win64',
           'Shipping',
-          `-project="${project.uprojectPath}"`,
+          `-project=${project.uprojectPath}`,
           '-NoMutex',
           '-clean',
           '-verbose',

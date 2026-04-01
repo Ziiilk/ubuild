@@ -191,7 +191,7 @@ export class BuildExecutor {
       options.target,
       options.platform,
       options.config,
-      `-project="${options.projectPath}"`,
+      `-project=${options.projectPath}`,
       '-NoMutex',
     ];
 
