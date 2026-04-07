@@ -232,6 +232,30 @@ describe('executeEngine', () => {
 
       expect(stdout.output).toContain('Total engines detected: 0');
     });
+
+    it('shows unknown for engine without source in verbose mode', async () => {
+      const minimalEngine: EngineInstallation = {
+        path: 'C:\\Engine\\Custom',
+        associationId: 'CustomBuild',
+      };
+
+      mockDetectProject.mockResolvedValue({
+        isValid: true,
+        project: createMockProjectInfo(),
+        warnings: [],
+      });
+      mockResolveEngine.mockResolvedValue(createMockEngineResult());
+      mockFindEngineInstallations.mockResolvedValue([minimalEngine]);
+
+      await executeEngine({
+        verbose: true,
+        stdout,
+        stderr,
+      });
+
+      expect(stdout.output).toContain('Source: unknown');
+      expect(stdout.output).toContain('Display Name: (none)');
+    });
   });
 
   describe('error handling', () => {
@@ -305,6 +329,117 @@ describe('executeEngine', () => {
 
       expect(stdout.output).toContain('2024-01-15');
     });
+
+    it('falls back to associationId when displayName is absent', async () => {
+      const engineWithoutName: EngineInstallation = {
+        path: 'C:\\Engine',
+        associationId: 'UE_5.3',
+        version: {
+          MajorVersion: 5,
+          MinorVersion: 3,
+          PatchVersion: 2,
+          Changelist: 29314046,
+          CompatibleChangelist: 0,
+          IsLicenseeVersion: 0,
+          IsPromotedBuild: 1,
+          BranchName: '++UE5+Release-5.3',
+          BuildId: '27419083',
+        },
+      };
+
+      mockDetectProject.mockResolvedValue({
+        isValid: true,
+        project: createMockProjectInfo(),
+        warnings: [],
+      });
+      mockResolveEngine.mockResolvedValue({
+        engine: engineWithoutName,
+        uprojectEngine: createMockEngineAssociation(),
+        warnings: [],
+      });
+
+      await executeEngine({
+        stdout,
+        stderr,
+      });
+
+      expect(stdout.output).toContain('UE_5.3');
+    });
+
+    it('displays No for non-promoted build', async () => {
+      const nonPromotedEngine: EngineInstallation = {
+        path: 'C:\\Engine',
+        associationId: 'UE_5.3',
+        displayName: 'UE 5.3',
+        version: {
+          MajorVersion: 5,
+          MinorVersion: 3,
+          PatchVersion: 2,
+          Changelist: 29314046,
+          CompatibleChangelist: 0,
+          IsLicenseeVersion: 0,
+          IsPromotedBuild: 0,
+          BranchName: '++UE5+Release-5.3',
+          BuildId: '27419083',
+        },
+      };
+
+      mockDetectProject.mockResolvedValue({
+        isValid: true,
+        project: createMockProjectInfo(),
+        warnings: [],
+      });
+      mockResolveEngine.mockResolvedValue({
+        engine: nonPromotedEngine,
+        uprojectEngine: createMockEngineAssociation(),
+        warnings: [],
+      });
+
+      await executeEngine({
+        stdout,
+        stderr,
+      });
+
+      expect(stdout.output).toContain('Promoted Build: No');
+    });
+
+    it('displays engine without installedDate', async () => {
+      const engineNoDate: EngineInstallation = {
+        path: 'C:\\Engine',
+        associationId: 'UE_5.3',
+        displayName: 'UE 5.3',
+        version: {
+          MajorVersion: 5,
+          MinorVersion: 3,
+          PatchVersion: 2,
+          Changelist: 29314046,
+          CompatibleChangelist: 0,
+          IsLicenseeVersion: 0,
+          IsPromotedBuild: 1,
+          BranchName: '++UE5+Release-5.3',
+          BuildId: '27419083',
+        },
+      };
+
+      mockDetectProject.mockResolvedValue({
+        isValid: true,
+        project: createMockProjectInfo(),
+        warnings: [],
+      });
+      mockResolveEngine.mockResolvedValue({
+        engine: engineNoDate,
+        uprojectEngine: createMockEngineAssociation(),
+        warnings: [],
+      });
+
+      await executeEngine({
+        stdout,
+        stderr,
+      });
+
+      expect(stdout.output).toContain('Engine Details');
+      expect(stdout.output).toContain('UE 5.3');
+    });
   });
 
   describe('project engine association display', () => {
@@ -344,6 +479,30 @@ describe('executeEngine', () => {
 
       expect(stdout.output).toContain('Engine association found in project');
       expect(stdout.output).toContain('no matching engine installation detected');
+    });
+
+    it('displays uprojectEngine with only guid when optional fields are absent', async () => {
+      mockDetectProject.mockResolvedValue({
+        isValid: true,
+        project: createMockProjectInfo(),
+        warnings: [],
+      });
+      mockResolveEngine.mockResolvedValue({
+        engine: createMockEngineInstallation(),
+        uprojectEngine: {
+          guid: 'UE_5.3',
+        },
+        warnings: [],
+      });
+
+      await executeEngine({
+        stdout,
+        stderr,
+      });
+
+      expect(stdout.output).toContain('Project Engine Association');
+      expect(stdout.output).toContain('UE_5.3');
+      expect(stdout.output).toContain('Engine information retrieved successfully');
     });
   });
 
