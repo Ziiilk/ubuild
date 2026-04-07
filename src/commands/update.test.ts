@@ -1,4 +1,5 @@
-import { executeUpdate } from './update';
+import { executeUpdate, updateCommand } from './update';
+import { Command } from 'commander';
 import { createOutputCapture } from '../test-utils';
 
 const mockExeca = jest.fn();
@@ -423,6 +424,55 @@ describe('executeUpdate', () => {
       await expect(
         executeUpdate({ stdout: capture.stdout, stderr: capture.stderr })
       ).rejects.toThrow('Global install permission denied');
+    });
+  });
+
+  describe('updateCommand', () => {
+    let originalExit: typeof process.exit;
+
+    beforeEach(() => {
+      originalExit = process.exit;
+      process.exit = jest.fn() as unknown as typeof process.exit;
+    });
+
+    afterEach(() => {
+      process.exit = originalExit;
+    });
+
+    it('registers the update command and calls executeUpdate', async () => {
+      mockReadJson.mockResolvedValue({ version: '0.0.8' });
+      mockExeca.mockImplementation(async (cmd: string, args: string[]) => {
+        if (cmd === 'npm' && args[0] === 'view') return { stdout: '0.0.9', stderr: '' };
+        if (cmd === 'npm' && args[0] === 'list') return { stdout: '', stderr: '' };
+        if (cmd === 'npm' && args[0] === 'install') return { stdout: '', stderr: '' };
+        throw new Error(`Unexpected: ${cmd}`);
+      });
+
+      const program = new Command();
+      program.exitOverride();
+      updateCommand(program);
+
+      await program.parseAsync(['node', 'test', 'update']);
+
+      expect(mockReadJson).toHaveBeenCalled();
+    });
+
+    it('handles errors from executeUpdate via handleCommandError', async () => {
+      mockReadJson.mockRejectedValue(new Error('package.json read failed'));
+
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+        throw new Error('process.exit called');
+      }) as (code?: string | number | null | undefined) => never);
+
+      const program = new Command();
+      updateCommand(program);
+
+      await expect(program.parseAsync(['node', 'test', 'update'])).rejects.toThrow(
+        'process.exit called'
+      );
+
+      expect(mockExit).toHaveBeenCalledWith(1);
+      mockExit.mockRestore();
     });
   });
 });

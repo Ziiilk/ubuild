@@ -361,6 +361,95 @@ describe('ProjectRunner', () => {
         expect(capture.getStdout()).toContain('Platform: Win64');
       });
     });
+
+    it('shows not detected message when resolveEngine returns no engine', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+        const capture = createOutputCapture();
+
+        mockResolveEngine.mockResolvedValue({ warnings: [] });
+
+        const runner = new ProjectRunner({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await runner.run({
+          project: project.projectDir,
+          target: 'Editor',
+          config: 'Development',
+          platform: 'Win64',
+          dryRun: true,
+        });
+
+        expect(capture.getStdout()).toContain('Not detected - specify with --engine-path');
+      });
+    });
+
+    it('prints path detection failed when executable check throws', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+        const engine = await createFakeEngine(rootDir);
+        const capture = createOutputCapture();
+
+        mockResolveEngine.mockResolvedValue({
+          engine: { path: engine.enginePath },
+          warnings: [],
+        });
+        mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+
+        let pathExistsCalls = 0;
+        const spy = jest.spyOn(fs, 'pathExists').mockImplementation(async () => {
+          pathExistsCalls++;
+          if (pathExistsCalls > 1) throw new Error('Simulated failure');
+          return true;
+        });
+
+        try {
+          const runner = new ProjectRunner({
+            stdout: capture.stdout,
+            stderr: capture.stderr,
+          });
+
+          await runner.run({
+            project: project.projectDir,
+            target: 'Editor',
+            config: 'Development',
+            platform: 'Win64',
+            dryRun: true,
+          });
+
+          expect(capture.getStdout()).toContain('Path detection failed');
+        } finally {
+          spy.mockRestore();
+        }
+      });
+    });
+
+    it('shows could not determine path when project has no uproject file', async () => {
+      await withTempDir(async (rootDir) => {
+        const emptyDir = path.join(rootDir, 'NoProject');
+        await fs.ensureDir(emptyDir);
+        const capture = createOutputCapture();
+
+        mockResolveEngine.mockResolvedValue({ warnings: [] });
+
+        const runner = new ProjectRunner({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await runner.run({
+          project: emptyDir,
+          target: 'Game',
+          config: 'Development',
+          platform: 'Win64',
+          dryRun: true,
+        });
+
+        expect(capture.getStdout()).toContain('Could not determine path');
+      });
+    });
   });
 
   describe('runProject', () => {
@@ -839,6 +928,38 @@ describe('ProjectRunner', () => {
             platform: 'Win64',
           })
         ).rejects.toThrow('Could not determine executable path');
+      });
+    });
+
+    it('throws when resolved project file does not exist on disk', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+        const capture = createOutputCapture();
+
+        mockResolveEnginePath.mockResolvedValue('');
+
+        const spy = jest.spyOn(fs, 'pathExists').mockImplementation(async (p: string) => {
+          if (p.endsWith('.uproject')) return false;
+          return true;
+        });
+
+        try {
+          const runner = new ProjectRunner({
+            stdout: capture.stdout,
+            stderr: capture.stderr,
+          });
+
+          await expect(
+            runner.run({
+              project: project.projectDir,
+              target: 'Editor',
+              config: 'Development',
+              platform: 'Win64',
+            })
+          ).rejects.toThrow('Project file not found');
+        } finally {
+          spy.mockRestore();
+        }
       });
     });
 
