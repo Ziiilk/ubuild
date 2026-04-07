@@ -447,7 +447,7 @@ describe('CompileCommandsGenerator', () => {
     });
   });
 
-  it('includes plugin sources by default', async () => {
+  it('does not include -IncludePluginSources flag by default', async () => {
     await withTempDir(async (rootDir) => {
       const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
       const engine = await createFakeEngine(rootDir);
@@ -463,11 +463,32 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
-      expect(ubtCall![1]).toContain('-mode=GenerateClangDatabase');
+      expect(ubtCall![1]).not.toContain('-IncludePluginSources');
     });
   });
 
-  it('excludes plugin sources when includePluginSources is false', async () => {
+  it('includes -IncludePluginSources flag when includePluginSources is true', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+        includePluginSources: true,
+      });
+
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).toContain('-IncludePluginSources');
+    });
+  });
+
+  it('does not include -IncludePluginSources flag when includePluginSources is false', async () => {
     await withTempDir(async (rootDir) => {
       const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
       const engine = await createFakeEngine(rootDir);
@@ -484,11 +505,11 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
-      expect(ubtCall![1]).toContain('-mode=GenerateClangDatabase');
+      expect(ubtCall![1]).not.toContain('-IncludePluginSources');
     });
   });
 
-  it('includes engine sources by default', async () => {
+  it('does not include -IncludeEngineSources flag by default', async () => {
     await withTempDir(async (rootDir) => {
       const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
       const engine = await createFakeEngine(rootDir);
@@ -504,10 +525,32 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).not.toContain('-IncludeEngineSources');
     });
   });
 
-  it('excludes engine sources when includeEngineSources is false', async () => {
+  it('includes -IncludeEngineSources flag when includeEngineSources is true', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+        includeEngineSources: true,
+      });
+
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).toContain('-IncludeEngineSources');
+    });
+  });
+
+  it('does not include -IncludeEngineSources flag when includeEngineSources is false', async () => {
     await withTempDir(async (rootDir) => {
       const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
       const engine = await createFakeEngine(rootDir);
@@ -524,10 +567,11 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).not.toContain('-IncludeEngineSources');
     });
   });
 
-  it('uses engine includes by default', async () => {
+  it('does not include -UseEngineIncludes flag by default', async () => {
     await withTempDir(async (rootDir) => {
       const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
       const engine = await createFakeEngine(rootDir);
@@ -543,10 +587,32 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).not.toContain('-UseEngineIncludes');
     });
   });
 
-  it('does not use engine includes when useEngineIncludes is false', async () => {
+  it('includes -UseEngineIncludes flag when useEngineIncludes is true', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+        useEngineIncludes: true,
+      });
+
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).toContain('-UseEngineIncludes');
+    });
+  });
+
+  it('does not include -UseEngineIncludes flag when useEngineIncludes is false', async () => {
     await withTempDir(async (rootDir) => {
       const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
       const engine = await createFakeEngine(rootDir);
@@ -563,6 +629,7 @@ describe('CompileCommandsGenerator', () => {
 
       const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
       expect(ubtCall).toBeDefined();
+      expect(ubtCall![1]).not.toContain('-UseEngineIncludes');
     });
   });
 
