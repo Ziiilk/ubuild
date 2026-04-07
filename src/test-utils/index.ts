@@ -23,5 +23,8 @@
 
 export * from './capture-stream';
 export * from './execa-child';
+export * from './flush-promises';
+export * from './registry-fixtures';
 export * from './temp-dir';
+export * from './test-contexts';
 export * from './unreal-fixtures';

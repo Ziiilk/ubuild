@@ -6,6 +6,7 @@
  */
 
 import { Command } from 'commander';
+import { flushPromises } from '../test-utils/flush-promises';
 
 // Mock Logger
 const mockLoggerDebug = jest.fn();
@@ -108,8 +109,8 @@ describe('CLI Entry Point', () => {
       // Import the module to trigger command registration
       await import('./index');
 
-      // Give time for async main() to start
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Wait for async main() to complete
+      await flushPromises();
 
       expect(mockListCommand).toHaveBeenCalled();
       expect(mockEngineCommand).toHaveBeenCalled();
@@ -128,7 +129,7 @@ describe('CLI Entry Point', () => {
       process.argv = ['node', 'ubuild', 'evolve'];
 
       await import('./index');
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushPromises();
 
       expect(mockEvolveCommand).toHaveBeenCalled();
     });
@@ -138,7 +139,7 @@ describe('CLI Entry Point', () => {
       process.env.NODE_ENV = 'development';
 
       await import('./index');
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushPromises();
 
       expect(mockEvolveCommand).toHaveBeenCalled();
     });
@@ -148,7 +149,7 @@ describe('CLI Entry Point', () => {
       process.env.UBUILD_EVOLVE_ENABLED = 'true';
 
       await import('./index');
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushPromises();
 
       expect(mockEvolveCommand).toHaveBeenCalled();
     });
@@ -159,7 +160,7 @@ describe('CLI Entry Point', () => {
       process.env.UBUILD_EVOLVE_ENABLED = undefined;
 
       await import('./index');
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushPromises();
 
       // Evolve command is always registered
       expect(mockEvolveCommand).toHaveBeenCalled();

@@ -11,6 +11,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "jest",
+    "test:unit": "jest --selectProjects unit",
+    "test:integration": "jest --selectProjects integration",
     "lint": "eslint src --ext .ts",
     "format": "prettier --write src/**/*.ts",
     "prepare": "npm run build",

@@ -1,0 +1,38 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`CLI Output Snapshots version command matches snapshot for JSON version output: version-json-output 1`] = `
+"{
+  "version": "1.0.0",
+  "name": "@zitool/ubuild",
+  "description": "Unreal Engine project management CLI tool for Agent integration"
+}
+"
+`;
+
+exports[`CLI Output Snapshots version command matches snapshot for fallback version output: version-fallback-output 1`] = `
+"
+ubuild - Unreal Engine Project Management
+═════════════════════════════════════════
+
+  Version: unknown
+  Package: @zitool/ubuild
+
+Unreal Engine project management CLI tool
+
+✓ Version information retrieved successfully
+"
+`;
+
+exports[`CLI Output Snapshots version command matches snapshot for normal version output: version-normal-output 1`] = `
+"
+ubuild - Unreal Engine Project Management
+═════════════════════════════════════════
+
+  Version: 1.0.0
+  Package: @zitool/ubuild
+
+Unreal Engine project management CLI tool for Agent integration
+
+✓ Version information retrieved successfully
+"
+`;
