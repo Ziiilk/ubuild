@@ -15,9 +15,9 @@ import fs from 'fs-extra';
 import path from 'path';
 
 import { EVOLUTION_VERIFY_COMMANDS } from '../types/evolve';
-import type { SelfEvolverOptions } from '../types/evolve';
+import type { SelfEvolverOptions, IterationResult, EvolutionRecord } from '../types/evolve';
 
-export type { SelfEvolverOptions };
+export type { SelfEvolverOptions, IterationResult, EvolutionRecord };
 
 /** Default sleep duration between iterations in milliseconds */
 const DEFAULT_SLEEP_MS = 5000;
@@ -33,6 +33,12 @@ const OPENCODE_STDERR_PREVIEW_LIMIT = 5000;
 const VERIFY_ERROR_PREVIEW_LIMIT = 2000;
 /** Minimum max listeners for process events (increased to handle concurrent test runs) */
 const MIN_MAX_LISTENERS = 50;
+/** Default forbidden file patterns that must not be modified during evolution */
+const DEFAULT_FORBIDDEN_PATHS = ['package.json', 'tsconfig.json', '.github/**'];
+/** Default allowed file patterns - files outside these paths are rejected during evolution */
+const DEFAULT_ALLOWED_PATHS = ['src/**'];
+/** Default maximum number of changed lines per iteration (insertions + deletions) */
+const DEFAULT_MAX_DIFF_LINES = 200;
 
 export class SelfDriver {
   private log: (msg: string) => void;
@@ -56,6 +62,13 @@ export class SelfDriver {
   private sleepCancelled = false;
   private increasedMaxListeners = false;
   private keepUntracked: boolean;
+  private lastIterationResult: IterationResult | null = null;
+  private logFile: string;
+  private iterationStartTime = 0;
+  private forbiddenPaths: string[];
+  private allowedPaths: string[];
+  private maxDiffLines: number;
+  private coverageBaseline: { branches: number; functions: number; lines: number; statements: number } | null;
 
   /**
    * Creates a new SelfDriver instance.
@@ -72,6 +85,11 @@ export class SelfDriver {
     this.useTsNode = options.useTsNode || false;
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.keepUntracked = options.keepUntracked || false;
+    this.logFile = options.logFile ?? '.evolve-history.jsonl';
+    this.forbiddenPaths = options.forbiddenPaths ?? DEFAULT_FORBIDDEN_PATHS;
+    this.allowedPaths = options.allowedPaths ?? DEFAULT_ALLOWED_PATHS;
+    this.maxDiffLines = options.maxDiffLines ?? DEFAULT_MAX_DIFF_LINES;
+    this.coverageBaseline = options.coverageBaseline ?? null;
 
     // Validate options
     if (this.sleepMs <= 0) {
@@ -102,6 +120,300 @@ export class SelfDriver {
    */
   private truncateOutput(output: string, maxLength: number): string {
     return output.length > maxLength ? output.slice(0, maxLength) + '...(truncated)' : output;
+  }
+
+  /**
+   * Writes a structured evolution record to the JSONL log file.
+   * Failures are logged as warnings but do not interrupt the evolution process.
+   */
+  private async writeEvolutionRecord(record: EvolutionRecord): Promise<void> {
+    if (this.dryRun) return;
+    try {
+      const logPath = path.join(this.projectRoot, this.logFile);
+      await fs.appendFile(logPath, JSON.stringify(record) + '\n', 'utf-8');
+    } catch (error) {
+      this.log(`⚠️  ${formatErrorWithPrefix('Could not write evolution log', error)}`);
+    }
+  }
+
+  /**
+   * Checks if a file path matches a forbidden pattern.
+   * Supports exact match, directory prefix (ending with /**), and direct filename match.
+   */
+  private matchesForbiddenPattern(filePath: string, pattern: string): boolean {
+    // Normalize separators to forward slashes
+    const normalized = filePath.replace(/\\/g, '/');
+    const normalizedPattern = pattern.replace(/\\/g, '/');
+
+    // Exact match
+    if (normalized === normalizedPattern) return true;
+
+    // Directory glob: "dir/**" matches any file under that directory
+    if (normalizedPattern.endsWith('/**')) {
+      const prefix = normalizedPattern.slice(0, -2);
+      if (normalized.startsWith(prefix)) return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Validates that changed files do not violate forbidden path patterns
+   * and are within the allowed paths whitelist.
+   * @returns Object with validation result and any violating files
+   */
+  private async validateChangedFiles(): Promise<{ valid: boolean; violations: string[] }> {
+    if (this.forbiddenPaths.length === 0 && this.allowedPaths.length === 0) {
+      return { valid: true, violations: [] };
+    }
+
+    const result = await this.safeExeca('git', ['diff', '--name-only']);
+    if (!result) {
+      this.log('⚠️  Could not determine changed files, skipping file validation');
+      return { valid: true, violations: [] };
+    }
+
+    const changedFiles = result.stdout
+      .split('\n')
+      .map((f) => f.trim())
+      .filter((f) => f.length > 0);
+
+    if (changedFiles.length === 0) {
+      return { valid: true, violations: [] };
+    }
+
+    const violations: string[] = [];
+    for (const file of changedFiles) {
+      // Check forbidden paths (blacklist)
+      let isForbidden = false;
+      for (const pattern of this.forbiddenPaths) {
+        if (this.matchesForbiddenPattern(file, pattern)) {
+          violations.push(file);
+          isForbidden = true;
+          break;
+        }
+      }
+
+      // Check allowed paths (whitelist) - only if not already forbidden
+      if (!isForbidden && this.allowedPaths.length > 0) {
+        const isAllowed = this.allowedPaths.some((pattern) =>
+          this.matchesAllowedPattern(file, pattern)
+        );
+        if (!isAllowed) {
+          violations.push(file);
+        }
+      }
+    }
+
+    return { valid: violations.length === 0, violations };
+  }
+
+  /**
+   * Checks if a file path matches an allowed pattern.
+   * Supports directory prefix (ending with /**) and exact match.
+   */
+  private matchesAllowedPattern(filePath: string, pattern: string): boolean {
+    const normalized = filePath.replace(/\\/g, '/');
+    const normalizedPattern = pattern.replace(/\\/g, '/');
+
+    // Exact match
+    if (normalized === normalizedPattern) return true;
+
+    // Directory glob: "dir/**" matches any file under that directory
+    if (normalizedPattern.endsWith('/**')) {
+      const prefix = normalizedPattern.slice(0, -2);
+      if (normalized.startsWith(prefix)) return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Checks if the total number of changed lines exceeds the configured limit.
+   * Parses `git diff --shortstat` output like " 3 files changed, 10 insertions(+), 5 deletions(-)"
+   * @returns Object with total changed lines and whether it's within the limit
+   */
+  private async checkDiffSize(): Promise<{ total: number; withinLimit: boolean }> {
+    if (this.maxDiffLines <= 0) {
+      return { total: 0, withinLimit: true };
+    }
+
+    const result = await this.safeExeca('git', ['diff', '--shortstat']);
+    if (!result) {
+      this.log('⚠️  Could not determine diff size, skipping size check');
+      return { total: 0, withinLimit: true };
+    }
+
+    const output = result.stdout.trim();
+    if (output.length === 0) {
+      return { total: 0, withinLimit: true };
+    }
+
+    let insertions = 0;
+    let deletions = 0;
+    const insertMatch = output.match(/(\d+)\s+insertion/);
+    const deleteMatch = output.match(/(\d+)\s+deletion/);
+    if (insertMatch) insertions = parseInt(insertMatch[1], 10);
+    if (deleteMatch) deletions = parseInt(deleteMatch[1], 10);
+
+    const total = insertions + deletions;
+    return { total, withinLimit: total <= this.maxDiffLines };
+  }
+
+  /**
+   * Gathers code coverage metrics from the last test run's coverage summary.
+   * Reads the coverage-summary.json generated by `npm test -- --coverage`.
+   * @returns A formatted string of coverage metrics, or null if unavailable
+   */
+  private async gatherCoverageMetrics(): Promise<string | null> {
+    try {
+      const summaryPath = path.join(this.projectRoot, 'coverage', 'coverage-summary.json');
+      if (!(await fs.pathExists(summaryPath))) {
+        return null;
+      }
+      const raw = await fs.readFile(summaryPath, 'utf-8');
+      const summary = JSON.parse(raw);
+      const total = summary?.total;
+      if (!total) return null;
+
+      const b = total.branches?.pct ?? '?';
+      const f = total.functions?.pct ?? '?';
+      const l = total.lines?.pct ?? '?';
+      const s = total.statements?.pct ?? '?';
+
+      return `- Test Coverage: branches ${b}%, functions ${f}%, lines ${l}%, statements ${s}%`;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Finds the files with the lowest line coverage from coverage-summary.json.
+   * @param maxFiles - Maximum number of low-coverage files to return
+   * @returns A formatted string listing low-coverage files, or null if unavailable
+   */
+  private async gatherLowestCoverageFiles(maxFiles = 5): Promise<string | null> {
+    try {
+      const summaryPath = path.join(this.projectRoot, 'coverage', 'coverage-summary.json');
+      if (!(await fs.pathExists(summaryPath))) {
+        return null;
+      }
+      const raw = await fs.readFile(summaryPath, 'utf-8');
+      const summary = JSON.parse(raw);
+
+      const fileEntries: Array<{ file: string; pct: number }> = [];
+      for (const [key, value] of Object.entries(summary)) {
+        if (key === 'total') continue;
+        const entry = value as { lines?: { pct?: number } };
+        const pct = entry?.lines?.pct;
+        if (typeof pct === 'number' && pct < 100) {
+          fileEntries.push({ file: key, pct });
+        }
+      }
+
+      if (fileEntries.length === 0) return null;
+
+      fileEntries.sort((a, b) => a.pct - b.pct);
+      const lowest = fileEntries.slice(0, maxFiles);
+
+      return `- Lowest Coverage Files:\n${lowest.map((f) => `  - ${f.file} (${f.pct}%)`).join('\n')}`;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Gathers ESLint warning count from the project.
+   * Runs eslint in JSON format and counts warnings.
+   * @returns A formatted string of lint warnings, or null if unavailable
+   */
+  private async gatherLintWarnings(): Promise<string | null> {
+    try {
+      const result = await this.safeExeca('npx', ['eslint', 'src', '--ext', '.ts', '-f', 'json'], {
+        timeout: this.verifyTimeoutMs,
+      });
+      if (!result) return null;
+
+      const parsed = JSON.parse(result.stdout);
+      if (!Array.isArray(parsed)) return null;
+
+      let totalWarnings = 0;
+      for (const file of parsed) {
+        totalWarnings += file.warningCount ?? 0;
+      }
+
+      return `- ESLint Warnings: ${totalWarnings}`;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Gathers code health metrics (coverage + lint warnings) for the evolution prompt.
+   * Returns a formatted section string, or empty string if no metrics are available.
+   */
+  private async gatherCodeHealthMetrics(): Promise<string> {
+    const [coverage, lint, lowestFiles] = await Promise.all([
+      this.gatherCoverageMetrics(),
+      this.gatherLintWarnings(),
+      this.gatherLowestCoverageFiles(),
+    ]);
+
+    const lines: string[] = [];
+    if (coverage) lines.push(coverage);
+    if (lowestFiles) lines.push(lowestFiles);
+    if (lint) lines.push(lint);
+
+    if (lines.length === 0) return '';
+
+    return `\n## Code Health Metrics\n${lines.join('\n')}\n\nPrioritize:\n- If coverage < 80% in any area → prefer TEST\n- If lint warnings > 0 → prefer FIX\n- If both healthy → prefer REFACTOR or SKIP`;
+  }
+
+  /**
+   * Checks if code coverage meets the configured baseline thresholds.
+   * Reads coverage-summary.json and compares each metric against the baseline.
+   * @returns Object with pass/fail status and details of any regressions
+   */
+  private async checkCoverageBaseline(): Promise<{ passed: boolean; details: string }> {
+    if (!this.coverageBaseline) {
+      return { passed: true, details: 'coverage gate disabled' };
+    }
+
+    try {
+      const summaryPath = path.join(this.projectRoot, 'coverage', 'coverage-summary.json');
+      if (!(await fs.pathExists(summaryPath))) {
+        return { passed: false, details: 'coverage-summary.json not found' };
+      }
+
+      const raw = await fs.readFile(summaryPath, 'utf-8');
+      const summary = JSON.parse(raw);
+      const total = summary?.total;
+      if (!total) {
+        return { passed: false, details: 'coverage-summary.json missing total section' };
+      }
+
+      const failures: string[] = [];
+      const metrics: Array<{ key: string; actual: number; expected: number }> = [
+        { key: 'branches', actual: total.branches?.pct ?? 0, expected: this.coverageBaseline.branches },
+        { key: 'functions', actual: total.functions?.pct ?? 0, expected: this.coverageBaseline.functions },
+        { key: 'lines', actual: total.lines?.pct ?? 0, expected: this.coverageBaseline.lines },
+        { key: 'statements', actual: total.statements?.pct ?? 0, expected: this.coverageBaseline.statements },
+      ];
+
+      for (const { key, actual, expected } of metrics) {
+        if (actual < expected) {
+          failures.push(`${key}: ${actual}% < ${expected}%`);
+        }
+      }
+
+      if (failures.length > 0) {
+        return { passed: false, details: failures.join(', ') };
+      }
+
+      return { passed: true, details: 'all coverage thresholds met' };
+    } catch {
+      return { passed: false, details: 'failed to read coverage data' };
+    }
   }
 
   /**
@@ -263,6 +575,7 @@ export class SelfDriver {
     this.cleanedUp = false;
     this.consecutiveFailures = 0;
     this.iterationCount = 0;
+    this.lastIterationResult = null;
   }
 
   /**
@@ -303,6 +616,8 @@ export class SelfDriver {
    */
   private async runIteration(): Promise<'stop' | 'retry' | 'completed'> {
     this.iterationCount++;
+    this.iterationStartTime = Date.now();
+    const iterationTimestamp = new Date().toISOString();
     this.log(`\n📊 Iteration ${this.iterationCount} starting...`);
 
     // Capture git commit hash before evolution to detect if changes were committed
@@ -316,6 +631,20 @@ export class SelfDriver {
     const executed = await this.evolveWithOpenCode(constitution);
 
     if (!executed) {
+      this.lastIterationResult = {
+        iteration: this.iterationCount,
+        success: false,
+        failureStage: 'execution',
+        failureDetail: 'OpenCode execution failed or timed out',
+      };
+      await this.writeEvolutionRecord({
+        iteration: this.iterationCount,
+        timestamp: iterationTimestamp,
+        success: false,
+        failureStage: 'execution',
+        failureDetail: 'OpenCode execution failed or timed out',
+        durationMs: Date.now() - this.iterationStartTime,
+      });
       const shouldStop = this.handleEvolutionFailure('Evolution execution issue');
       return shouldStop ? 'stop' : 'retry';
     }
@@ -325,6 +654,20 @@ export class SelfDriver {
     const verified = await this.verify();
 
     if (!verified) {
+      this.lastIterationResult = {
+        iteration: this.iterationCount,
+        success: false,
+        failureStage: 'verification',
+        failureDetail: 'Build, test, or lint checks failed after AI changes',
+      };
+      await this.writeEvolutionRecord({
+        iteration: this.iterationCount,
+        timestamp: iterationTimestamp,
+        success: false,
+        failureStage: 'verification',
+        failureDetail: 'Build, test, or lint checks failed after AI changes',
+        durationMs: Date.now() - this.iterationStartTime,
+      });
       this.log('❌ Verification failed, reverting...');
       const revertSuccess = await this.revert();
       return this.handleRevertFailure(revertSuccess, 'Verification failed') ? 'completed' : 'stop';
@@ -344,6 +687,57 @@ export class SelfDriver {
       hashChanged,
       beforeHashError || afterHashError
     );
+
+    // Gather changed files and decision for iteration context
+    const filesChanged = await this.getChangedFilesList(beforeCommitHash, afterCommitHash);
+    const decision = hashChanged ? await this.detectDecisionFromCommit() : undefined;
+
+    const durationMs = Date.now() - this.iterationStartTime;
+    if (isClean && hashChanged) {
+      this.lastIterationResult = {
+        iteration: this.iterationCount,
+        success: true,
+        decision,
+        filesChanged,
+      };
+      await this.writeEvolutionRecord({
+        iteration: this.iterationCount,
+        timestamp: iterationTimestamp,
+        success: true,
+        commitHash: afterCommitHash ?? undefined,
+        durationMs,
+      });
+    } else if (isClean && !hashChanged) {
+      this.lastIterationResult = {
+        iteration: this.iterationCount,
+        success: true,
+        decision: 'SKIP',
+        failureDetail: 'AI made no changes (SKIP)',
+      };
+      await this.writeEvolutionRecord({
+        iteration: this.iterationCount,
+        timestamp: iterationTimestamp,
+        success: true,
+        durationMs,
+      });
+    } else {
+      this.lastIterationResult = {
+        iteration: this.iterationCount,
+        success: false,
+        failureStage: 'commit',
+        failureDetail: 'Verification passed but AI did not commit changes properly',
+        filesChanged,
+      };
+      await this.writeEvolutionRecord({
+        iteration: this.iterationCount,
+        timestamp: iterationTimestamp,
+        success: false,
+        failureStage: 'commit',
+        failureDetail: 'Verification passed but AI did not commit changes properly',
+        durationMs,
+      });
+    }
+
     return shouldContinue ? 'completed' : 'stop';
   }
 
@@ -479,19 +873,49 @@ export class SelfDriver {
 
   /**
    * Builds the evolution prompt for OpenCode with constitution and file tree.
+   * Optionally includes context from the previous iteration to avoid repeated failures.
    */
-  private buildEvolutionPrompt(constitution: string, fileTree: string): string {
+  private buildEvolutionPrompt(
+    constitution: string,
+    fileTree: string,
+    lastResult?: IterationResult | null,
+    metricsSection?: string
+  ): string {
     const runner = this.getCommandRunner();
     const cliVerifyCommands = EVOLUTION_VERIFY_COMMANDS.map(
       (cmd) => `   - ${runner.file} ${runner.prefixArgs.join(' ')} ${cmd} --help`
     ).join('\n');
+
+    let previousIterationSection = '';
+    if (lastResult) {
+      const resultLabel = lastResult.success ? 'SUCCESS' : 'FAILED';
+      const parts = [`- Result: ${resultLabel}`];
+      if (lastResult.decision) {
+        parts.push(`- Decision: ${lastResult.decision}`);
+      }
+      if (lastResult.failureStage) {
+        parts.push(`- Failed Stage: ${lastResult.failureStage}`);
+      }
+      if (lastResult.failureDetail) {
+        parts.push(`- Error: ${lastResult.failureDetail}`);
+      }
+      if (lastResult.filesChanged && lastResult.filesChanged.length > 0) {
+        parts.push(`- Files Changed: ${lastResult.filesChanged.join(', ')}`);
+      }
+      previousIterationSection = `
+
+## Previous Iteration (#${lastResult.iteration})
+${parts.join('\n')}
+
+Do NOT repeat the same approach that failed. Try a different strategy.`;
+    }
 
     return `${constitution}
 ## Current Codebase
 
 Source files:
 ${fileTree}
-
+${metricsSection || ''}
 ## Your Task
 
 Read and analyze the codebase, then decide:
@@ -503,7 +927,7 @@ Read and analyze the codebase, then decide:
 5. SKIP - Codebase is healthy, no changes needed this round
 
 Execute your decision. Make minimal, focused changes.
-
+${this.forbiddenPaths.length > 0 || this.allowedPaths.length > 0 ? `\n## File Restrictions${this.allowedPaths.length > 0 ? `\nOnly modify files under:\n${this.allowedPaths.map((p) => `- ${p}`).join('\n')}` : ''}${this.forbiddenPaths.length > 0 ? `\nDo NOT modify these files/paths:\n${this.forbiddenPaths.map((p) => `- ${p}`).join('\n')}` : ''}\n` : ''}${this.maxDiffLines > 0 ? `\n## Change Size Limit\nKeep changes under ${this.maxDiffLines} lines (insertions + deletions combined).\nOne commit = one focused logical change.\n` : ''}
 ## After Changes
 
 1. **Verify** all pass:
@@ -524,7 +948,7 @@ ${cliVerifyCommands}
     - \`refactor:\` - code improvements
     - \`feat:\` - new features
 
-If verification fails, do NOT commit - the system will revert automatically.`;
+If verification fails, do NOT commit - the system will revert automatically.${previousIterationSection}`;
   }
 
   /**
@@ -532,7 +956,13 @@ If verification fails, do NOT commit - the system will revert automatically.`;
    */
   private async evolveWithOpenCode(constitution: string): Promise<boolean> {
     const fileTree = await this.getFileTree();
-    const prompt = this.buildEvolutionPrompt(constitution, fileTree);
+    const metricsSection = await this.gatherCodeHealthMetrics();
+    const prompt = this.buildEvolutionPrompt(
+      constitution,
+      fileTree,
+      this.lastIterationResult,
+      metricsSection
+    );
 
     try {
       this.log('🚀 Executing OpenCode...');
@@ -589,6 +1019,25 @@ If verification fails, do NOT commit - the system will revert automatically.`;
    * When adding new commands, add them to EVOLUTION_VERIFY_COMMANDS in types/evolve.ts.
    */
   private async verify(): Promise<boolean> {
+    // Check forbidden file changes before running expensive build/test/lint
+    const { valid, violations } = await this.validateChangedFiles();
+    if (!valid) {
+      this.log(`  ❌ Forbidden file changes detected:`);
+      for (const v of violations) {
+        this.log(`     - ${v}`);
+      }
+      return false;
+    }
+
+    // Check diff size limit
+    const { total, withinLimit } = await this.checkDiffSize();
+    if (!withinLimit) {
+      this.log(
+        `  ❌ Change too large: ${total} lines changed (limit: ${this.maxDiffLines})`
+      );
+      return false;
+    }
+
     const runner = this.getCommandRunner();
     const commandChecks = EVOLUTION_VERIFY_COMMANDS.map((cmd) => ({
       name: `${cmd.charAt(0).toUpperCase() + cmd.slice(1)} command`,
@@ -596,38 +1045,96 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       args: [...runner.prefixArgs, cmd, '--help'],
     }));
 
-    const checks: Array<{ name: string; file: string; args: string[] }> = [
-      { name: 'Build', file: 'npm', args: ['run', 'build'] },
-      { name: 'Tests', file: 'npm', args: ['test'] },
+    // Stage 1: Build (must succeed first to produce dist/ artifacts)
+    const buildCheck = { name: 'Build', file: 'npm', args: ['run', 'build'] };
+    this.log(`  Checking ${buildCheck.name}...`);
+    const buildResult = await this.safeExeca(buildCheck.file, buildCheck.args, {
+      timeout: this.verifyTimeoutMs,
+    });
+    if (!buildResult || buildResult.exitCode !== 0) {
+      this.logCheckFailure(buildCheck.name, buildResult);
+      return false;
+    }
+    this.log(`  ✅ ${buildCheck.name} passed`);
+
+    // Stage 2: Tests + Lint (independent, can run in parallel)
+    const testArgs = this.coverageBaseline
+      ? ['test', '--', '--coverage']
+      : ['test'];
+    const parallelChecks = [
+      { name: 'Tests', file: 'npm', args: testArgs },
       { name: 'Lint', file: 'npm', args: ['run', 'lint'] },
-      ...commandChecks,
     ];
 
-    for (const check of checks) {
-      this.log(`  Checking ${check.name}...`);
-      const result = await this.safeExeca(check.file, check.args, {
-        timeout: this.verifyTimeoutMs,
-      });
+    this.log(`  Checking Tests and Lint in parallel...`);
+    const parallelResults = await Promise.all(
+      parallelChecks.map(async (check) => {
+        const result = await this.safeExeca(check.file, check.args, {
+          timeout: this.verifyTimeoutMs,
+        });
+        return { check, result };
+      })
+    );
 
+    for (const { check, result } of parallelResults) {
       if (!result || result.exitCode !== 0) {
-        this.log(`  ❌ ${check.name} failed`);
-        // Show error output for debugging
-        if (result?.stderr) {
-          const stderrPreview = this.truncateOutput(result.stderr, VERIFY_ERROR_PREVIEW_LIMIT);
-          this.log(`     Error: ${stderrPreview}`);
-        }
-        if (result?.stdout) {
-          const stdoutPreview = this.truncateOutput(result.stdout, VERIFY_ERROR_PREVIEW_LIMIT);
-          if (stdoutPreview) {
-            this.log(`     Output: ${stdoutPreview}`);
-          }
-        }
+        this.logCheckFailure(check.name, result);
+        return false;
+      }
+      this.log(`  ✅ ${check.name} passed`);
+    }
+
+    // Stage 2.5: Coverage gate (runs after tests generate coverage data)
+    if (this.coverageBaseline) {
+      this.log(`  Checking coverage baseline...`);
+      const { passed, details } = await this.checkCoverageBaseline();
+      if (!passed) {
+        this.log(`  ❌ Coverage gate failed: ${details}`);
+        return false;
+      }
+      this.log(`  ✅ Coverage gate passed`);
+    }
+
+    // Stage 3: CLI command checks (all independent, can run in parallel)
+    this.log(`  Checking CLI commands in parallel...`);
+    const commandResults = await Promise.all(
+      commandChecks.map(async (check) => {
+        const result = await this.safeExeca(check.file, check.args, {
+          timeout: this.verifyTimeoutMs,
+        });
+        return { check, result };
+      })
+    );
+
+    for (const { check, result } of commandResults) {
+      if (!result || result.exitCode !== 0) {
+        this.logCheckFailure(check.name, result);
         return false;
       }
       this.log(`  ✅ ${check.name} passed`);
     }
 
     return true;
+  }
+
+  /**
+   * Logs a check failure with error details.
+   */
+  private logCheckFailure(
+    name: string,
+    result: { exitCode: number; stdout: string; stderr: string } | null
+  ): void {
+    this.log(`  ❌ ${name} failed`);
+    if (result?.stderr) {
+      const stderrPreview = this.truncateOutput(result.stderr, VERIFY_ERROR_PREVIEW_LIMIT);
+      this.log(`     Error: ${stderrPreview}`);
+    }
+    if (result?.stdout) {
+      const stdoutPreview = this.truncateOutput(result.stdout, VERIFY_ERROR_PREVIEW_LIMIT);
+      if (stdoutPreview) {
+        this.log(`     Output: ${stdoutPreview}`);
+      }
+    }
   }
 
   /**
@@ -756,6 +1263,48 @@ If verification fails, do NOT commit - the system will revert automatically.`;
   }
 
   /**
+   * Gets the list of files changed between two commit hashes, or in the working tree.
+   * @returns Array of changed file paths, or undefined if unavailable
+   */
+  private async getChangedFilesList(
+    beforeHash: string | null,
+    afterHash: string | null
+  ): Promise<string[] | undefined> {
+    try {
+      let result;
+      if (beforeHash && afterHash && beforeHash !== afterHash) {
+        result = await this.safeExeca('git', ['diff', '--name-only', beforeHash, afterHash]);
+      } else {
+        result = await this.safeExeca('git', ['diff', '--name-only']);
+      }
+      if (!result || result.exitCode !== 0) return undefined;
+      const files = result.stdout
+        .split('\n')
+        .map((f) => f.trim())
+        .filter((f) => f.length > 0);
+      return files.length > 0 ? files : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Detects the AI's decision from the most recent commit message.
+   * Maps conventional commit prefixes to decision labels.
+   * @returns The decision string, or undefined if not detectable
+   */
+  private async detectDecisionFromCommit(): Promise<string | undefined> {
+    const result = await this.safeExeca('git', ['log', '-1', '--format=%s']);
+    if (!result || result.exitCode !== 0) return undefined;
+    const msg = result.stdout.trim().toLowerCase();
+    if (msg.startsWith('fix:') || msg.startsWith('fix(')) return 'FIX';
+    if (msg.startsWith('test:') || msg.startsWith('test(')) return 'TEST';
+    if (msg.startsWith('refactor:') || msg.startsWith('refactor(')) return 'REFACTOR';
+    if (msg.startsWith('feat:') || msg.startsWith('feat(')) return 'FEATURE';
+    return undefined;
+  }
+
+  /**
    * Reverts changes (both staged and unstaged).
    * @returns true if revert succeeded, false otherwise
    */
@@ -828,6 +1377,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
     consecutiveFailures: number;
     iterationCount: number;
     keepUntracked: boolean;
+    lastIterationResult: IterationResult | null;
   } {
     return {
       interrupted: this.interrupted,
@@ -838,6 +1388,7 @@ If verification fails, do NOT commit - the system will revert automatically.`;
       consecutiveFailures: this.consecutiveFailures,
       iterationCount: this.iterationCount,
       keepUntracked: this.keepUntracked,
+      lastIterationResult: this.lastIterationResult,
     };
   }
 }

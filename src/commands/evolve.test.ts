@@ -519,6 +519,118 @@ describe('evolveCommand', () => {
         });
       });
     });
+
+    describe('--coverage-gate option', () => {
+      it('registers the --coverage-gate option', () => {
+        evolveCommand(program);
+
+        const commands = program.commands;
+        const evolveCmd = commands.find((cmd) => cmd.name() === 'evolve');
+
+        expect(evolveCmd).toBeDefined();
+        const coverageGateOption = evolveCmd?.options.find(
+          (opt) => opt.long === '--coverage-gate'
+        );
+        expect(coverageGateOption).toBeDefined();
+      });
+
+      it('passes coverageBaseline to runSelfEvolution when --coverage-gate is used', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync(['node', 'test', 'evolve', '--coverage-gate', '70,80,80,80']);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith(
+          expect.objectContaining({
+            coverageBaseline: {
+              branches: 70,
+              functions: 80,
+              lines: 80,
+              statements: 80,
+            },
+          })
+        );
+      });
+
+      it('parses thresholds with spaces between values', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync(['node', 'test', 'evolve', '--coverage-gate', '50, 60, 70, 80']);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith(
+          expect.objectContaining({
+            coverageBaseline: {
+              branches: 50,
+              functions: 60,
+              lines: 70,
+              statements: 80,
+            },
+          })
+        );
+      });
+
+      it('throws error for wrong number of values', async () => {
+        evolveCommand(program);
+
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--coverage-gate', '70,80,80'])
+        ).rejects.toThrow('expected 4 comma-separated numbers');
+      });
+
+      it('throws error for non-numeric value', async () => {
+        evolveCommand(program);
+
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--coverage-gate', '70,abc,80,80'])
+        ).rejects.toThrow('must be a number between 0 and 100');
+      });
+
+      it('throws error for value over 100', async () => {
+        evolveCommand(program);
+
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--coverage-gate', '70,80,110,80'])
+        ).rejects.toThrow('must be a number between 0 and 100');
+      });
+
+      it('throws error for negative value', async () => {
+        evolveCommand(program);
+
+        await expect(
+          program.parseAsync(['node', 'test', 'evolve', '--coverage-gate', '70,-5,80,80'])
+        ).rejects.toThrow('must be a number between 0 and 100');
+      });
+
+      it('can combine --coverage-gate with other options', async () => {
+        mockRunSelfEvolution.mockResolvedValue(undefined);
+
+        evolveCommand(program);
+
+        await program.parseAsync([
+          'node',
+          'test',
+          'evolve',
+          '--once',
+          '--coverage-gate',
+          '70,80,80,80',
+        ]);
+
+        expect(mockRunSelfEvolution).toHaveBeenCalledWith(
+          expect.objectContaining({
+            once: true,
+            coverageBaseline: {
+              branches: 70,
+              functions: 80,
+              lines: 80,
+              statements: 80,
+            },
+          })
+        );
+      });
+    });
   });
 
   describe('parsePositiveInt validation', () => {

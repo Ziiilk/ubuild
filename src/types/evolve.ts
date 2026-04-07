@@ -65,4 +65,59 @@ export interface SelfEvolverOptions {
   projectRoot?: string;
   /** Keep untracked files when reverting changes (default: false - removes untracked files) */
   keepUntracked?: boolean;
+  /** Path to the evolution log file relative to projectRoot (default: '.evolve-history.jsonl') */
+  logFile?: string;
+  /** Glob patterns for files that must not be modified during evolution (default: ['package.json', 'tsconfig.json', '.github/**']) */
+  forbiddenPaths?: string[];
+  /** Glob patterns for files that are allowed to be modified during evolution (default: ['src/**']). Files outside these patterns are rejected. Set to empty array to disable. */
+  allowedPaths?: string[];
+  /** Maximum number of changed lines (insertions + deletions) allowed per iteration (default: 200, 0 to disable) */
+  maxDiffLines?: number;
+  /** Coverage baseline thresholds. When set, verification will fail if coverage drops below these values. */
+  coverageBaseline?: {
+    branches: number;
+    functions: number;
+    lines: number;
+    statements: number;
+  };
+}
+
+/**
+ * Result of a single evolution iteration, used to propagate context
+ * between iterations so the AI can learn from previous failures.
+ */
+export interface IterationResult {
+  /** The iteration number */
+  iteration: number;
+  /** Whether the iteration succeeded */
+  success: boolean;
+  /** The AI's decision for this iteration (FIX, TEST, REFACTOR, FEATURE, SKIP) */
+  decision?: string;
+  /** The stage at which the iteration failed, if applicable */
+  failureStage?: 'execution' | 'verification' | 'commit';
+  /** Truncated error detail from the failed stage */
+  failureDetail?: string;
+  /** List of files changed by the AI in this iteration */
+  filesChanged?: string[];
+}
+
+/**
+ * Structured log record for a single evolution iteration.
+ * Written as JSONL (one JSON object per line) to the evolution log file.
+ */
+export interface EvolutionRecord {
+  /** The iteration number */
+  iteration: number;
+  /** ISO timestamp of when the iteration started */
+  timestamp: string;
+  /** Whether the iteration succeeded */
+  success: boolean;
+  /** The stage at which the iteration failed, if applicable */
+  failureStage?: 'execution' | 'verification' | 'commit';
+  /** Truncated error detail from the failed stage */
+  failureDetail?: string;
+  /** Git commit hash if changes were committed */
+  commitHash?: string;
+  /** Duration of the iteration in milliseconds */
+  durationMs: number;
 }

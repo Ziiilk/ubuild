@@ -4,7 +4,7 @@
  * @module types/evolve.test
  */
 
-import type { SelfEvolverOptions } from './evolve';
+import type { SelfEvolverOptions, IterationResult, EvolutionRecord } from './evolve';
 import { EVOLUTION_VERIFY_COMMANDS } from './evolve';
 
 describe('SelfEvolverOptions interface', () => {
@@ -21,6 +21,7 @@ describe('SelfEvolverOptions interface', () => {
       maxRetries: 3,
       projectRoot: '/custom/project/path',
       keepUntracked: true,
+      logFile: 'custom.jsonl',
     };
 
     expect(options.logger).toBeDefined();
@@ -33,6 +34,7 @@ describe('SelfEvolverOptions interface', () => {
     expect(options.maxRetries).toBe(3);
     expect(options.projectRoot).toBe('/custom/project/path');
     expect(options.keepUntracked).toBe(true);
+    expect(options.logFile).toBe('custom.jsonl');
   });
 
   it('accepts empty options object', () => {
@@ -149,5 +151,115 @@ describe('EVOLUTION_VERIFY_COMMANDS', () => {
 
   it('includes evolve command for self-verification', () => {
     expect(EVOLUTION_VERIFY_COMMANDS).toContain('evolve');
+  });
+});
+
+describe('IterationResult interface', () => {
+  it('accepts a successful result', () => {
+    const result: IterationResult = {
+      iteration: 1,
+      success: true,
+    };
+    expect(result.iteration).toBe(1);
+    expect(result.success).toBe(true);
+    expect(result.failureStage).toBeUndefined();
+    expect(result.failureDetail).toBeUndefined();
+  });
+
+  it('accepts a failed result with execution stage', () => {
+    const result: IterationResult = {
+      iteration: 2,
+      success: false,
+      failureStage: 'execution',
+      failureDetail: 'OpenCode timed out',
+    };
+    expect(result.success).toBe(false);
+    expect(result.failureStage).toBe('execution');
+    expect(result.failureDetail).toBe('OpenCode timed out');
+  });
+
+  it('accepts a failed result with verification stage', () => {
+    const result: IterationResult = {
+      iteration: 3,
+      success: false,
+      failureStage: 'verification',
+      failureDetail: 'Lint failed',
+    };
+    expect(result.failureStage).toBe('verification');
+  });
+
+  it('accepts a failed result with commit stage', () => {
+    const result: IterationResult = {
+      iteration: 4,
+      success: false,
+      failureStage: 'commit',
+      failureDetail: 'AI did not commit changes',
+    };
+    expect(result.failureStage).toBe('commit');
+  });
+
+  it('accepts a result without optional fields', () => {
+    const result: IterationResult = {
+      iteration: 5,
+      success: true,
+    };
+    expect(result).toEqual({ iteration: 5, success: true });
+  });
+
+  it('accepts a result with decision field', () => {
+    const result: IterationResult = {
+      iteration: 6,
+      success: true,
+      decision: 'FIX',
+    };
+    expect(result.decision).toBe('FIX');
+  });
+
+  it('accepts a result with filesChanged field', () => {
+    const result: IterationResult = {
+      iteration: 7,
+      success: true,
+      decision: 'TEST',
+      filesChanged: ['src/core/foo.ts', 'src/core/foo.test.ts'],
+    };
+    expect(result.filesChanged).toEqual(['src/core/foo.ts', 'src/core/foo.test.ts']);
+  });
+});
+
+describe('EvolutionRecord interface', () => {
+  it('accepts a complete successful record', () => {
+    const record: EvolutionRecord = {
+      iteration: 1,
+      timestamp: '2026-04-07T12:00:00.000Z',
+      success: true,
+      commitHash: 'abc123',
+      durationMs: 5000,
+    };
+    expect(record.success).toBe(true);
+    expect(record.commitHash).toBe('abc123');
+    expect(record.durationMs).toBe(5000);
+  });
+
+  it('accepts a failed record with failure details', () => {
+    const record: EvolutionRecord = {
+      iteration: 2,
+      timestamp: '2026-04-07T12:01:00.000Z',
+      success: false,
+      failureStage: 'verification',
+      failureDetail: 'Build failed',
+      durationMs: 3000,
+    };
+    expect(record.failureStage).toBe('verification');
+  });
+
+  it('accepts a minimal record without optional fields', () => {
+    const record: EvolutionRecord = {
+      iteration: 3,
+      timestamp: '2026-04-07T12:02:00.000Z',
+      success: true,
+      durationMs: 1000,
+    };
+    expect(record.commitHash).toBeUndefined();
+    expect(record.failureStage).toBeUndefined();
   });
 });

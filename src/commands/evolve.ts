@@ -68,6 +68,31 @@ export function evolveCommand(program: Command): void {
       '--keep-untracked',
       'Keep untracked files when reverting changes (default: remove untracked files)'
     )
+    .option(
+      '--coverage-gate <thresholds>',
+      'Enable coverage gate with thresholds as "branches,functions,lines,statements" (e.g. "70,80,80,80")',
+      (value: string) => {
+        const parts = value.split(',').map((s) => s.trim());
+        if (parts.length !== 4) {
+          throw new Error(
+            'Invalid --coverage-gate: expected 4 comma-separated numbers (branches,functions,lines,statements)'
+          );
+        }
+        const nums = parts.map((p) => {
+          const n = Number(p);
+          if (isNaN(n) || n < 0 || n > 100) {
+            throw new Error(`Invalid threshold value "${p}": must be a number between 0 and 100`);
+          }
+          return n;
+        });
+        return {
+          branches: nums[0],
+          functions: nums[1],
+          lines: nums[2],
+          statements: nums[3],
+        };
+      }
+    )
     .action(async (options) => {
       try {
         Logger.title('ubuild Self-Evolution');
@@ -97,6 +122,7 @@ export function evolveCommand(program: Command): void {
           opencodeTimeoutMs: options.opencodeTimeout,
           maxRetries: options.maxRetries,
           keepUntracked: options.keepUntracked,
+          coverageBaseline: options.coverageGate,
         });
       } catch (error) {
         handleCommandError(error);
