@@ -868,6 +868,80 @@ export class SelfDriver {
   }
 
   /**
+   * Builds the file restriction section for the evolution prompt.
+   * Includes allowed paths and forbidden paths when configured.
+   * @returns Formatted section string, or empty string if no restrictions
+   */
+  private buildFileRestrictionSection(): string {
+    if (this.forbiddenPaths.length === 0 && this.allowedPaths.length === 0) {
+      return '';
+    }
+
+    const parts: string[] = ['\n## File Restrictions'];
+
+    if (this.allowedPaths.length > 0) {
+      parts.push('Only modify files under:');
+      parts.push(...this.allowedPaths.map((p) => `- ${p}`));
+    }
+
+    if (this.forbiddenPaths.length > 0) {
+      parts.push('Do NOT modify these files/paths:');
+      parts.push(...this.forbiddenPaths.map((p) => `- ${p}`));
+    }
+
+    return parts.join('\n') + '\n';
+  }
+
+  /**
+   * Builds the change size limit section for the evolution prompt.
+   * @returns Formatted section string, or empty string if no limit set
+   */
+  private buildChangeSizeLimitSection(): string {
+    if (this.maxDiffLines <= 0) {
+      return '';
+    }
+
+    return [
+      '',
+      '## Change Size Limit',
+      `Keep changes under ${this.maxDiffLines} lines (insertions + deletions combined).`,
+      'One commit = one focused logical change.',
+      '',
+    ].join('\n');
+  }
+
+  /**
+   * Builds the previous iteration context section for the evolution prompt.
+   * @param lastResult - The result from the previous iteration
+   * @returns Formatted section string, or empty string if no previous result
+   */
+  private buildPreviousIterationSection(lastResult: IterationResult): string {
+    const resultLabel = lastResult.success ? 'SUCCESS' : 'FAILED';
+    const parts = [`- Result: ${resultLabel}`];
+
+    if (lastResult.decision) {
+      parts.push(`- Decision: ${lastResult.decision}`);
+    }
+    if (lastResult.failureStage) {
+      parts.push(`- Failed Stage: ${lastResult.failureStage}`);
+    }
+    if (lastResult.failureDetail) {
+      parts.push(`- Error: ${lastResult.failureDetail}`);
+    }
+    if (lastResult.filesChanged && lastResult.filesChanged.length > 0) {
+      parts.push(`- Files Changed: ${lastResult.filesChanged.join(', ')}`);
+    }
+
+    return [
+      '',
+      `## Previous Iteration (#${lastResult.iteration})`,
+      parts.join('\n'),
+      '',
+      'Do NOT repeat the same approach that failed. Try a different strategy.',
+    ].join('\n');
+  }
+
+  /**
    * Builds the evolution prompt for OpenCode with constitution and file tree.
    * Optionally includes context from the previous iteration to avoid repeated failures.
    */
@@ -882,37 +956,19 @@ export class SelfDriver {
       (cmd) => `   - ${runner.file} ${runner.prefixArgs.join(' ')} ${cmd} --help`
     ).join('\n');
 
-    let previousIterationSection = '';
-    if (lastResult) {
-      const resultLabel = lastResult.success ? 'SUCCESS' : 'FAILED';
-      const parts = [`- Result: ${resultLabel}`];
-      if (lastResult.decision) {
-        parts.push(`- Decision: ${lastResult.decision}`);
-      }
-      if (lastResult.failureStage) {
-        parts.push(`- Failed Stage: ${lastResult.failureStage}`);
-      }
-      if (lastResult.failureDetail) {
-        parts.push(`- Error: ${lastResult.failureDetail}`);
-      }
-      if (lastResult.filesChanged && lastResult.filesChanged.length > 0) {
-        parts.push(`- Files Changed: ${lastResult.filesChanged.join(', ')}`);
-      }
-      previousIterationSection = `
+    const previousIterationSection = lastResult
+      ? this.buildPreviousIterationSection(lastResult)
+      : '';
 
-## Previous Iteration (#${lastResult.iteration})
-${parts.join('\n')}
-
-Do NOT repeat the same approach that failed. Try a different strategy.`;
-    }
+    const fileRestrictionSection = this.buildFileRestrictionSection();
+    const changeSizeLimitSection = this.buildChangeSizeLimitSection();
 
     return `${constitution}
 ## Current Codebase
 
 Source files:
 ${fileTree}
-${metricsSection || ''}
-## Your Task
+${metricsSection || ''}## Your Task
 
 Read and analyze the codebase, then decide:
 
@@ -923,8 +979,7 @@ Read and analyze the codebase, then decide:
 5. SKIP - Codebase is healthy, no changes needed this round
 
 Execute your decision. Make minimal, focused changes.
-${this.forbiddenPaths.length > 0 || this.allowedPaths.length > 0 ? `\n## File Restrictions${this.allowedPaths.length > 0 ? `\nOnly modify files under:\n${this.allowedPaths.map((p) => `- ${p}`).join('\n')}` : ''}${this.forbiddenPaths.length > 0 ? `\nDo NOT modify these files/paths:\n${this.forbiddenPaths.map((p) => `- ${p}`).join('\n')}` : ''}\n` : ''}${this.maxDiffLines > 0 ? `\n## Change Size Limit\nKeep changes under ${this.maxDiffLines} lines (insertions + deletions combined).\nOne commit = one focused logical change.\n` : ''}
-## After Changes
+${fileRestrictionSection}${changeSizeLimitSection}## After Changes
 
 1. **Verify** all pass:
    - npm run build
