@@ -25,7 +25,21 @@ export class ProjectPathResolver {
    * @returns Promise resolving to path resolution result with metadata
    */
   static async resolve(projectPath: string = process.cwd()): Promise<ProjectPathResolution> {
-    if ((await fs.pathExists(projectPath)) && (await fs.stat(projectPath)).isDirectory()) {
+    let stat: fs.Stats;
+    try {
+      stat = await fs.stat(projectPath);
+    } catch {
+      // Path does not exist or is inaccessible
+      return {
+        inputPath: projectPath,
+        resolvedPath: projectPath,
+        isDirectory: false,
+        wasResolvedFromDirectory: false,
+        hasUProjectExtension: projectPath.endsWith('.uproject'),
+      };
+    }
+
+    if (stat.isDirectory()) {
       const uprojectFiles = await fs
         .readdir(projectPath)
         .then((files) => files.filter((file) => file.endsWith('.uproject')));
