@@ -810,6 +810,74 @@ describe('ProjectGenerator', () => {
       });
     });
 
+    it('handles tasks.json containing primitive JSON value', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'PrimitiveJsonGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: { stdout: 'VSCode project files generated' },
+          })
+        );
+
+        const projectDir = path.dirname(project.uprojectPath);
+        const vscodeDir = path.join(projectDir, '.vscode');
+        await fs.ensureDir(vscodeDir);
+
+        // Write a JSON primitive (string) instead of an object
+        await fs.writeFile(path.join(vscodeDir, 'tasks.json'), '"just a string"');
+
+        const result = await ProjectGenerator.generate({
+          ide: 'vscode',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(true);
+
+        const tasksConfig = await fs.readJson(path.join(vscodeDir, 'tasks.json'));
+        expect(tasksConfig.version).toBe('2.0.0');
+        expect(tasksConfig.tasks).toHaveLength(2);
+      });
+    });
+
+    it('handles tasks.json with non-object task entries in array', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'BadTaskEntryGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: { stdout: 'VSCode project files generated' },
+          })
+        );
+
+        const projectDir = path.dirname(project.uprojectPath);
+        const vscodeDir = path.join(projectDir, '.vscode');
+        await fs.ensureDir(vscodeDir);
+
+        const existingTasks = {
+          version: '2.0.0',
+          tasks: [null, 'string-task', 42],
+        };
+        await fs.writeJson(path.join(vscodeDir, 'tasks.json'), existingTasks, { spaces: 2 });
+
+        const result = await ProjectGenerator.generate({
+          ide: 'vscode',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(true);
+
+        const tasksConfig = await fs.readJson(path.join(vscodeDir, 'tasks.json'));
+        expect(tasksConfig.version).toBe('2.0.0');
+        expect(tasksConfig.tasks).toHaveLength(2);
+        expect(tasksConfig.tasks[0].label).toBe('ubuild: Build Project');
+      });
+    });
+
     it('handles streaming output from UBT', async () => {
       await withTempDir(async (rootDir) => {
         const project = await createFakeProject(rootDir, { projectName: 'StreamingGame' });
