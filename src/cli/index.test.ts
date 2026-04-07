@@ -172,4 +172,49 @@ describe('CLI Entry Point', () => {
       expect(mockEvolveCommand).toHaveBeenCalled();
     });
   });
+
+  describe('error handling', () => {
+    it('logs error and exits when program.parseAsync throws', async () => {
+      process.argv = ['node', 'ubuild', 'list'];
+
+      // Mock commander to make parseAsync reject
+      jest.doMock('commander', () => {
+        const ActualCommand = jest.requireActual('commander').Command;
+        return {
+          Command: class MockCommand extends ActualCommand {
+            async parseAsync(..._args: unknown[]): Promise<this> {
+              throw new Error('Command execution failed');
+            }
+          },
+        };
+      });
+
+      await import('./index');
+      await flushPromises();
+
+      expect(mockLoggerError).toHaveBeenCalledWith('Error: Command execution failed');
+      expect(process.exit).toHaveBeenCalledWith(1);
+    });
+
+    it('handles non-Error values thrown by parseAsync', async () => {
+      process.argv = ['node', 'ubuild', 'list'];
+
+      jest.doMock('commander', () => {
+        const ActualCommand = jest.requireActual('commander').Command;
+        return {
+          Command: class MockCommand extends ActualCommand {
+            async parseAsync(..._args: unknown[]): Promise<this> {
+              throw 'string error';
+            }
+          },
+        };
+      });
+
+      await import('./index');
+      await flushPromises();
+
+      expect(mockLoggerError).toHaveBeenCalledWith('Error: string error');
+      expect(process.exit).toHaveBeenCalledWith(1);
+    });
+  });
 });
