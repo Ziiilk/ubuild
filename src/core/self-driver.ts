@@ -68,7 +68,12 @@ export class SelfDriver {
   private forbiddenPaths: string[];
   private allowedPaths: string[];
   private maxDiffLines: number;
-  private coverageBaseline: { branches: number; functions: number; lines: number; statements: number } | null;
+  private coverageBaseline: {
+    branches: number;
+    functions: number;
+    lines: number;
+    statements: number;
+  } | null;
 
   /**
    * Creates a new SelfDriver instance.
@@ -137,11 +142,10 @@ export class SelfDriver {
   }
 
   /**
-   * Checks if a file path matches a forbidden pattern.
-   * Supports exact match, directory prefix (ending with /**), and direct filename match.
+   * Checks if a file path matches a glob pattern.
+   * Supports exact match and directory prefix (ending with /**).
    */
-  private matchesForbiddenPattern(filePath: string, pattern: string): boolean {
-    // Normalize separators to forward slashes
+  private matchesGlobPattern(filePath: string, pattern: string): boolean {
     const normalized = filePath.replace(/\\/g, '/');
     const normalizedPattern = pattern.replace(/\\/g, '/');
 
@@ -187,7 +191,7 @@ export class SelfDriver {
       // Check forbidden paths (blacklist)
       let isForbidden = false;
       for (const pattern of this.forbiddenPaths) {
-        if (this.matchesForbiddenPattern(file, pattern)) {
+        if (this.matchesGlobPattern(file, pattern)) {
           violations.push(file);
           isForbidden = true;
           break;
@@ -197,7 +201,7 @@ export class SelfDriver {
       // Check allowed paths (whitelist) - only if not already forbidden
       if (!isForbidden && this.allowedPaths.length > 0) {
         const isAllowed = this.allowedPaths.some((pattern) =>
-          this.matchesAllowedPattern(file, pattern)
+          this.matchesGlobPattern(file, pattern)
         );
         if (!isAllowed) {
           violations.push(file);
@@ -206,26 +210,6 @@ export class SelfDriver {
     }
 
     return { valid: violations.length === 0, violations };
-  }
-
-  /**
-   * Checks if a file path matches an allowed pattern.
-   * Supports directory prefix (ending with /**) and exact match.
-   */
-  private matchesAllowedPattern(filePath: string, pattern: string): boolean {
-    const normalized = filePath.replace(/\\/g, '/');
-    const normalizedPattern = pattern.replace(/\\/g, '/');
-
-    // Exact match
-    if (normalized === normalizedPattern) return true;
-
-    // Directory glob: "dir/**" matches any file under that directory
-    if (normalizedPattern.endsWith('/**')) {
-      const prefix = normalizedPattern.slice(0, -2);
-      if (normalized.startsWith(prefix)) return true;
-    }
-
-    return false;
   }
 
   /**
@@ -394,10 +378,22 @@ export class SelfDriver {
 
       const failures: string[] = [];
       const metrics: Array<{ key: string; actual: number; expected: number }> = [
-        { key: 'branches', actual: total.branches?.pct ?? 0, expected: this.coverageBaseline.branches },
-        { key: 'functions', actual: total.functions?.pct ?? 0, expected: this.coverageBaseline.functions },
+        {
+          key: 'branches',
+          actual: total.branches?.pct ?? 0,
+          expected: this.coverageBaseline.branches,
+        },
+        {
+          key: 'functions',
+          actual: total.functions?.pct ?? 0,
+          expected: this.coverageBaseline.functions,
+        },
         { key: 'lines', actual: total.lines?.pct ?? 0, expected: this.coverageBaseline.lines },
-        { key: 'statements', actual: total.statements?.pct ?? 0, expected: this.coverageBaseline.statements },
+        {
+          key: 'statements',
+          actual: total.statements?.pct ?? 0,
+          expected: this.coverageBaseline.statements,
+        },
       ];
 
       for (const { key, actual, expected } of metrics) {
@@ -1032,9 +1028,7 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     // Check diff size limit
     const { total, withinLimit } = await this.checkDiffSize();
     if (!withinLimit) {
-      this.log(
-        `  ❌ Change too large: ${total} lines changed (limit: ${this.maxDiffLines})`
-      );
+      this.log(`  ❌ Change too large: ${total} lines changed (limit: ${this.maxDiffLines})`);
       return false;
     }
 
@@ -1058,9 +1052,7 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     this.log(`  ✅ ${buildCheck.name} passed`);
 
     // Stage 2: Tests + Lint (independent, can run in parallel)
-    const testArgs = this.coverageBaseline
-      ? ['test', '--', '--coverage']
-      : ['test'];
+    const testArgs = this.coverageBaseline ? ['test', '--', '--coverage'] : ['test'];
     const parallelChecks = [
       { name: 'Tests', file: 'npm', args: testArgs },
       { name: 'Lint', file: 'npm', args: ['run', 'lint'] },
