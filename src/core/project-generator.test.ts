@@ -878,6 +878,115 @@ describe('ProjectGenerator', () => {
       });
     });
 
+    it('handles tasks.json with task objects that have non-string labels', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'BadLabelGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: { stdout: 'VSCode project files generated' },
+          })
+        );
+
+        const projectDir = path.dirname(project.uprojectPath);
+        const vscodeDir = path.join(projectDir, '.vscode');
+        await fs.ensureDir(vscodeDir);
+
+        // Task with a numeric label — isVSCodeTaskDefinition returns false
+        // because label is defined but not a string
+        const existingTasks = {
+          version: '2.0.0',
+          tasks: [{ label: 123, type: 'shell', command: 'bad' }],
+        };
+        await fs.writeJson(path.join(vscodeDir, 'tasks.json'), existingTasks, { spaces: 2 });
+
+        const result = await ProjectGenerator.generate({
+          ide: 'vscode',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(true);
+
+        // isVSCodeTasksFile returns false → regenerate entire file
+        const tasksConfig = await fs.readJson(path.join(vscodeDir, 'tasks.json'));
+        expect(tasksConfig.version).toBe('2.0.0');
+        expect(tasksConfig.tasks).toHaveLength(2);
+        expect(tasksConfig.tasks[0].label).toBe('ubuild: Build Project');
+      });
+    });
+
+    it('handles tasks.json with task object that has boolean label', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'BoolLabelGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: { stdout: 'VSCode project files generated' },
+          })
+        );
+
+        const projectDir = path.dirname(project.uprojectPath);
+        const vscodeDir = path.join(projectDir, '.vscode');
+        await fs.ensureDir(vscodeDir);
+
+        // Task with a boolean label — isVSCodeTaskDefinition returns false
+        const existingTasks = {
+          version: '2.0.0',
+          tasks: [{ label: true }],
+        };
+        await fs.writeJson(path.join(vscodeDir, 'tasks.json'), existingTasks, { spaces: 2 });
+
+        const result = await ProjectGenerator.generate({
+          ide: 'vscode',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(true);
+
+        const tasksConfig = await fs.readJson(path.join(vscodeDir, 'tasks.json'));
+        expect(tasksConfig.tasks).toHaveLength(2);
+      });
+    });
+
+    it('handles tasks.json with task object that has object label', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'ObjLabelGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: { stdout: 'VSCode project files generated' },
+          })
+        );
+
+        const projectDir = path.dirname(project.uprojectPath);
+        const vscodeDir = path.join(projectDir, '.vscode');
+        await fs.ensureDir(vscodeDir);
+
+        // Task with an object label — isVSCodeTaskDefinition returns false
+        const existingTasks = {
+          version: '2.0.0',
+          tasks: [{ label: { nested: true } }],
+        };
+        await fs.writeJson(path.join(vscodeDir, 'tasks.json'), existingTasks, { spaces: 2 });
+
+        const result = await ProjectGenerator.generate({
+          ide: 'vscode',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(true);
+
+        const tasksConfig = await fs.readJson(path.join(vscodeDir, 'tasks.json'));
+        expect(tasksConfig.tasks).toHaveLength(2);
+      });
+    });
+
     it('handles streaming output from UBT', async () => {
       await withTempDir(async (rootDir) => {
         const project = await createFakeProject(rootDir, { projectName: 'StreamingGame' });
