@@ -247,6 +247,41 @@ describe('ProjectInitializer', () => {
       expect(result.error).toContain('No Unreal Engine installations found');
     });
 
+    it('auto-selects single engine when no enginePath is provided', async () => {
+      const tempDir = await createTempDir();
+      const enginePath = path.join(tempDir, 'Engine');
+      await createMockEngineStructure(enginePath);
+
+      const mockEngine = createMockEngineInstallation({
+        path: enginePath,
+        displayName: 'Unreal Engine 5.3',
+        associationId: '5.3',
+      });
+
+      jest.mocked(EngineResolver.findEngineInstallations).mockResolvedValue([mockEngine]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      const options: InitOptions = {
+        name: 'SingleEngineProject',
+        type: 'blueprint',
+        directory: path.join(tempDir, 'project'),
+        // No enginePath provided — should auto-select the single engine
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+
+      expect(result.success).toBe(true);
+      expect(result.engineAssociation).toBe('5.3');
+      // Should NOT have prompted user — inquirer not called
+      expect(inquirer.prompt).not.toHaveBeenCalled();
+    });
+
     it('prompts for engine selection when multiple engines are available', async () => {
       const tempDir = await createTempDir();
       const enginePath1 = path.join(tempDir, 'Engine1');
