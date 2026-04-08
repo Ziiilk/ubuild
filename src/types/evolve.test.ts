@@ -22,6 +22,15 @@ describe('SelfEvolverOptions interface', () => {
       projectRoot: '/custom/project/path',
       keepUntracked: true,
       logFile: 'custom.jsonl',
+      forbiddenPaths: ['package.json', 'tsconfig.json'],
+      allowedPaths: ['src/**'],
+      maxDiffLines: 200,
+      coverageBaseline: {
+        branches: 80,
+        functions: 75,
+        lines: 85,
+        statements: 85,
+      },
     };
 
     expect(options.logger).toBeDefined();
@@ -35,6 +44,10 @@ describe('SelfEvolverOptions interface', () => {
     expect(options.projectRoot).toBe('/custom/project/path');
     expect(options.keepUntracked).toBe(true);
     expect(options.logFile).toBe('custom.jsonl');
+    expect(options.forbiddenPaths).toEqual(['package.json', 'tsconfig.json']);
+    expect(options.allowedPaths).toEqual(['src/**']);
+    expect(options.maxDiffLines).toBe(200);
+    expect(options.coverageBaseline?.branches).toBe(80);
   });
 
   it('accepts empty options object', () => {
@@ -112,6 +125,94 @@ describe('SelfEvolverOptions interface', () => {
 
     options.logger?.('test message');
     expect(mockLogger).toHaveBeenCalledWith('test message');
+  });
+
+  it('accepts forbiddenPaths option', () => {
+    const options: SelfEvolverOptions = {
+      forbiddenPaths: ['package.json', 'tsconfig.json', '.github/**'],
+    };
+    expect(options.forbiddenPaths).toEqual(['package.json', 'tsconfig.json', '.github/**']);
+  });
+
+  it('accepts empty forbiddenPaths array', () => {
+    const options: SelfEvolverOptions = {
+      forbiddenPaths: [],
+    };
+    expect(options.forbiddenPaths).toEqual([]);
+  });
+
+  it('accepts allowedPaths option', () => {
+    const options: SelfEvolverOptions = {
+      allowedPaths: ['src/**'],
+    };
+    expect(options.allowedPaths).toEqual(['src/**']);
+  });
+
+  it('accepts empty allowedPaths array to disable check', () => {
+    const options: SelfEvolverOptions = {
+      allowedPaths: [],
+    };
+    expect(options.allowedPaths).toEqual([]);
+  });
+
+  it('accepts maxDiffLines option', () => {
+    const options: SelfEvolverOptions = {
+      maxDiffLines: 200,
+    };
+    expect(options.maxDiffLines).toBe(200);
+  });
+
+  it('accepts maxDiffLines of 0 to disable', () => {
+    const options: SelfEvolverOptions = {
+      maxDiffLines: 0,
+    };
+    expect(options.maxDiffLines).toBe(0);
+  });
+
+  it('accepts coverageBaseline option', () => {
+    const options: SelfEvolverOptions = {
+      coverageBaseline: {
+        branches: 80,
+        functions: 75,
+        lines: 85,
+        statements: 85,
+      },
+    };
+    expect(options.coverageBaseline).toBeDefined();
+    expect(options.coverageBaseline?.branches).toBe(80);
+    expect(options.coverageBaseline?.functions).toBe(75);
+    expect(options.coverageBaseline?.lines).toBe(85);
+    expect(options.coverageBaseline?.statements).toBe(85);
+  });
+
+  it('accepts coverageBaseline with zero thresholds', () => {
+    const options: SelfEvolverOptions = {
+      coverageBaseline: {
+        branches: 0,
+        functions: 0,
+        lines: 0,
+        statements: 0,
+      },
+    };
+    expect(options.coverageBaseline?.branches).toBe(0);
+  });
+
+  it('accepts all new options together', () => {
+    const options: SelfEvolverOptions = {
+      forbiddenPaths: ['package.json'],
+      allowedPaths: ['src/**'],
+      maxDiffLines: 100,
+      coverageBaseline: {
+        branches: 40,
+        functions: 50,
+        lines: 60,
+        statements: 60,
+      },
+    };
+    expect(options.forbiddenPaths).toEqual(['package.json']);
+    expect(options.allowedPaths).toEqual(['src/**']);
+    expect(options.maxDiffLines).toBe(100);
+    expect(options.coverageBaseline?.branches).toBe(40);
   });
 });
 
