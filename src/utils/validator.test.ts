@@ -255,6 +255,84 @@ describe('Validator', () => {
         expect(await Validator.isValidUProjectFile(uprojectPath)).toBe(false);
       });
     });
+
+    it('accepts a blueprint project without Modules key', async () => {
+      await withTempDir(async (tempDir) => {
+        const uprojectPath = path.join(tempDir, 'Blueprint.uproject');
+        await fs.writeJson(uprojectPath, {
+          FileVersion: 3,
+          EngineAssociation: 'UE_5.3',
+          // No Modules key at all – blueprint project
+        });
+
+        expect(await Validator.isValidUProjectFile(uprojectPath)).toBe(true);
+      });
+    });
+
+    it('accepts a project with Plugins but no Modules', async () => {
+      await withTempDir(async (tempDir) => {
+        const uprojectPath = path.join(tempDir, 'PluginOnly.uproject');
+        await fs.writeJson(uprojectPath, {
+          FileVersion: 3,
+          EngineAssociation: 'UE_5.3',
+          Plugins: [{ Name: 'TestPlugin', Enabled: true }],
+        });
+
+        expect(await Validator.isValidUProjectFile(uprojectPath)).toBe(true);
+      });
+    });
+
+    it('rejects a .uproject with empty string EngineAssociation', async () => {
+      await withTempDir(async (tempDir) => {
+        const uprojectPath = path.join(tempDir, 'EmptyAssoc.uproject');
+        await fs.writeJson(uprojectPath, {
+          FileVersion: 3,
+          EngineAssociation: '',
+          Modules: [],
+        });
+
+        expect(await Validator.isValidUProjectFile(uprojectPath)).toBe(false);
+      });
+    });
+
+    it('rejects a .uproject with non-string EngineAssociation', async () => {
+      await withTempDir(async (tempDir) => {
+        const uprojectPath = path.join(tempDir, 'NumericAssoc.uproject');
+        await fs.writeJson(uprojectPath, {
+          FileVersion: 3,
+          EngineAssociation: 5.3,
+          Modules: [],
+        });
+
+        expect(await Validator.isValidUProjectFile(uprojectPath)).toBe(false);
+      });
+    });
+
+    it('rejects a .uproject with null EngineAssociation', async () => {
+      await withTempDir(async (tempDir) => {
+        const uprojectPath = path.join(tempDir, 'NullAssoc.uproject');
+        await fs.writeJson(uprojectPath, {
+          FileVersion: 3,
+          EngineAssociation: null,
+          Modules: [],
+        });
+
+        expect(await Validator.isValidUProjectFile(uprojectPath)).toBe(false);
+      });
+    });
+
+    it('rejects a .uproject with Modules as a non-array truthy value', async () => {
+      await withTempDir(async (tempDir) => {
+        const uprojectPath = path.join(tempDir, 'StringModules.uproject');
+        await fs.writeJson(uprojectPath, {
+          FileVersion: 3,
+          EngineAssociation: 'UE_5.3',
+          Modules: 'not-an-array',
+        });
+
+        expect(await Validator.isValidUProjectFile(uprojectPath)).toBe(false);
+      });
+    });
   });
 
   describe('isSafeForInit', () => {
@@ -365,6 +443,29 @@ describe('Validator', () => {
         }
       });
     });
+
+    it('accepts a directory with only .git directory', async () => {
+      await withTempDir(async (tempDir) => {
+        await fs.ensureDir(path.join(tempDir, '.git'));
+
+        const result = await Validator.isSafeForInit(tempDir);
+
+        expect(result.safe).toBe(true);
+        expect(result.message).toContain('empty or contains only hidden files');
+      });
+    });
+
+    it('detects hidden .uproject files among non-hidden files', async () => {
+      await withTempDir(async (tempDir) => {
+        await fs.writeJson(path.join(tempDir, '.HiddenProject.uproject'), { FileVersion: 3 });
+        await fs.writeFile(path.join(tempDir, 'README.md'), '# readme');
+
+        const result = await Validator.isSafeForInit(tempDir);
+
+        expect(result.safe).toBe(false);
+        expect(result.message).toContain('.HiddenProject.uproject');
+      });
+    });
   });
 
   describe('isValidEnginePath error handling', () => {
@@ -385,6 +486,16 @@ describe('Validator', () => {
         } finally {
           mockPathExists.mockRestore();
         }
+      });
+    });
+
+    it('rejects when Engine directory exists but Binaries does not', async () => {
+      await withTempDir(async (tempDir) => {
+        const enginePath = path.join(tempDir, 'Engine');
+        // Create Engine subdirectory but NOT Engine/Binaries
+        await fs.ensureDir(path.join(enginePath, 'Engine'));
+
+        expect(await Validator.isValidEnginePath(enginePath)).toBe(false);
       });
     });
   });
