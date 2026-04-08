@@ -9,6 +9,7 @@ const mockInitCommand = jest.fn();
 const mockRunCommand = jest.fn();
 const mockUpdateCommand = jest.fn();
 const mockGencodebaseCommand = jest.fn();
+const mockExecuteGencodebase = jest.fn();
 const mockEvolveCommand = jest.fn();
 const mockCleanCommand = jest.fn();
 const mockVersionCommand = jest.fn();
@@ -44,6 +45,7 @@ jest.mock('./commands/update', () => ({
 
 jest.mock('./commands/gencodebase', () => ({
   gencodebaseCommand: mockGencodebaseCommand,
+  executeGencodebase: mockExecuteGencodebase,
 }));
 
 jest.mock('./commands/evolve', () => ({
@@ -72,6 +74,7 @@ import {
   runCommand,
   updateCommand,
   gencodebaseCommand,
+  executeGencodebase,
   evolveCommand,
   cleanCommand,
   versionCommand,
@@ -122,6 +125,11 @@ describe('Public API exports', () => {
     it('exports gencodebaseCommand', () => {
       expect(gencodebaseCommand).toBeDefined();
       expect(typeof gencodebaseCommand).toBe('function');
+    });
+
+    it('exports executeGencodebase', () => {
+      expect(executeGencodebase).toBeDefined();
+      expect(typeof executeGencodebase).toBe('function');
     });
 
     it('exports evolveCommand', () => {
@@ -277,6 +285,7 @@ describe('Public API exports', () => {
       expect(runCommand).toBe(mockRunCommand);
       expect(updateCommand).toBe(mockUpdateCommand);
       expect(gencodebaseCommand).toBe(mockGencodebaseCommand);
+      expect(executeGencodebase).toBe(mockExecuteGencodebase);
       expect(evolveCommand).toBe(mockEvolveCommand);
       expect(cleanCommand).toBe(mockCleanCommand);
       expect(versionCommand).toBe(mockVersionCommand);
