@@ -3,6 +3,9 @@ import type {
   BuildTarget,
   BuildConfiguration,
   BuildPlatform,
+  BuildTargetWithCustom,
+  BuildConfigurationWithCustom,
+  BuildPlatformWithCustom,
   BuildOptions,
   BuildResult,
   // Engine types
@@ -25,8 +28,13 @@ import type {
   ProjectDetectionOptions,
   ProjectDetectionResult,
   ProjectPathResolution,
+  // Clean types
+  CleanOptions,
+  CleanResult,
+  // Evolve types
+  SelfEvolverOptions,
 } from './index';
-import { BUILD_TARGETS, BUILD_CONFIGS, BUILD_PLATFORMS } from './index';
+import { BUILD_TARGETS, BUILD_CONFIGS, BUILD_PLATFORMS, EVOLUTION_VERIFY_COMMANDS } from './index';
 
 describe('Type Exports', () => {
   describe('Build types', () => {
@@ -442,6 +450,110 @@ describe('Type Exports', () => {
       expect(resolution.inputPath).toBe('./MyProject');
       expect(resolution.wasResolvedFromDirectory).toBe(true);
       expect(resolution.hasUProjectExtension).toBe(true);
+    });
+  });
+
+  describe('Build WithCustom types', () => {
+    it('BuildTargetWithCustom accepts standard BuildTarget values', () => {
+      const targets: BuildTargetWithCustom[] = ['Editor', 'Game', 'Client', 'Server'];
+      expect(targets).toHaveLength(4);
+    });
+
+    it('BuildTargetWithCustom accepts custom target strings', () => {
+      const custom: BuildTargetWithCustom[] = ['MyPluginTarget', 'CustomBuild'];
+      expect(custom).toHaveLength(2);
+    });
+
+    it('BuildConfigurationWithCustom accepts standard and custom configs', () => {
+      const configs: BuildConfigurationWithCustom[] = ['Development', 'Shipping', 'CustomConfig'];
+      expect(configs).toHaveLength(3);
+    });
+
+    it('BuildPlatformWithCustom accepts standard and custom platforms', () => {
+      const platforms: BuildPlatformWithCustom[] = ['Win64', 'Linux', 'CustomPlatform'];
+      expect(platforms).toHaveLength(3);
+    });
+  });
+
+  describe('Clean types', () => {
+    it('CleanOptions interface accepts minimal properties', () => {
+      const options: CleanOptions = {};
+      expect(Object.keys(options)).toHaveLength(0);
+    });
+
+    it('CleanOptions interface accepts all properties', () => {
+      const options: CleanOptions = {
+        projectPath: '/path/to/project',
+        enginePath: '/path/to/engine',
+        dryRun: true,
+        binariesOnly: false,
+        silent: true,
+      };
+
+      expect(options.projectPath).toBe('/path/to/project');
+      expect(options.dryRun).toBe(true);
+      expect(options.binariesOnly).toBe(false);
+    });
+
+    it('CleanResult interface accepts success state', () => {
+      const result: CleanResult = {
+        success: true,
+        deletedPaths: ['/project/Binaries', '/project/Intermediate'],
+        failedPaths: [],
+      };
+
+      expect(result.success).toBe(true);
+      expect(result.deletedPaths).toHaveLength(2);
+      expect(result.failedPaths).toHaveLength(0);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('CleanResult interface accepts failure state', () => {
+      const result: CleanResult = {
+        success: false,
+        deletedPaths: [],
+        failedPaths: [{ path: '/project/Binaries', error: 'Permission denied' }],
+        error: 'Failed to clean 1 path(s)',
+      };
+
+      expect(result.success).toBe(false);
+      expect(result.failedPaths).toHaveLength(1);
+      expect(result.error).toBe('Failed to clean 1 path(s)');
+    });
+  });
+
+  describe('Evolve types', () => {
+    it('SelfEvolverOptions accepts minimal options', () => {
+      const options: SelfEvolverOptions = {};
+      expect(Object.keys(options)).toHaveLength(0);
+    });
+
+    it('SelfEvolverOptions accepts all options', () => {
+      const options: SelfEvolverOptions = {
+        once: true,
+        dryRun: false,
+        logger: (msg: string) => {
+          void msg;
+        },
+        verifyTimeoutMs: 120000,
+        opencodeTimeoutMs: 600000,
+        sleepMs: 5000,
+        useTsNode: false,
+        maxRetries: 5,
+        projectRoot: '/project',
+      };
+
+      expect(options.once).toBe(true);
+      expect(options.maxRetries).toBe(5);
+      expect(options.projectRoot).toBe('/project');
+    });
+
+    it('EVOLUTION_VERIFY_COMMANDS contains expected commands', () => {
+      expect(EVOLUTION_VERIFY_COMMANDS).toContain('build');
+      expect(EVOLUTION_VERIFY_COMMANDS).toContain('evolve');
+      expect(EVOLUTION_VERIFY_COMMANDS).toContain('list');
+      expect(EVOLUTION_VERIFY_COMMANDS).toContain('clean');
+      expect(EVOLUTION_VERIFY_COMMANDS).toHaveLength(11);
     });
   });
 });
