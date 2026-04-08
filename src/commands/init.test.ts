@@ -875,3 +875,158 @@ describe('initCommand', () => {
     mockExit.mockRestore();
   });
 });
+
+describe('executeInit dry-run', () => {
+  let stdout: CapturedWritable;
+  let stderr: CapturedWritable;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    stdout = new CapturedWritable();
+    stderr = new CapturedWritable();
+    mockIsValidProjectName.mockReturnValue(true);
+    mockIsValidProjectType.mockReturnValue(true);
+  });
+
+  it('shows Force: Yes when force option is true', async () => {
+    mockFindEngineInstallations.mockResolvedValue([]);
+
+    await executeInit({
+      name: 'ForcedProject',
+      type: 'cpp',
+      template: 'Basic',
+      force: true,
+      dryRun: true,
+      stdout,
+      stderr,
+    });
+
+    const output = stdout.output;
+    expect(output).toContain('Force: Yes');
+  });
+
+  it('shows Force: No when force option is false', async () => {
+    mockFindEngineInstallations.mockResolvedValue([]);
+
+    await executeInit({
+      name: 'NormalProject',
+      type: 'cpp',
+      template: 'Basic',
+      force: false,
+      dryRun: true,
+      stdout,
+      stderr,
+    });
+
+    const output = stdout.output;
+    expect(output).toContain('Force: No');
+  });
+
+  it('shows engine displayName when single engine found with displayName', async () => {
+    mockFindEngineInstallations.mockResolvedValue([
+      {
+        path: 'C:\\Epic\\UE_5.3',
+        version: {
+          MajorVersion: 5,
+          MinorVersion: 3,
+          PatchVersion: 0,
+          Changelist: 1,
+          CompatibleChangelist: 0,
+          IsLicenseeVersion: 0,
+          IsPromotedBuild: 0,
+          BranchName: '',
+          BuildId: '',
+        },
+        associationId: 'UE_5.3',
+        displayName: 'Unreal Engine 5.3',
+        installedDate: '',
+        source: 'launcher',
+      },
+    ]);
+
+    await executeInit({
+      name: 'MyProject',
+      type: 'cpp',
+      template: 'Basic',
+      dryRun: true,
+      stdout,
+      stderr,
+    });
+
+    const output = stdout.output;
+    expect(output).toContain('Unreal Engine 5.3');
+  });
+
+  it('lists multiple engines with display names and versions', async () => {
+    mockFindEngineInstallations.mockResolvedValue([
+      {
+        path: 'C:\\Epic\\UE_5.3',
+        version: {
+          MajorVersion: 5,
+          MinorVersion: 3,
+          PatchVersion: 2,
+          Changelist: 100,
+          CompatibleChangelist: 0,
+          IsLicenseeVersion: 0,
+          IsPromotedBuild: 0,
+          BranchName: '',
+          BuildId: '',
+        },
+        associationId: 'UE_5.3',
+        displayName: 'Unreal Engine 5.3',
+        installedDate: '',
+        source: 'launcher',
+      },
+      {
+        path: 'C:\\Epic\\UE_5.4',
+        version: {
+          MajorVersion: 5,
+          MinorVersion: 4,
+          PatchVersion: 0,
+          Changelist: 200,
+          CompatibleChangelist: 0,
+          IsLicenseeVersion: 0,
+          IsPromotedBuild: 0,
+          BranchName: '',
+          BuildId: '',
+        },
+        associationId: 'UE_5.4',
+        displayName: 'Unreal Engine 5.4',
+        installedDate: '',
+        source: 'launcher',
+      },
+    ]);
+
+    await executeInit({
+      name: 'MultiEngineProject',
+      type: 'blueprint',
+      template: 'Basic',
+      dryRun: true,
+      stdout,
+      stderr,
+    });
+
+    const output = stdout.output;
+    expect(output).toContain('Multiple engines available');
+    expect(output).toContain('Unreal Engine 5.3');
+    expect(output).toContain('Unreal Engine 5.4');
+    expect(output).toContain('UE 5.3.2');
+    expect(output).toContain('UE 5.4.0');
+  });
+
+  it('uses engine-path directly when provided instead of detecting engines', async () => {
+    await executeInit({
+      name: 'PathProject',
+      type: 'cpp',
+      template: 'Basic',
+      dryRun: true,
+      enginePath: 'C:\\Custom\\Engine',
+      stdout,
+      stderr,
+    });
+
+    const output = stdout.output;
+    expect(output).toContain('Engine Path: C:\\Custom\\Engine');
+    expect(mockFindEngineInstallations).not.toHaveBeenCalled();
+  });
+});
