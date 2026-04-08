@@ -115,6 +115,21 @@ describe('executeVersion', () => {
     expect(output).toContain('Unreal Engine project management CLI tool');
   });
 
+  it('uses unknown fallback when version is missing from package.json', async () => {
+    const { stdout, getStdout } = createOutputCapture();
+
+    mockedFs.readJson.mockResolvedValue({
+      // version completely missing
+      name: '@test/package',
+      description: 'Test description',
+    });
+
+    await executeVersion({ stdout });
+
+    const output = getStdout();
+    expect(output).toContain('unknown');
+  });
+
   it('works with default streams', async () => {
     mockedFs.readJson.mockResolvedValue({
       version: '0.0.8',

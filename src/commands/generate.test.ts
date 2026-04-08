@@ -280,6 +280,23 @@ describe('executeGenerate', () => {
         })
       ).rejects.toThrow('Unexpected error');
     });
+
+    it('throws generic message when generation fails without specific error', async () => {
+      mockGenerate.mockResolvedValue({
+        success: false,
+        generatedFiles: [],
+      });
+
+      await expect(
+        executeGenerate({
+          ide: 'sln',
+          stdout,
+          stderr,
+        })
+      ).rejects.toThrow('Failed to generate project files');
+
+      expect(stderr.output).toContain('Failed to generate project files');
+    });
   });
 
   describe('option passing', () => {
