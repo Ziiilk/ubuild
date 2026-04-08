@@ -5653,11 +5653,7 @@ describe('coverage baseline gate', () => {
     await verify.call(driver);
 
     // Check that npm test was called with --coverage
-    expect(mockExeca).toHaveBeenCalledWith(
-      'npm',
-      ['test', '--', '--coverage'],
-      expect.any(Object)
-    );
+    expect(mockExeca).toHaveBeenCalledWith('npm', ['test', '--', '--coverage'], expect.any(Object));
   });
 
   it('does not add --coverage flag when coverageBaseline is not set', async () => {
@@ -5700,5 +5696,201 @@ describe('coverage baseline gate', () => {
 
     expect(result).toBe(false);
     expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Coverage gate failed'));
+  });
+});
+
+describe('matchesGlobPattern direct', () => {
+  beforeEach(() => {
+    driver = new SelfDriver();
+  });
+  afterEach(() => {
+    if (driver) driver.cleanup();
+  });
+
+  it('matches exact file path', () => {
+    const m = (driver as unknown as { matchesGlobPattern: (f: string, p: string) => boolean })
+      .matchesGlobPattern;
+    expect(m.call(driver, 'package.json', 'package.json')).toBe(true);
+    expect(m.call(driver, 'other.json', 'package.json')).toBe(false);
+  });
+
+  it('matches directory glob /** pattern', () => {
+    const m = (driver as unknown as { matchesGlobPattern: (f: string, p: string) => boolean })
+      .matchesGlobPattern;
+    expect(m.call(driver, '.github/workflows/ci.yml', '.github/**')).toBe(true);
+    expect(m.call(driver, '.github/README.md', '.github/**')).toBe(true);
+    expect(m.call(driver, 'src/index.ts', '.github/**')).toBe(false);
+  });
+
+  it('normalizes backslashes to forward slashes', () => {
+    const m = (driver as unknown as { matchesGlobPattern: (f: string, p: string) => boolean })
+      .matchesGlobPattern;
+    expect(m.call(driver, 'src\\core\\foo.ts', 'src/**')).toBe(true);
+    expect(m.call(driver, '.github\\ci.yml', '.github/**')).toBe(true);
+  });
+
+  it('returns false for unsupported patterns like *.json', () => {
+    const m = (driver as unknown as { matchesGlobPattern: (f: string, p: string) => boolean })
+      .matchesGlobPattern;
+    expect(m.call(driver, 'package.json', '*.json')).toBe(false);
+    expect(m.call(driver, 'src/index.ts', 'docs/**')).toBe(false);
+  });
+});
+
+describe('truncateOutput direct', () => {
+  beforeEach(() => {
+    driver = new SelfDriver();
+  });
+  afterEach(() => {
+    if (driver) driver.cleanup();
+  });
+
+  it('returns original when under limit', () => {
+    const t = (driver as unknown as { truncateOutput: (s: string, n: number) => string })
+      .truncateOutput;
+    expect(t.call(driver, 'hello', 10)).toBe('hello');
+  });
+
+  it('truncates and appends suffix when over limit', () => {
+    const t = (driver as unknown as { truncateOutput: (s: string, n: number) => string })
+      .truncateOutput;
+    expect(t.call(driver, 'abcdefghij', 5)).toBe('abcde...(truncated)');
+  });
+
+  it('returns original when exactly at limit', () => {
+    const t = (driver as unknown as { truncateOutput: (s: string, n: number) => string })
+      .truncateOutput;
+    expect(t.call(driver, 'abcde', 5)).toBe('abcde');
+  });
+});
+
+describe('buildFileRestrictionSection direct', () => {
+  afterEach(() => {
+    if (driver) driver.cleanup();
+  });
+
+  it('returns empty when no restrictions configured', () => {
+    driver = new SelfDriver({ forbiddenPaths: [], allowedPaths: [] });
+    const m = (driver as unknown as { buildFileRestrictionSection: () => string })
+      .buildFileRestrictionSection;
+    expect(m.call(driver)).toBe('');
+  });
+
+  it('includes allowed and forbidden paths together', () => {
+    driver = new SelfDriver({ forbiddenPaths: ['package.json'], allowedPaths: ['src/**'] });
+    const m = (driver as unknown as { buildFileRestrictionSection: () => string })
+      .buildFileRestrictionSection;
+    const result = m.call(driver);
+    expect(result).toContain('Only modify files under');
+    expect(result).toContain('- src/**');
+    expect(result).toContain('Do NOT modify');
+    expect(result).toContain('- package.json');
+  });
+
+  it('shows only allowed when no forbidden', () => {
+    driver = new SelfDriver({ forbiddenPaths: [], allowedPaths: ['src/**'] });
+    const m = (driver as unknown as { buildFileRestrictionSection: () => string })
+      .buildFileRestrictionSection;
+    const result = m.call(driver);
+    expect(result).toContain('Only modify files under');
+    expect(result).not.toContain('Do NOT modify');
+  });
+
+  it('shows only forbidden when no allowed', () => {
+    driver = new SelfDriver({ forbiddenPaths: ['dist/**'], allowedPaths: [] });
+    const m = (driver as unknown as { buildFileRestrictionSection: () => string })
+      .buildFileRestrictionSection;
+    const result = m.call(driver);
+    expect(result).toContain('Do NOT modify');
+    expect(result).not.toContain('Only modify');
+  });
+});
+
+describe('buildChangeSizeLimitSection direct', () => {
+  afterEach(() => {
+    if (driver) driver.cleanup();
+  });
+
+  it('returns section with configured line limit', () => {
+    driver = new SelfDriver({ maxDiffLines: 150 });
+    const m = (driver as unknown as { buildChangeSizeLimitSection: () => string })
+      .buildChangeSizeLimitSection;
+    const result = m.call(driver);
+    expect(result).toContain('Change Size Limit');
+    expect(result).toContain('150 lines');
+    expect(result).toContain('One commit');
+  });
+
+  it('returns empty when maxDiffLines is 0', () => {
+    driver = new SelfDriver({ maxDiffLines: 0 });
+    const m = (driver as unknown as { buildChangeSizeLimitSection: () => string })
+      .buildChangeSizeLimitSection;
+    expect(m.call(driver)).toBe('');
+  });
+
+  it('returns empty when maxDiffLines is negative', () => {
+    driver = new SelfDriver({ maxDiffLines: -1 });
+    const m = (driver as unknown as { buildChangeSizeLimitSection: () => string })
+      .buildChangeSizeLimitSection;
+    expect(m.call(driver)).toBe('');
+  });
+});
+
+describe('buildPreviousIterationSection direct', () => {
+  beforeEach(() => {
+    driver = new SelfDriver();
+  });
+  afterEach(() => {
+    if (driver) driver.cleanup();
+  });
+
+  it('shows FAILED result with stage and error', () => {
+    const m = (
+      driver as unknown as {
+        buildPreviousIterationSection: (r: IterationResult) => string;
+      }
+    ).buildPreviousIterationSection;
+    const result = m.call(driver, {
+      iteration: 3,
+      success: false,
+      failureStage: 'verification',
+      failureDetail: 'Build error',
+    });
+    expect(result).toContain('Previous Iteration (#3)');
+    expect(result).toContain('Result: FAILED');
+    expect(result).toContain('Failed Stage: verification');
+    expect(result).toContain('Error: Build error');
+    expect(result).toContain('Do NOT repeat');
+  });
+
+  it('shows SUCCESS with decision and files changed', () => {
+    const m = (
+      driver as unknown as {
+        buildPreviousIterationSection: (r: IterationResult) => string;
+      }
+    ).buildPreviousIterationSection;
+    const result = m.call(driver, {
+      iteration: 2,
+      success: true,
+      decision: 'FIX',
+      filesChanged: ['a.ts', 'b.ts'],
+    });
+    expect(result).toContain('Result: SUCCESS');
+    expect(result).toContain('Decision: FIX');
+    expect(result).toContain('Files Changed: a.ts, b.ts');
+    expect(result).not.toContain('Failed Stage');
+  });
+
+  it('omits optional fields when not present', () => {
+    const m = (
+      driver as unknown as {
+        buildPreviousIterationSection: (r: IterationResult) => string;
+      }
+    ).buildPreviousIterationSection;
+    const result = m.call(driver, { iteration: 1, success: true });
+    expect(result).not.toContain('Decision:');
+    expect(result).not.toContain('Failed Stage');
+    expect(result).not.toContain('Error:');
+    expect(result).not.toContain('Files Changed:');
   });
 });
