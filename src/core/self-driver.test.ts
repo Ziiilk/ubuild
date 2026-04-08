@@ -644,6 +644,56 @@ describe('SelfDriver', () => {
       expect(callOrder).not.toContain('test');
       expect(callOrder).not.toContain('lint');
     });
+
+    it('returns false and logs violations when forbidden files are changed', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        // git diff --name-only returns a forbidden file
+        if (command === 'git' && args?.includes('diff') && args?.includes('--name-only')) {
+          return mockExecaResult(0, 'package.json\nsrc/core/self-driver.ts', '');
+        }
+        // git diff --shortstat returns normal size
+        if (command === 'git' && args?.includes('--shortstat')) {
+          return mockExecaResult(0, ' 1 file changed, 5 insertions(+)', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith(
+        expect.stringContaining('Forbidden file changes detected')
+      );
+      expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('package.json'));
+    });
+
+    it('returns false when change size exceeds maxDiffLines limit', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger, maxDiffLines: 50 });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        // git diff --name-only returns allowed files only
+        if (command === 'git' && args?.includes('diff') && args?.includes('--name-only')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts', '');
+        }
+        // git diff --shortstat returns too many changes
+        if (command === 'git' && args?.includes('--shortstat')) {
+          return mockExecaResult(0, ' 3 files changed, 200 insertions(+), 100 deletions(-)', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result).toBe(false);
+      expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Change too large'));
+      expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('300 lines changed'));
+    });
   });
 
   describe('isWorkingTreeClean', () => {
