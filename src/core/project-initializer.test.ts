@@ -675,6 +675,279 @@ describe('ProjectInitializer', () => {
       expect(result.engineAssociation).toBe('5.1');
     });
 
+    it('generates UE5 target files with BuildSettingsVersion.Latest and IncludeOrderVersion', async () => {
+      const tempDir = await createTempDir();
+      const enginePath = path.join(tempDir, 'Engine');
+      await createMockEngineStructure(enginePath);
+
+      const mockEngine = createMockEngineInstallation({ path: enginePath });
+      jest.mocked(EngineResolver.findEngineInstallations).mockResolvedValue([mockEngine]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      const options: InitOptions = {
+        name: 'MyUE5Game',
+        type: 'cpp',
+        directory: path.join(tempDir, 'project'),
+        enginePath,
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+
+      expect(result.success).toBe(true);
+
+      const sourceDir = path.join(options.directory!, 'Source');
+
+      const gameTarget = await fs.readFile(path.join(sourceDir, 'MyUE5Game.Target.cs'), 'utf-8');
+      expect(gameTarget).toContain('BuildSettingsVersion.Latest');
+      expect(gameTarget).toContain('IncludeOrderVersion = EngineIncludeOrderVersion.Latest');
+      expect(gameTarget).not.toContain('BuildSettingsVersion.V2');
+
+      const editorTarget = await fs.readFile(
+        path.join(sourceDir, 'MyUE5GameEditor.Target.cs'),
+        'utf-8'
+      );
+      expect(editorTarget).toContain('BuildSettingsVersion.Latest');
+      expect(editorTarget).toContain('IncludeOrderVersion = EngineIncludeOrderVersion.Latest');
+    });
+
+    it('verifies C++ module header content', async () => {
+      const tempDir = await createTempDir();
+      const enginePath = path.join(tempDir, 'Engine');
+      await createMockEngineStructure(enginePath);
+
+      const mockEngine = createMockEngineInstallation({ path: enginePath });
+      jest.mocked(EngineResolver.findEngineInstallations).mockResolvedValue([mockEngine]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      const options: InitOptions = {
+        name: 'MyGame',
+        type: 'cpp',
+        directory: path.join(tempDir, 'project'),
+        enginePath,
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+      expect(result.success).toBe(true);
+
+      const header = await fs.readFile(
+        path.join(options.directory!, 'Source', 'MyGame', 'Public', 'MyGame.h'),
+        'utf-8'
+      );
+      expect(header).toContain('#pragma once');
+      expect(header).toContain('class FMyGameModule : public IModuleInterface');
+      expect(header).toContain('virtual void StartupModule() override');
+      expect(header).toContain('virtual void ShutdownModule() override');
+    });
+
+    it('verifies C++ module source content with IMPLEMENT_MODULE', async () => {
+      const tempDir = await createTempDir();
+      const enginePath = path.join(tempDir, 'Engine');
+      await createMockEngineStructure(enginePath);
+
+      const mockEngine = createMockEngineInstallation({ path: enginePath });
+      jest.mocked(EngineResolver.findEngineInstallations).mockResolvedValue([mockEngine]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      const options: InitOptions = {
+        name: 'CoolGame',
+        type: 'cpp',
+        directory: path.join(tempDir, 'project'),
+        enginePath,
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+      expect(result.success).toBe(true);
+
+      const source = await fs.readFile(
+        path.join(options.directory!, 'Source', 'CoolGame', 'Private', 'CoolGame.cpp'),
+        'utf-8'
+      );
+      expect(source).toContain('#include "CoolGame.h"');
+      expect(source).toContain('IMPLEMENT_MODULE(FCoolGameModule, CoolGame)');
+      expect(source).toContain('FCoolGameModule::StartupModule()');
+      expect(source).toContain('FCoolGameModule::ShutdownModule()');
+    });
+
+    it('verifies Build.cs file content', async () => {
+      const tempDir = await createTempDir();
+      const enginePath = path.join(tempDir, 'Engine');
+      await createMockEngineStructure(enginePath);
+
+      const mockEngine = createMockEngineInstallation({ path: enginePath });
+      jest.mocked(EngineResolver.findEngineInstallations).mockResolvedValue([mockEngine]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      const options: InitOptions = {
+        name: 'RPGGame',
+        type: 'cpp',
+        directory: path.join(tempDir, 'project'),
+        enginePath,
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+      expect(result.success).toBe(true);
+
+      const buildCs = await fs.readFile(
+        path.join(options.directory!, 'Source', 'RPGGame', 'RPGGame.Build.cs'),
+        'utf-8'
+      );
+      expect(buildCs).toContain('public class RPGGame : ModuleRules');
+      expect(buildCs).toContain('PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs');
+      expect(buildCs).toContain('"Core"');
+      expect(buildCs).toContain('"CoreUObject"');
+      expect(buildCs).toContain('"Engine"');
+    });
+
+    it('verifies GameMode header content', async () => {
+      const tempDir = await createTempDir();
+      const enginePath = path.join(tempDir, 'Engine');
+      await createMockEngineStructure(enginePath);
+
+      const mockEngine = createMockEngineInstallation({ path: enginePath });
+      jest.mocked(EngineResolver.findEngineInstallations).mockResolvedValue([mockEngine]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      const options: InitOptions = {
+        name: 'ShooterGame',
+        type: 'cpp',
+        directory: path.join(tempDir, 'project'),
+        enginePath,
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+      expect(result.success).toBe(true);
+
+      const header = await fs.readFile(
+        path.join(
+          options.directory!,
+          'Source',
+          'ShooterGame',
+          'Public',
+          'ShooterGameGameModeBase.h'
+        ),
+        'utf-8'
+      );
+      expect(header).toContain('UCLASS()');
+      expect(header).toContain('class AShooterGameGameModeBase : public AGameModeBase');
+      expect(header).toContain('GENERATED_BODY()');
+      expect(header).toContain('AShooterGameGameModeBase()');
+    });
+
+    it('verifies GameMode source content', async () => {
+      const tempDir = await createTempDir();
+      const enginePath = path.join(tempDir, 'Engine');
+      await createMockEngineStructure(enginePath);
+
+      const mockEngine = createMockEngineInstallation({ path: enginePath });
+      jest.mocked(EngineResolver.findEngineInstallations).mockResolvedValue([mockEngine]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      const options: InitOptions = {
+        name: 'PlatformGame',
+        type: 'cpp',
+        directory: path.join(tempDir, 'project'),
+        enginePath,
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+      expect(result.success).toBe(true);
+
+      const source = await fs.readFile(
+        path.join(
+          options.directory!,
+          'Source',
+          'PlatformGame',
+          'Private',
+          'PlatformGameGameModeBase.cpp'
+        ),
+        'utf-8'
+      );
+      expect(source).toContain('#include "PlatformGameGameModeBase.h"');
+      expect(source).toContain('APlatformGameGameModeBase::APlatformGameGameModeBase()');
+      expect(source).toContain('ConstructorHelpers::FClassFinder<APawn>');
+    });
+
+    it('verifies DefaultEngine.ini contains a ProjectID', async () => {
+      const tempDir = await createTempDir();
+      const enginePath = path.join(tempDir, 'Engine');
+      await createMockEngineStructure(enginePath);
+
+      const mockEngine = createMockEngineInstallation({ path: enginePath });
+      jest.mocked(EngineResolver.findEngineInstallations).mockResolvedValue([mockEngine]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      const options: InitOptions = {
+        name: 'TestProject',
+        type: 'cpp',
+        directory: path.join(tempDir, 'project'),
+        enginePath,
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+      expect(result.success).toBe(true);
+
+      const defaultEngine = await fs.readFile(
+        path.join(options.directory!, 'Config', 'DefaultEngine.ini'),
+        'utf-8'
+      );
+      expect(defaultEngine).toContain('[/Script/EngineSettings.GeneralProjectSettings]');
+      expect(defaultEngine).toMatch(/ProjectID=[0-9a-f-]{36}/);
+
+      const defaultGame = await fs.readFile(
+        path.join(options.directory!, 'Config', 'DefaultGame.ini'),
+        'utf-8'
+      );
+      expect(defaultGame).toContain('[/Script/Engine.GameSession]');
+
+      const defaultEditor = await fs.readFile(
+        path.join(options.directory!, 'Config', 'DefaultEditor.ini'),
+        'utf-8'
+      );
+      expect(defaultEditor).toContain('[/Script/UnrealEd.EditorEngine]');
+    });
+
     it('uses launcher engine version for engine association', async () => {
       const tempDir = await createTempDir();
       const enginePath = path.join(tempDir, 'Engine');
