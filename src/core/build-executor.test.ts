@@ -862,4 +862,121 @@ describe('BuildExecutor', () => {
       });
     });
   });
+
+  describe('duration field', () => {
+    it('includes a positive duration in successful build result', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'DurationGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: {
+              stdout: 'Build done',
+              exitCode: 0,
+            },
+          })
+        );
+
+        const result = await BuildExecutor.execute({
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+          target: 'Game',
+          silent: true,
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.duration).toBeGreaterThanOrEqual(0);
+        expect(typeof result.duration).toBe('number');
+      });
+    });
+
+    it('includes a positive duration in failed build result', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'FailDurationGame' });
+
+        const result = await BuildExecutor.execute({
+          projectPath: project.projectDir,
+          target: 'Editor',
+          silent: true,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.duration).toBeGreaterThanOrEqual(0);
+        expect(typeof result.duration).toBe('number');
+      });
+    });
+  });
+
+  describe('additionalArgs through Build.bat path', () => {
+    it('passes additionalArgs to Build.bat execution', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'ArgsGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: {
+              stdout: 'Build done',
+              exitCode: 0,
+            },
+          })
+        );
+
+        const result = await BuildExecutor.execute({
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+          target: 'Game',
+          additionalArgs: ['-CustomFlag', '-AnotherArg'],
+          silent: true,
+        });
+
+        expect(result.success).toBe(true);
+        expect(mockExeca).toHaveBeenCalledWith(
+          engine.buildBatPath,
+          expect.arrayContaining(['-CustomFlag', '-AnotherArg']),
+          expect.any(Object)
+        );
+      });
+    });
+  });
+
+  describe('getAvailableTargets with directory path', () => {
+    it('correctly resolves targets when given a project directory path', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, {
+          projectName: 'DirGame',
+          withSource: true,
+          targets: [{ name: 'DirGame', type: 'Game' }],
+        });
+
+        // Pass the project directory (not .uproject file)
+        const targets = await BuildExecutor.getAvailableTargets(project.projectDir);
+
+        expect(targets).toHaveLength(1);
+        expect(targets).toContainEqual({ name: 'DirGame', type: 'Game' });
+      });
+    });
+  });
+
+  describe('getDefaultOptions with directory path', () => {
+    it('returns correct defaults when given a project directory path', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, {
+          projectName: 'DefaultDirGame',
+          withSource: true,
+          targets: [
+            { name: 'DefaultDirGame', type: 'Game' },
+            { name: 'DefaultDirGameEditor', type: 'Editor' },
+          ],
+        });
+
+        const options = await BuildExecutor.getDefaultOptions(project.projectDir);
+
+        expect(options.target).toBe('Editor');
+        expect(options.config).toBe('Development');
+        expect(options.platform).toBe('Win64');
+      });
+    });
+  });
 });
