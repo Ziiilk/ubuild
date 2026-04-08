@@ -1029,4 +1029,91 @@ describe('executeInit dry-run', () => {
     expect(output).toContain('Engine Path: C:\\Custom\\Engine');
     expect(mockFindEngineInstallations).not.toHaveBeenCalled();
   });
+
+  it('falls back to associationId when single engine has no displayName', async () => {
+    mockFindEngineInstallations.mockResolvedValue([
+      {
+        path: 'C:\\Epic\\UE_5.3',
+        version: {
+          MajorVersion: 5,
+          MinorVersion: 3,
+          PatchVersion: 0,
+          Changelist: 1,
+          CompatibleChangelist: 0,
+          IsLicenseeVersion: 0,
+          IsPromotedBuild: 0,
+          BranchName: '',
+          BuildId: '',
+        },
+        associationId: 'UE_5.3',
+        displayName: undefined,
+        source: 'registry',
+      },
+    ]);
+
+    await executeInit({
+      name: 'FallbackProject',
+      type: 'cpp',
+      template: 'Basic',
+      dryRun: true,
+      stdout,
+      stderr,
+    });
+
+    const output = stdout.output;
+    expect(output).toContain('UE_5.3');
+  });
+
+  it('falls back to associationId when multiple engines have no displayName', async () => {
+    mockFindEngineInstallations.mockResolvedValue([
+      {
+        path: 'C:\\Epic\\UE_5.2',
+        version: {
+          MajorVersion: 5,
+          MinorVersion: 2,
+          PatchVersion: 0,
+          Changelist: 50,
+          CompatibleChangelist: 0,
+          IsLicenseeVersion: 0,
+          IsPromotedBuild: 0,
+          BranchName: '',
+          BuildId: '',
+        },
+        associationId: 'UE_5.2',
+        displayName: undefined,
+        source: 'registry',
+      },
+      {
+        path: 'C:\\Epic\\UE_5.3',
+        version: {
+          MajorVersion: 5,
+          MinorVersion: 3,
+          PatchVersion: 0,
+          Changelist: 100,
+          CompatibleChangelist: 0,
+          IsLicenseeVersion: 0,
+          IsPromotedBuild: 0,
+          BranchName: '',
+          BuildId: '',
+        },
+        associationId: 'UE_5.3',
+        displayName: undefined,
+        source: 'registry',
+      },
+    ]);
+
+    await executeInit({
+      name: 'MultiFallbackProject',
+      type: 'blueprint',
+      template: 'Basic',
+      dryRun: true,
+      stdout,
+      stderr,
+    });
+
+    const output = stdout.output;
+    expect(output).toContain('Multiple engines available');
+    expect(output).toContain('UE_5.2');
+    expect(output).toContain('UE_5.3');
+  });
 });
