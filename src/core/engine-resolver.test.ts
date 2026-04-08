@@ -2005,4 +2005,69 @@ describe('EngineResolver', () => {
       expect(result[0].version!.PatchVersion).toBe(0);
     });
   });
+
+  describe('compareVersions (private)', () => {
+    type VersionRef = {
+      MajorVersion: number;
+      MinorVersion: number;
+      PatchVersion: number;
+      Changelist: number;
+    };
+
+    const compareVersions = (a?: VersionRef, b?: VersionRef): number => {
+      return (
+        EngineResolver as unknown as {
+          compareVersions(a?: VersionRef, b?: VersionRef): number;
+        }
+      ).compareVersions(a, b);
+    };
+
+    it('returns 0 when both versions are undefined', () => {
+      expect(compareVersions(undefined, undefined)).toBe(0);
+    });
+
+    it('returns -1 when first version is undefined', () => {
+      expect(
+        compareVersions(undefined, {
+          MajorVersion: 5,
+          MinorVersion: 0,
+          PatchVersion: 0,
+          Changelist: 0,
+        })
+      ).toBe(-1);
+    });
+
+    it('returns 1 when second version is undefined', () => {
+      expect(
+        compareVersions(
+          { MajorVersion: 5, MinorVersion: 0, PatchVersion: 0, Changelist: 0 },
+          undefined
+        )
+      ).toBe(1);
+    });
+
+    it('compares by MinorVersion when MajorVersion is equal', () => {
+      const a = { MajorVersion: 5, MinorVersion: 1, PatchVersion: 0, Changelist: 0 };
+      const b = { MajorVersion: 5, MinorVersion: 3, PatchVersion: 0, Changelist: 0 };
+      expect(compareVersions(a, b)).toBeLessThan(0);
+      expect(compareVersions(b, a)).toBeGreaterThan(0);
+      expect(compareVersions(a, a)).toBe(0);
+    });
+
+    it('compares by PatchVersion when MajorVersion and MinorVersion are equal', () => {
+      const a = { MajorVersion: 5, MinorVersion: 3, PatchVersion: 1, Changelist: 0 };
+      const b = { MajorVersion: 5, MinorVersion: 3, PatchVersion: 5, Changelist: 0 };
+      expect(compareVersions(a, b)).toBeLessThan(0);
+      expect(compareVersions(b, a)).toBeGreaterThan(0);
+      expect(compareVersions(a, a)).toBe(0);
+    });
+
+    it('compares by Changelist when MajorVersion, MinorVersion, and PatchVersion are equal', () => {
+      const a = { MajorVersion: 5, MinorVersion: 3, PatchVersion: 2, Changelist: 100 };
+      const b = { MajorVersion: 5, MinorVersion: 3, PatchVersion: 2, Changelist: 500 };
+      expect(compareVersions(a, b)).toBeLessThan(0);
+      expect(compareVersions(b, a)).toBeGreaterThan(0);
+      expect(compareVersions(a, a)).toBe(0);
+    });
+  });
 });
