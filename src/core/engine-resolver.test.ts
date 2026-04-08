@@ -1825,4 +1825,93 @@ describe('EngineResolver', () => {
       expect(result.indexOf(withVersion!)).toBeLessThan(result.indexOf(withoutVersion!));
     });
   });
+
+  describe('additional branch coverage', () => {
+    it('resolveEngine catches error when getEngineFromEnvironment throws', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(false);
+
+      // Set an env var so getEngineFromEnvironment checks pathExists
+      process.env.UE_ENGINE_PATH = 'C:\\Engines\\UE_Throw';
+
+      // Make pathExists reject - propagates through getEngineFromEnvironment
+      // (no try/catch there) → findEngineInstallations (no try/catch) → resolveEngine outer catch
+      mockPathExists.mockRejectedValue(new Error('Critical filesystem failure'));
+
+      const result = await EngineResolver.resolveEngine();
+
+      // The outer catch should return result.error
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain('Critical filesystem failure');
+      expect(result.warnings).toBeDefined();
+    });
+
+    it('handles REG_SZ on same line as GUID', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const engineGuid = '{SAMLINE-GUID-1234}';
+      const enginePath = 'C:\\Epic\\UE_SameLine';
+
+      // REG_SZ and path on the same line as GUID
+      mockExeca.mockImplementation(async () => ({
+        stdout: `HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds\n${engineGuid}    REG_SZ    ${enginePath}`,
+      }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result.some((e) => e.associationId === engineGuid && e.path === enginePath)).toBe(
+        true
+      );
+    });
+
+    it('handles launcher manifest outer catch when pathExists throws', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      // Make execa succeed (registry returns empty), but pathExists throw for manifest
+      mockExeca.mockImplementation(async () => ({
+        stdout:
+          'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds\nThe system was unable to find the specified registry key or value.',
+      }));
+      mockPathExists.mockImplementation(async (p: string) => {
+        if (p === manifestPath) throw new Error('Filesystem access error');
+        return false;
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Should return empty array without crashing
+      expect(result).toEqual([]);
+    });
+
+    it('loadEngineVersionInfo outer catch handles pathExists throwing for version file', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(false);
+
+      const enginePath = 'C:\\Engines\\UE_VersionCrash';
+      process.env.UE_ENGINE_PATH = enginePath;
+
+      // pathExists returns true for the engine path itself but throws for version file paths
+      mockPathExists.mockImplementation(async (p: string) => {
+        if (p === enginePath) return true;
+        // Throw for any version file path to trigger outer catch in loadEngineVersionInfo
+        if (p.includes('Build.version') || p.includes('UnrealEditor.version')) {
+          throw new Error('Version file access error');
+        }
+        return false;
+      });
+      mockStat.mockImplementation(async () => ({ isDirectory: () => true }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Should still return engine without version info
+      expect(result).toHaveLength(1);
+      expect(result[0].path).toBe(enginePath);
+      expect(result[0].version).toBeUndefined();
+    });
+  });
 });
