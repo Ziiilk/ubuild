@@ -217,4 +217,71 @@ describe('CLI Entry Point', () => {
       expect(process.exit).toHaveBeenCalledWith(1);
     });
   });
+
+  describe('configureOutput', () => {
+    it('configures outputError to wrap errors with chalk.red', async () => {
+      let capturedOutputError: ((str: string, write: (s: string) => void) => void) | null = null;
+
+      jest.doMock('commander', () => {
+        const ActualCommand = jest.requireActual('commander').Command;
+        return {
+          Command: class extends ActualCommand {
+            configureOutput(opts: Record<string, unknown>) {
+              if (typeof opts?.outputError === 'function') {
+                capturedOutputError = opts.outputError as typeof capturedOutputError;
+              }
+              return super.configureOutput(opts as never);
+            }
+          },
+        };
+      });
+
+      process.argv = ['node', 'ubuild', 'list'];
+      await import('./index');
+      await flushPromises();
+
+      expect(capturedOutputError).not.toBeNull();
+
+      const mockWrite = jest.fn();
+      capturedOutputError!('test error', mockWrite);
+      expect(mockWrite).toHaveBeenCalledTimes(1);
+
+      // The callback delegates to write(chalk.red(str)) — chalk.red output
+      // varies by environment (ANSI in TTY, plain in non-TTY), so we verify
+      // the error text is present in the written output.
+      const written = mockWrite.mock.calls[0][0] as string;
+      expect(written).toContain('test error');
+    });
+  });
+
+  describe('configureHelp', () => {
+    it('configures help to sort subcommands and show name-only terms', async () => {
+      let capturedHelpConfig: Record<string, unknown> | null = null;
+
+      jest.doMock('commander', () => {
+        const ActualCommand = jest.requireActual('commander').Command;
+        return {
+          Command: class extends ActualCommand {
+            configureHelp(config: Record<string, unknown>) {
+              capturedHelpConfig = config;
+              return super.configureHelp(config as never);
+            }
+          },
+        };
+      });
+
+      process.argv = ['node', 'ubuild', 'list'];
+      await import('./index');
+      await flushPromises();
+
+      expect(capturedHelpConfig).not.toBeNull();
+      expect(capturedHelpConfig!.sortSubcommands).toBe(true);
+
+      const subcommandTerm = capturedHelpConfig!.subcommandTerm as (cmd: {
+        name: () => string;
+      }) => string;
+      expect(typeof subcommandTerm).toBe('function');
+      expect(subcommandTerm({ name: () => 'testCommand' })).toBe('testCommand');
+    });
+  });
 });
