@@ -264,7 +264,8 @@ export class SelfDriver {
       }
       const raw = await fs.readFile(summaryPath, 'utf-8');
       return JSON.parse(raw) as Record<string, unknown>;
-    } catch {
+    } catch (error) {
+      this.log(`⚠️  ${formatErrorWithPrefix('Could not read coverage summary', error)}`);
       return null;
     }
   }
@@ -332,7 +333,8 @@ export class SelfDriver {
       }
 
       return `- ESLint Warnings: ${totalWarnings}`;
-    } catch {
+    } catch (error) {
+      this.log(`⚠️  ${formatErrorWithPrefix('Could not gather lint warnings', error)}`);
       return null;
     }
   }
@@ -1357,7 +1359,8 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
         .map((f) => f.trim())
         .filter((f) => f.length > 0);
       return files.length > 0 ? files : undefined;
-    } catch {
+    } catch (error) {
+      this.log(`⚠️  ${formatErrorWithPrefix('Could not get changed files list', error)}`);
       return undefined;
     }
   }
