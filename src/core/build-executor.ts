@@ -143,23 +143,17 @@ export class BuildExecutor {
 
     if (availableTargets.length > 0) {
       const result = await TargetResolver.resolveTarget(projectPath, target);
-      if (result && result !== target) {
+      if (result !== target) {
         // Target was resolved to a different name (generic -> specific)
         resolvedTarget = result;
         this.logger.debug(`Resolved target "${target}" to "${resolvedTarget}"`);
-      } else if (TargetResolver.isGenericTarget(target) && availableTargets.length > 0) {
-        // Generic target that couldn't be resolved and we have targets - error
+      } else if (
+        TargetResolver.isGenericTarget(target) ||
+        !availableTargets.some((t) => t.name === target)
+      ) {
         throw new Error(
           `No ${target} target found in project. Available targets: ${availableTargets.map((t) => t.name).join(', ')}`
         );
-      } else {
-        // Specific target name - check if it exists
-        const targetExists = availableTargets.some((t) => t.name === target);
-        if (!targetExists) {
-          throw new Error(
-            `No ${target} target found in project. Available targets: ${availableTargets.map((t) => t.name).join(', ')}`
-          );
-        }
       }
     } else {
       this.logger.debug('No target files found, using generic target name');
