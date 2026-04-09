@@ -135,26 +135,23 @@ export class CompileCommandsGenerator {
     const targetCompileCommandsPath = path.join(vscodeDir, 'compile_commands.json');
     const engineCompileCommandsPath = path.join(enginePath, 'compile_commands.json');
 
-    let actualCompileCommandsPath = targetCompileCommandsPath;
-
     if (await fs.pathExists(engineCompileCommandsPath)) {
       logger.debug(
         'Found compile_commands.json at engine directory, copying to project .vscode directory'
       );
       await fs.copy(engineCompileCommandsPath, targetCompileCommandsPath);
       await fs.remove(engineCompileCommandsPath);
-      actualCompileCommandsPath = targetCompileCommandsPath;
     }
 
-    if (!(await fs.pathExists(actualCompileCommandsPath))) {
+    if (!(await fs.pathExists(targetCompileCommandsPath))) {
       throw new Error(
-        `compile_commands.json not found at expected location: ${actualCompileCommandsPath}`
+        `compile_commands.json not found at expected location: ${targetCompileCommandsPath}`
       );
     }
 
     await this.updateVSCodeSettings(projectDir, logger);
 
-    return actualCompileCommandsPath;
+    return targetCompileCommandsPath;
   }
 
   /**
@@ -179,6 +176,7 @@ export class CompileCommandsGenerator {
    */
   private static async updateVSCodeSettings(projectDir: string, logger: Logger): Promise<void> {
     const vscodeDir = path.join(projectDir, '.vscode');
+    await fs.ensureDir(vscodeDir);
     const settingsPath = path.join(vscodeDir, 'settings.json');
 
     const clangdConfig = {
