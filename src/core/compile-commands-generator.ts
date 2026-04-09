@@ -129,6 +129,37 @@ export class CompileCommandsGenerator {
       );
     }
 
+    return this.relocateCompileCommands(projectDir, enginePath, logger);
+  }
+
+  /**
+   * Resolves a generic target name (e.g., 'Editor', 'Game') to a specific project target.
+   * Falls back to a default target if resolution fails.
+   * @param projectPath - Path to the .uproject file
+   * @param target - Generic target name to resolve
+   * @returns Promise resolving to the resolved target name or a default target
+   */
+  private static async resolveTargetName(projectPath: string, target: string): Promise<string> {
+    const resolved = await TargetResolver.resolveTargetName(projectPath, target);
+    // If resolution fails (returns undefined), fall back to the original target
+    return resolved ?? target;
+  }
+
+  /**
+   * Relocates compile_commands.json from the engine directory to the project's .vscode directory.
+   * If the file exists at the engine root (UBT's default output location), it is copied to
+   * the project's .vscode directory and the original is removed.
+   * @param projectDir - Path to the project directory
+   * @param enginePath - Path to the Unreal Engine installation
+   * @param logger - Logger instance for output
+   * @returns Promise resolving to the path of the relocated compile_commands.json
+   * @throws Error if compile_commands.json is not found at either location
+   */
+  private static async relocateCompileCommands(
+    projectDir: string,
+    enginePath: string,
+    logger: Logger
+  ): Promise<string> {
     const vscodeDir = path.join(projectDir, '.vscode');
     await fs.ensureDir(vscodeDir);
 
@@ -152,19 +183,6 @@ export class CompileCommandsGenerator {
     await this.updateVSCodeSettings(projectDir, logger);
 
     return targetCompileCommandsPath;
-  }
-
-  /**
-   * Resolves a generic target name (e.g., 'Editor', 'Game') to a specific project target.
-   * Falls back to a default target if resolution fails.
-   * @param projectPath - Path to the .uproject file
-   * @param target - Generic target name to resolve
-   * @returns Promise resolving to the resolved target name or a default target
-   */
-  private static async resolveTargetName(projectPath: string, target: string): Promise<string> {
-    const resolved = await TargetResolver.resolveTargetName(projectPath, target);
-    // If resolution fails (returns undefined), fall back to the original target
-    return resolved ?? target;
   }
 
   /**
