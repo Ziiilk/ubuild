@@ -19,6 +19,30 @@ import { formatError } from '../utils/error';
 import { DEFAULTS } from '../utils/constants';
 import { resolveUnrealBuildToolPath } from '../utils/unreal-paths';
 
+/** Default clangd arguments for VSCode integration. */
+const CLANGD_ARGUMENTS = [
+  '--compile-commands-dir=${workspaceFolder}/.vscode',
+  '--background-index',
+  '--j=8',
+  '--index-store-path=.clangd/index',
+  '--pch-storage=disk',
+  '--limit-results=200',
+  '--header-insertion=iwyu',
+];
+
+/** Default C/C++ extension settings to disable IntelliSense in favor of clangd. */
+const CPP_EXTENSION_CONFIG = {
+  'C_Cpp.default.compileCommands': '${workspaceFolder}/.vscode/compile_commands.json',
+  'C_Cpp.intelliSenseEngine': 'disabled',
+};
+
+/** Maps compile command options to their corresponding UBT flag arguments. */
+const UBT_FLAG_OPTIONS: Array<{ option: keyof CompileCommandsGenerateOptions; flag: string }> = [
+  { option: 'includePluginSources', flag: '-IncludePluginSources' },
+  { option: 'includeEngineSources', flag: '-IncludeEngineSources' },
+  { option: 'useEngineIncludes', flag: '-UseEngineIncludes' },
+];
+
 /** Options for generating compile commands database. */
 export interface CompileCommandsGenerateOptions {
   /** Build target (Editor, Game, Client, Server) */
@@ -78,16 +102,10 @@ export class CompileCommandsGenerator {
       args.push(`-Target="${resolvedTarget} ${platform} ${config}"`);
     }
 
-    if (options.includePluginSources) {
-      args.push('-IncludePluginSources');
-    }
-
-    if (options.includeEngineSources) {
-      args.push('-IncludeEngineSources');
-    }
-
-    if (options.useEngineIncludes) {
-      args.push('-UseEngineIncludes');
+    for (const { option, flag } of UBT_FLAG_OPTIONS) {
+      if (options[option]) {
+        args.push(flag);
+      }
     }
 
     logger.info(
@@ -193,21 +211,10 @@ export class CompileCommandsGenerator {
     const settingsPath = path.join(vscodeDir, 'settings.json');
 
     const clangdConfig = {
-      'clangd.arguments': [
-        '--compile-commands-dir=${workspaceFolder}/.vscode',
-        '--background-index',
-        '--j=8',
-        '--index-store-path=.clangd/index',
-        '--pch-storage=disk',
-        '--limit-results=200',
-        '--header-insertion=iwyu',
-      ],
+      'clangd.arguments': CLANGD_ARGUMENTS,
     };
 
-    const cppConfig = {
-      'C_Cpp.default.compileCommands': '${workspaceFolder}/.vscode/compile_commands.json',
-      'C_Cpp.intelliSenseEngine': 'disabled',
-    };
+    const cppConfig = CPP_EXTENSION_CONFIG;
 
     let settings: Record<string, unknown> = {};
 
