@@ -135,7 +135,8 @@ export class BuildExecutor {
     const availableTargets = await BuildExecutor.getAvailableTargets(projectPath);
 
     if (availableTargets.length > 0) {
-      const result = await TargetResolver.resolveTarget(projectPath, target);
+      // Use pre-fetched targets to avoid redundant filesystem scan in TargetResolver
+      const result = TargetResolver.resolveTargetFromList(target, availableTargets);
       if (result !== target) {
         // Target was resolved to a different name (generic -> specific)
         resolvedTarget = result;

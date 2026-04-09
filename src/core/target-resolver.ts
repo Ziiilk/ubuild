@@ -65,6 +65,33 @@ export class TargetResolver {
   }
 
   /**
+   * Resolves a target string using pre-fetched targets, avoiding redundant filesystem scans.
+   * Use this when the caller has already fetched available targets via getAvailableTargets().
+   * Returns the original target if resolution fails.
+   *
+   * @param target - The target name or generic type to resolve
+   * @param availableTargets - Pre-fetched array of available targets in the project
+   * @returns The resolved target name, or the original target if resolution fails
+   */
+  static resolveTargetFromList(target: string, availableTargets: ResolvedTarget[]): string {
+    const targetList = target.split(' ').filter(Boolean);
+    const resolvedTargets: string[] = [];
+
+    for (const requestedTarget of targetList) {
+      const resolved = this.resolveSingleTarget(requestedTarget, availableTargets);
+      if (resolved) {
+        resolvedTargets.push(resolved);
+      }
+    }
+
+    if (resolvedTargets.length === 0) {
+      return target;
+    }
+
+    return resolvedTargets.join(' ');
+  }
+
+  /**
    * Resolves a single target request to an actual target name from available targets.
    * @param requestedTarget - The target name or generic type to resolve
    * @param availableTargets - Array of available targets in the project

@@ -356,6 +356,75 @@ describe('TargetResolver', () => {
     });
   });
 
+  describe('resolveTargetFromList', () => {
+    it('resolves generic Editor target using pre-fetched targets', () => {
+      const targets: ResolvedTarget[] = [
+        { name: 'MyGame', type: 'Game' },
+        { name: 'MyGameEditor', type: 'Editor' },
+      ];
+
+      const result = TargetResolver.resolveTargetFromList('Editor', targets);
+
+      expect(result).toBe('MyGameEditor');
+    });
+
+    it('returns original target when no targets match', () => {
+      const targets: ResolvedTarget[] = [{ name: 'MyGame', type: 'Game' }];
+
+      const result = TargetResolver.resolveTargetFromList('Server', targets);
+
+      expect(result).toBe('Server');
+    });
+
+    it('returns original target when available targets is empty', () => {
+      const result = TargetResolver.resolveTargetFromList('Editor', []);
+
+      expect(result).toBe('Editor');
+    });
+
+    it('resolves specific target name that exists in the list', () => {
+      const targets: ResolvedTarget[] = [
+        { name: 'MyGame', type: 'Game' },
+        { name: 'MyGameEditor', type: 'Editor' },
+      ];
+
+      const result = TargetResolver.resolveTargetFromList('MyGameEditor', targets);
+
+      expect(result).toBe('MyGameEditor');
+    });
+
+    it('returns original target for unknown specific target name', () => {
+      const targets: ResolvedTarget[] = [{ name: 'MyGame', type: 'Game' }];
+
+      const result = TargetResolver.resolveTargetFromList('NonExistent', targets);
+
+      expect(result).toBe('NonExistent');
+    });
+
+    it('resolves multiple space-separated targets', () => {
+      const targets: ResolvedTarget[] = [
+        { name: 'MyGame', type: 'Game' },
+        { name: 'MyGameEditor', type: 'Editor' },
+        { name: 'MyGameServer', type: 'Server' },
+      ];
+
+      const result = TargetResolver.resolveTargetFromList('Editor Game Server', targets);
+
+      expect(result).toBe('MyGameEditor MyGame MyGameServer');
+    });
+
+    it('falls back to name matching when type matching fails', () => {
+      const targets: ResolvedTarget[] = [
+        { name: 'MyGame', type: 'Game' },
+        { name: 'CustomEditor', type: 'Utility' },
+      ];
+
+      const result = TargetResolver.resolveTargetFromList('Editor', targets);
+
+      expect(result).toBe('CustomEditor');
+    });
+  });
+
   describe('multiple targets with mixed results', () => {
     it('resolves some targets and filters unresolved ones', async () => {
       const availableTargets: ResolvedTarget[] = [
