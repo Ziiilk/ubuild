@@ -2006,6 +2006,221 @@ describe('EngineResolver', () => {
     });
   });
 
+  describe('remaining branch coverage', () => {
+    it('uses associationId in warning when displayName is undefined for fallback engine', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const uprojectPath = 'C:\\Projects\\TestProj\\TestProj.uproject';
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+      const enginePath = 'C:\\Epic\\UE_5.3';
+
+      configureFs({
+        existingPaths: [uprojectPath, manifestPath, enginePath],
+        fileContents: {
+          [uprojectPath]: JSON.stringify({ EngineAssociation: '5.0' }),
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_5_3',
+                InstallLocation: enginePath,
+                // No DisplayName - the displayName will be inferred from path as "UE 5.3"
+                // but if no version file exists either, it falls back to associationId in the warning
+              },
+            ],
+          }),
+        },
+      });
+
+      mockExeca.mockImplementation(async () => ({ stdout: '' }));
+
+      const result = await EngineResolver.resolveEngine(uprojectPath);
+
+      expect(result.engine).toBeDefined();
+      // When DisplayName is absent but path matches UE_5.3, displayName becomes "UE 5.3"
+      // The warning uses matchedEngine.displayName (from path inference) not associationId
+      expect(result.warnings).toEqual(
+        expect.arrayContaining([expect.stringContaining('not associated with project')])
+      );
+    });
+
+    it('skips launcher entries without AppName', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      configureFs({
+        existingPaths: [manifestPath],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                // No AppName field
+                InstallLocation: 'C:\\Epic\\SomeEngine',
+                DisplayName: 'Orphan Entry',
+                Category: 'engine',
+              },
+              {
+                AppName: 'UE_5_3',
+                InstallLocation: 'C:\\Epic\\UE_5.3',
+                DisplayName: 'UE 5.3',
+              },
+            ],
+          }),
+        },
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Only the entry with AppName should be included
+      expect(result).toHaveLength(1);
+      expect(result[0].associationId).toBe('UE_5_3');
+    });
+
+    it('uses AppVersion fallback in displayName when DisplayName and appName are falsy', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      configureFs({
+        existingPaths: [manifestPath, 'C:\\Epic\\AppVerEngine'],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_5_3',
+                InstallLocation: 'C:\\Epic\\AppVerEngine',
+                // DisplayName is intentionally omitted
+                AppVersion: '5.3.0',
+              },
+            ],
+          }),
+        },
+      });
+
+      mockExeca.mockImplementation(async () => ({ stdout: '' }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result).toHaveLength(1);
+      // When DisplayName is absent, the displayName should use the appName fallback
+      expect(result[0].displayName).toBe('UE_5_3');
+    });
+
+    it('uses "Unknown" in displayName when DisplayName, appName, and AppVersion are all absent', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+
+      configureFs({
+        existingPaths: [manifestPath, 'C:\\Epic\\UnknownEngine'],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UnrealEngine_Unknown',
+                InstallLocation: 'C:\\Epic\\UnknownEngine',
+                // No DisplayName, no AppVersion
+                Category: 'engine',
+              },
+            ],
+          }),
+        },
+      });
+
+      mockExeca.mockImplementation(async () => ({ stdout: '' }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result).toHaveLength(1);
+      // When DisplayName is absent and appName is 'UnrealEngine_Unknown', displayName = appName
+      expect(result[0].displayName).toBe('UnrealEngine_Unknown');
+    });
+
+    it('handles version path with only major version segment', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(false);
+
+      // Path with UE_ prefix with only major.minor version (no patch)
+      // This exercises the parseInt fallback for missing patch segment
+      process.env.UE_ENGINE_PATH = 'C:\\Engines\\UE_5.3';
+
+      configureFs({
+        existingPaths: ['C:\\Engines\\UE_5.3'],
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].version).toBeDefined();
+      // "5.3" → versionParts = ["5", "3"]
+      // MajorVersion = parseInt("5") = 5
+      // MinorVersion = parseInt("3") = 3
+      // PatchVersion = parseInt(undefined) = NaN → fallback 0
+      expect(result[0].version!.MajorVersion).toBe(5);
+      expect(result[0].version!.MinorVersion).toBe(3);
+      expect(result[0].version!.PatchVersion).toBe(0);
+      expect(result[0].displayName).toBe('UE 5.3');
+    });
+
+    it('handles engine with undefined source in duplicate removal', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+      const enginePath = 'C:\\Epic\\UE_5.3';
+
+      // Launcher provides engine at path, registry also returns same path
+      configureFs({
+        existingPaths: [manifestPath, enginePath],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_5_3',
+                InstallLocation: enginePath,
+                DisplayName: 'Unreal Engine 5.3',
+              },
+            ],
+          }),
+        },
+      });
+
+      // Registry returns same path - source is 'registry'
+      mockExeca.mockImplementation(async () => ({
+        stdout: `{REG-GUID}    REG_SZ    ${enginePath}`,
+      }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Should deduplicate, keeping launcher source (higher priority)
+      expect(result).toHaveLength(1);
+      expect(result[0].source).toBe('launcher');
+    });
+  });
+
   describe('compareVersions (private)', () => {
     type VersionRef = {
       MajorVersion: number;
