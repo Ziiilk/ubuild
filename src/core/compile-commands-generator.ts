@@ -57,10 +57,6 @@ export class CompileCommandsGenerator {
     const silent = options.silent || false;
     const logger = new Logger({ silent });
 
-    if (!(await fs.pathExists(projectPath))) {
-      throw new Error(`Project file not found: ${projectPath}`);
-    }
-
     const enginePath = await EngineResolver.resolveEnginePath({
       projectPath,
       enginePath: options.enginePath,
