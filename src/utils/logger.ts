@@ -38,6 +38,49 @@ export interface LoggerOptions {
   silent?: boolean;
 }
 
+/**
+ * Common options for classes that need Logger and output streams.
+ * Used by BuildExecutor, ProjectRunner, CleanExecutor, and similar classes
+ * to avoid duplicating the Logger initialization pattern.
+ */
+export interface LoggableOptions {
+  /** Optional pre-configured Logger instance */
+  logger?: Logger;
+  /** Writable stream for standard output (defaults to process.stdout) */
+  stdout?: Writable;
+  /** Writable stream for error output (defaults to process.stderr) */
+  stderr?: Writable;
+  /** When true, suppresses all log output */
+  silent?: boolean;
+}
+
+/**
+ * Resolves Logger and output streams from common options.
+ *
+ * If a Logger is provided, uses it directly. Otherwise creates a new Logger
+ * configured with the provided streams and silent flag, falling back to
+ * process.stdout and process.stderr when streams are not specified.
+ *
+ * @param options - Logger and stream configuration options
+ * @returns Object with resolved stdout, stderr, and logger
+ */
+export function resolveLoggerStreams(options: LoggableOptions): {
+  stdout: Writable;
+  stderr: Writable;
+  logger: Logger;
+} {
+  const stdout = options.stdout || process.stdout;
+  const stderr = options.stderr || process.stderr;
+  const logger =
+    options.logger ||
+    new Logger({
+      stdout,
+      stderr,
+      silent: options.silent,
+    });
+  return { stdout, stderr, logger };
+}
+
 interface WidthAwareWritable extends Writable {
   columns?: number;
 }

@@ -37,6 +37,11 @@ const mockLoggerInstance = {
 
 jest.mock('../utils/logger', () => ({
   Logger: jest.fn().mockImplementation(() => mockLoggerInstance),
+  resolveLoggerStreams: jest.fn().mockImplementation((options?: { logger?: unknown }) => ({
+    stdout: process.stdout,
+    stderr: process.stderr,
+    logger: options?.logger || mockLoggerInstance,
+  })),
 }));
 
 jest.mock('./project-path-resolver', () => ({

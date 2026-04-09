@@ -10,10 +10,9 @@
 
 import fs from 'fs-extra';
 import path from 'path';
-import { Writable } from 'stream';
 import { CleanOptions, CleanResult } from '../types/clean';
 import { formatError } from '../utils/error';
-import { Logger } from '../utils/logger';
+import { Logger, resolveLoggerStreams, type LoggableOptions } from '../utils/logger';
 import { ProjectPathResolver } from './project-path-resolver';
 
 /**
@@ -22,27 +21,15 @@ import { ProjectPathResolver } from './project-path-resolver';
  */
 export class CleanExecutor {
   private logger: Logger;
-  private stdout: Writable;
-  private stderr: Writable;
   private silent: boolean;
 
   /**
    * Creates a new CleanExecutor instance.
    * @param options - Configuration options for logging and output streams
    */
-  constructor(
-    options: { logger?: Logger; stdout?: Writable; stderr?: Writable; silent?: boolean } = {}
-  ) {
-    this.stdout = options.stdout || process.stdout;
-    this.stderr = options.stderr || process.stderr;
+  constructor(options: LoggableOptions = {}) {
     this.silent = options.silent || false;
-    this.logger =
-      options.logger ||
-      new Logger({
-        stdout: this.stdout,
-        stderr: this.stderr,
-        silent: this.silent,
-      });
+    this.logger = resolveLoggerStreams(options).logger;
   }
 
   /**

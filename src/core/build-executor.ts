@@ -14,7 +14,7 @@ import fs from 'fs-extra';
 import { Writable } from 'stream';
 import { BuildOptions, BuildResult } from '../types/build';
 import { EngineResolver } from './engine-resolver';
-import { Logger } from '../utils/logger';
+import { Logger, resolveLoggerStreams, type LoggableOptions } from '../utils/logger';
 import { formatError } from '../utils/error';
 import { ProjectPathResolver } from './project-path-resolver';
 import { inferTargetType } from '../utils/target-helpers';
@@ -35,18 +35,11 @@ export class BuildExecutor {
    * Creates a new BuildExecutor instance.
    * @param options - Configuration options for logging and output streams
    */
-  constructor(
-    options: { logger?: Logger; stdout?: Writable; stderr?: Writable; silent?: boolean } = {}
-  ) {
-    this.stdout = options.stdout || process.stdout;
-    this.stderr = options.stderr || process.stderr;
-    this.logger =
-      options.logger ||
-      new Logger({
-        stdout: this.stdout,
-        stderr: this.stderr,
-        silent: options.silent,
-      });
+  constructor(options: LoggableOptions = {}) {
+    const { stdout, stderr, logger } = resolveLoggerStreams(options);
+    this.stdout = stdout;
+    this.stderr = stderr;
+    this.logger = logger;
   }
 
   /**
