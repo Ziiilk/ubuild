@@ -962,12 +962,14 @@ export class SelfDriver {
     const fileRestrictionSection = this.buildFileRestrictionSection();
     const changeSizeLimitSection = this.buildChangeSizeLimitSection();
 
+    const metricsBlock = metricsSection ? `${metricsSection}\n` : '';
+
     return `${constitution}
 ## Current Codebase
 
 Source files:
 ${fileTree}
-${metricsSection || ''}## Your Task
+${metricsBlock}## Your Task
 
 Read and analyze the codebase, then decide:
 
