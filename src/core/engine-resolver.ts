@@ -496,56 +496,88 @@ export class EngineResolver {
       Logger.debug('Searching for launcher manifests in: ' + JSON.stringify(manifestPaths));
 
       for (const manifestPath of manifestPaths) {
-        Logger.debug(`Checking launcher manifest path: ${manifestPath}`);
-        if (await fs.pathExists(manifestPath)) {
-          Logger.debug(`Found launcher manifest at: ${manifestPath}`);
-          try {
-            const content = await fs.readFile(manifestPath, 'utf-8');
-            const manifest = JSON.parse(content);
-
-            if (manifest.InstallationList && Array.isArray(manifest.InstallationList)) {
-              Logger.debug(`Found ${manifest.InstallationList.length} installations in manifest`);
-              for (const installation of manifest.InstallationList) {
-                if (
-                  installation.AppName &&
-                  (installation.AppName.startsWith('UE_') ||
-                    installation.AppName.includes('UnrealEngine') ||
-                    installation.Category === 'engine')
-                ) {
-                  Logger.debug(
-                    `Found UE installation: ${installation.AppName} at ${installation.InstallLocation}`
-                  );
-                  installations.push({
-                    path: installation.InstallLocation,
-                    associationId: installation.AppName,
-                    displayName:
-                      installation.DisplayName ||
-                      installation.AppName ||
-                      `UE ${installation.AppVersion || 'Unknown'}`,
-                    installedDate: installation.InstallDate,
-                    version: undefined,
-                    source: 'launcher',
-                  });
-                } else {
-                  Logger.debug(`Skipping non-UE installation: ${installation.AppName}`);
-                }
-              }
-            } else {
-              Logger.debug('No InstallationList found in manifest or it is not an array');
-            }
-          } catch (parseError) {
-            Logger.debug('Failed to parse launcher manifest: ' + formatError(parseError));
-            Logger.debug('Manifest path: ' + manifestPath);
-          }
-        } else {
-          Logger.debug('Launcher manifest not found at: ' + manifestPath);
-        }
+        const manifestInstallations = await this.parseLauncherManifest(manifestPath);
+        installations.push(...manifestInstallations);
       }
     } catch (error) {
       Logger.warning('Failed to read launcher manifest: ' + formatError(error));
     }
 
     Logger.debug(`Total launcher engines found: ${installations.length}`);
+    return installations;
+  }
+
+  /**
+   * Parses a single launcher manifest file and extracts UE installations.
+   * @param manifestPath - Path to the launcher manifest JSON file
+   * @returns Array of engine installations found in the manifest
+   */
+  private static async parseLauncherManifest(manifestPath: string): Promise<EngineInstallation[]> {
+    Logger.debug(`Checking launcher manifest path: ${manifestPath}`);
+
+    if (!(await fs.pathExists(manifestPath))) {
+      Logger.debug('Launcher manifest not found at: ' + manifestPath);
+      return [];
+    }
+
+    Logger.debug(`Found launcher manifest at: ${manifestPath}`);
+
+    try {
+      const content = await fs.readFile(manifestPath, 'utf-8');
+      const manifest = JSON.parse(content);
+      const installationList = manifest.InstallationList;
+
+      if (!installationList || !Array.isArray(installationList)) {
+        Logger.debug('No InstallationList found in manifest or it is not an array');
+        return [];
+      }
+
+      Logger.debug(`Found ${installationList.length} installations in manifest`);
+      return this.extractEngineInstallations(installationList);
+    } catch (parseError) {
+      Logger.debug('Failed to parse launcher manifest: ' + formatError(parseError));
+      Logger.debug('Manifest path: ' + manifestPath);
+      return [];
+    }
+  }
+
+  /**
+   * Filters a launcher installation list for Unreal Engine entries and maps them
+   * to EngineInstallation objects.
+   * @param installationList - Array of installation entries from the launcher manifest
+   * @returns Array of engine installations
+   */
+  private static extractEngineInstallations(
+    installationList: Array<Record<string, unknown>>
+  ): EngineInstallation[] {
+    const installations: EngineInstallation[] = [];
+
+    for (const entry of installationList) {
+      const appName = entry.AppName as string | undefined;
+      if (!appName) continue;
+
+      const isUE =
+        appName.startsWith('UE_') ||
+        appName.includes('UnrealEngine') ||
+        entry.Category === 'engine';
+
+      if (!isUE) {
+        Logger.debug(`Skipping non-UE installation: ${appName}`);
+        continue;
+      }
+
+      Logger.debug(`Found UE installation: ${appName} at ${entry.InstallLocation}`);
+      installations.push({
+        path: entry.InstallLocation as string,
+        associationId: appName,
+        displayName:
+          (entry.DisplayName as string) || appName || `UE ${entry.AppVersion || 'Unknown'}`,
+        installedDate: entry.InstallDate as string | undefined,
+        version: undefined,
+        source: 'launcher',
+      });
+    }
+
     return installations;
   }
 
