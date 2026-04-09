@@ -21,7 +21,7 @@ import {
 import { Platform } from '../utils/platform';
 import { Logger } from '../utils/logger';
 import { ProjectPathResolver } from './project-path-resolver';
-import { formatError } from '../utils/error';
+import { formatError, formatErrorWithPrefix } from '../utils/error';
 import { compareVersions as compareVersionStrings } from '../utils/version';
 
 /**
@@ -247,7 +247,7 @@ export class EngineResolver {
 
       return { association, warnings };
     } catch (error) {
-      warnings.push(`Failed to read project file: ${formatError(error)}`);
+      warnings.push(formatErrorWithPrefix('Failed to read project file', error));
       return { warnings };
     }
   }
@@ -500,7 +500,7 @@ export class EngineResolver {
         installations.push(...manifestInstallations);
       }
     } catch (error) {
-      Logger.warning('Failed to read launcher manifest: ' + formatError(error));
+      Logger.warning(formatErrorWithPrefix('Failed to read launcher manifest', error));
     }
 
     Logger.debug(`Total launcher engines found: ${installations.length}`);
@@ -535,7 +535,7 @@ export class EngineResolver {
       Logger.debug(`Found ${installationList.length} installations in manifest`);
       return this.extractEngineInstallations(installationList);
     } catch (parseError) {
-      Logger.debug('Failed to parse launcher manifest: ' + formatError(parseError));
+      Logger.debug(formatErrorWithPrefix('Failed to parse launcher manifest', parseError));
       Logger.debug('Manifest path: ' + manifestPath);
       return [];
     }
@@ -627,7 +627,7 @@ export class EngineResolver {
 
             return;
           } catch (parseError) {
-            Logger.debug('Failed to parse version file: ' + formatError(parseError));
+            Logger.debug(formatErrorWithPrefix('Failed to parse version file', parseError));
           }
         }
       }
@@ -650,7 +650,7 @@ export class EngineResolver {
         installation.displayName = `UE ${versionStr}`;
       }
     } catch (error) {
-      Logger.warning('Failed to load engine version info: ' + formatError(error));
+      Logger.warning(formatErrorWithPrefix('Failed to load engine version info', error));
     }
   }
 
