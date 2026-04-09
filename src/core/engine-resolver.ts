@@ -94,9 +94,24 @@ function getLauncherManifestPaths(): string[] {
 }
 
 /**
+ * Engine resolver module for ubuild
+ *
  * Resolves Unreal Engine installations from various sources including
  * Windows Registry, Epic Launcher, environment variables, and manual paths.
+ * Provides engine version detection and project association resolution.
+ *
+ * @module core/engine-resolver
  */
+
+/** Priority order for engine detection sources (lower = higher priority). */
+const ENGINE_SOURCE_PRIORITY = {
+  launcher: 0,
+  environment: 1,
+  registry: 2,
+} as const;
+
+/** Default priority for unknown or missing source values. */
+const DEFAULT_SOURCE_PRIORITY = 2;
 export class EngineResolver {
   /**
    * Resolves the engine path using the provided options or auto-detection.
@@ -598,10 +613,11 @@ export class EngineResolver {
       const pathMatch = installation.path.match(/UE_((?:5|4)[._]\d+(?:[._]\d+)*)/i);
       if (pathMatch) {
         const versionStr = pathMatch[1].replace(/_/g, '.');
+        const versionParts = versionStr.split('.');
         installation.version = {
-          MajorVersion: parseInt(versionStr.split('.')[0]) || 5,
-          MinorVersion: parseInt(versionStr.split('.')[1]) || 0,
-          PatchVersion: parseInt(versionStr.split('.')[2]) || 0,
+          MajorVersion: parseInt(versionParts[0]) || 5,
+          MinorVersion: parseInt(versionParts[1]) || 0,
+          PatchVersion: parseInt(versionParts[2]) || 0,
           Changelist: 0,
           CompatibleChangelist: 0,
           IsLicenseeVersion: 0,
@@ -631,10 +647,8 @@ export class EngineResolver {
       if (!existing) {
         pathMap.set(normalizedPath, installation);
       } else {
-        const sourcePriority = { launcher: 0, environment: 1, registry: 2 };
-        const existingPriority =
-          sourcePriority[existing.source as keyof typeof sourcePriority] ?? 2;
-        const newPriority = sourcePriority[installation.source as keyof typeof sourcePriority] ?? 2;
+        const existingPriority = this.getSourcePriority(existing.source);
+        const newPriority = this.getSourcePriority(installation.source);
 
         if (newPriority < existingPriority) {
           pathMap.set(normalizedPath, installation);
@@ -647,6 +661,18 @@ export class EngineResolver {
     unique.sort((a, b) => this.compareVersions(b.version, a.version));
 
     return unique;
+  }
+
+  /**
+   * Returns the priority value for a given engine source.
+   * Lower values indicate higher priority (preferred over others).
+   * @param source - The engine detection source
+   * @returns Priority number (0=highest for launcher, 1=environment, 2=registry/unknown)
+   */
+  private static getSourcePriority(source?: string): number {
+    if (!source) return DEFAULT_SOURCE_PRIORITY;
+    const priority = ENGINE_SOURCE_PRIORITY[source as keyof typeof ENGINE_SOURCE_PRIORITY];
+    return priority !== undefined ? priority : DEFAULT_SOURCE_PRIORITY;
   }
 
   /**
