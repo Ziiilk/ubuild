@@ -84,20 +84,14 @@ export class CleanExecutor {
       }
 
       // Clean each path
-      const removeLabel = options.dryRun ? 'Would remove' : 'Removed';
       for (const cleanPath of pathsToClean) {
-        const result = await this.cleanPath(cleanPath, options.dryRun);
-        if (result.deleted) {
-          deletedPaths.push(cleanPath);
-          if (!this.silent) {
-            this.logger.success(`${removeLabel}: ${path.relative(projectDir, cleanPath)}`);
-          }
-        } else if (result.error) {
-          failedPaths.push({ path: cleanPath, error: result.error });
-          if (!this.silent) {
-            this.logger.error(`Failed to remove: ${path.relative(projectDir, cleanPath)}`);
-          }
-        }
+        await this.processCleanResult(
+          cleanPath,
+          projectDir,
+          options.dryRun ?? false,
+          deletedPaths,
+          failedPaths
+        );
       }
 
       // Clean plugin directories
@@ -205,6 +199,36 @@ export class CleanExecutor {
   }
 
   /**
+   * Processes the result of cleaning a single path: tracks deletions/failures and logs progress.
+   * @param cleanPath - The path that was cleaned
+   * @param projectDir - The project directory for relative path display
+   * @param dryRun - Whether this is a dry run
+   * @param deletedPaths - Accumulator for successfully deleted paths
+   * @param failedPaths - Accumulator for failed paths with error details
+   */
+  private async processCleanResult(
+    cleanPath: string,
+    projectDir: string,
+    dryRun: boolean,
+    deletedPaths: string[],
+    failedPaths: Array<{ path: string; error: string }>
+  ): Promise<void> {
+    const result = await this.cleanPath(cleanPath, dryRun);
+    if (result.deleted) {
+      deletedPaths.push(cleanPath);
+      if (!this.silent) {
+        const removeLabel = dryRun ? 'Would remove' : 'Removed';
+        this.logger.success(`${removeLabel}: ${path.relative(projectDir, cleanPath)}`);
+      }
+    } else if (result.error) {
+      failedPaths.push({ path: cleanPath, error: result.error });
+      if (!this.silent) {
+        this.logger.error(`Failed to remove: ${path.relative(projectDir, cleanPath)}`);
+      }
+    }
+  }
+
+  /**
    * Cleans build directories from plugin folders.
    * @param projectDir - The project directory path
    * @param options - Clean options
@@ -240,19 +264,13 @@ export class CleanExecutor {
         const pluginIntermediate = path.join(fullPluginPath, 'Intermediate');
 
         for (const cleanPath of [pluginBinaries, pluginIntermediate]) {
-          const result = await this.cleanPath(cleanPath, options.dryRun);
-          if (result.deleted) {
-            deletedPaths.push(cleanPath);
-            if (!this.silent) {
-              const removeLabel = options.dryRun ? 'Would remove' : 'Removed';
-              this.logger.success(`${removeLabel}: ${path.relative(projectDir, cleanPath)}`);
-            }
-          } else if (result.error) {
-            failedPaths.push({ path: cleanPath, error: result.error });
-            if (!this.silent) {
-              this.logger.error(`Failed to remove: ${path.relative(projectDir, cleanPath)}`);
-            }
-          }
+          await this.processCleanResult(
+            cleanPath,
+            projectDir,
+            options.dryRun ?? false,
+            deletedPaths,
+            failedPaths
+          );
         }
       }
     } catch (error) {
