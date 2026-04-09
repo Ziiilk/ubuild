@@ -168,10 +168,9 @@ export class CompileCommandsGenerator {
 
     if (await fs.pathExists(engineCompileCommandsPath)) {
       logger.debug(
-        'Found compile_commands.json at engine directory, copying to project .vscode directory'
+        'Found compile_commands.json at engine directory, moving to project .vscode directory'
       );
-      await fs.copy(engineCompileCommandsPath, targetCompileCommandsPath);
-      await fs.remove(engineCompileCommandsPath);
+      await fs.move(engineCompileCommandsPath, targetCompileCommandsPath, { overwrite: true });
     }
 
     if (!(await fs.pathExists(targetCompileCommandsPath))) {
