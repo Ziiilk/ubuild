@@ -2046,6 +2046,14 @@ describe('EngineResolver', () => {
       ).toBe(1);
     });
 
+    it('compares by MajorVersion when MajorVersion differs', () => {
+      const a = { MajorVersion: 4, MinorVersion: 27, PatchVersion: 0, Changelist: 0 };
+      const b = { MajorVersion: 5, MinorVersion: 0, PatchVersion: 0, Changelist: 0 };
+      expect(compareVersions(a, b)).toBeLessThan(0);
+      expect(compareVersions(b, a)).toBeGreaterThan(0);
+      expect(compareVersions(a, a)).toBe(0);
+    });
+
     it('compares by MinorVersion when MajorVersion is equal', () => {
       const a = { MajorVersion: 5, MinorVersion: 1, PatchVersion: 0, Changelist: 0 };
       const b = { MajorVersion: 5, MinorVersion: 3, PatchVersion: 0, Changelist: 0 };
