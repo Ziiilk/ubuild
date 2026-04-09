@@ -5167,28 +5167,82 @@ describe('code health metrics', () => {
     process.cwd = originalCwd;
   });
 
-  it('gathers coverage metrics from coverage-summary.json', async () => {
+  it('reads and parses coverage-summary.json', async () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ logger: mockLogger });
 
     mockPathExists.mockResolvedValue(true);
-    mockReadFile.mockResolvedValue(
-      JSON.stringify({
-        total: {
-          branches: { pct: 72 },
-          functions: { pct: 85 },
-          lines: { pct: 83 },
-          statements: { pct: 84 },
-        },
-      })
-    );
+    const coverageData = {
+      total: {
+        branches: { pct: 72 },
+        functions: { pct: 85 },
+        lines: { pct: 83 },
+        statements: { pct: 84 },
+      },
+    };
+    mockReadFile.mockResolvedValue(JSON.stringify(coverageData));
 
-    const gatherCoverageMetrics = (
+    const readCoverageSummary = (
       driver as unknown as {
-        gatherCoverageMetrics: () => Promise<string | null>;
+        readCoverageSummary: () => Promise<Record<string, unknown> | null>;
       }
-    ).gatherCoverageMetrics;
-    const result = await gatherCoverageMetrics.call(driver);
+    ).readCoverageSummary;
+    const result = await readCoverageSummary.call(driver);
+
+    expect(result).toEqual(coverageData);
+  });
+
+  it('returns null from readCoverageSummary when file does not exist', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockPathExists.mockResolvedValue(false);
+
+    const readCoverageSummary = (
+      driver as unknown as {
+        readCoverageSummary: () => Promise<Record<string, unknown> | null>;
+      }
+    ).readCoverageSummary;
+    const result = await readCoverageSummary.call(driver);
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null from readCoverageSummary when JSON is malformed', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockPathExists.mockResolvedValue(true);
+    mockReadFile.mockResolvedValue('not json');
+
+    const readCoverageSummary = (
+      driver as unknown as {
+        readCoverageSummary: () => Promise<Record<string, unknown> | null>;
+      }
+    ).readCoverageSummary;
+    const result = await readCoverageSummary.call(driver);
+
+    expect(result).toBeNull();
+  });
+
+  it('formats coverage metrics from parsed summary', () => {
+    driver = new SelfDriver();
+
+    const summary = {
+      total: {
+        branches: { pct: 72 },
+        functions: { pct: 85 },
+        lines: { pct: 83 },
+        statements: { pct: 84 },
+      },
+    };
+
+    const formatCoverageMetrics = (
+      driver as unknown as {
+        formatCoverageMetrics: (s: Record<string, unknown>) => string | null;
+      }
+    ).formatCoverageMetrics;
+    const result = formatCoverageMetrics.call(driver, summary);
 
     expect(result).toContain('branches 72%');
     expect(result).toContain('functions 85%');
@@ -5196,35 +5250,15 @@ describe('code health metrics', () => {
     expect(result).toContain('statements 84%');
   });
 
-  it('returns null when coverage-summary.json does not exist', async () => {
-    const mockLogger = jest.fn();
-    driver = new SelfDriver({ logger: mockLogger });
+  it('formatCoverageMetrics returns null when total is missing', () => {
+    driver = new SelfDriver();
 
-    mockPathExists.mockResolvedValue(false);
-
-    const gatherCoverageMetrics = (
+    const formatCoverageMetrics = (
       driver as unknown as {
-        gatherCoverageMetrics: () => Promise<string | null>;
+        formatCoverageMetrics: (s: Record<string, unknown>) => string | null;
       }
-    ).gatherCoverageMetrics;
-    const result = await gatherCoverageMetrics.call(driver);
-
-    expect(result).toBeNull();
-  });
-
-  it('returns null when coverage JSON is malformed', async () => {
-    const mockLogger = jest.fn();
-    driver = new SelfDriver({ logger: mockLogger });
-
-    mockPathExists.mockResolvedValue(true);
-    mockReadFile.mockResolvedValue('not json');
-
-    const gatherCoverageMetrics = (
-      driver as unknown as {
-        gatherCoverageMetrics: () => Promise<string | null>;
-      }
-    ).gatherCoverageMetrics;
-    const result = await gatherCoverageMetrics.call(driver);
+    ).formatCoverageMetrics;
+    const result = formatCoverageMetrics.call(driver, {});
 
     expect(result).toBeNull();
   });
@@ -5314,27 +5348,24 @@ describe('code health metrics', () => {
     expect(result).toContain('Prioritize');
   });
 
-  it('gathers lowest coverage files from coverage-summary.json', async () => {
+  it('formats lowest coverage files from parsed summary', () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ logger: mockLogger });
 
-    mockPathExists.mockResolvedValue(true);
-    mockReadFile.mockResolvedValue(
-      JSON.stringify({
-        total: { lines: { pct: 80 } },
-        'src/core/build-executor.ts': { lines: { pct: 45 } },
-        'src/commands/run.ts': { lines: { pct: 52 } },
-        'src/core/engine-resolver.ts': { lines: { pct: 95 } },
-        'src/utils/logger.ts': { lines: { pct: 100 } },
-      })
-    );
+    const summary = {
+      total: { lines: { pct: 80 } },
+      'src/core/build-executor.ts': { lines: { pct: 45 } },
+      'src/commands/run.ts': { lines: { pct: 52 } },
+      'src/core/engine-resolver.ts': { lines: { pct: 95 } },
+      'src/utils/logger.ts': { lines: { pct: 100 } },
+    };
 
-    const gatherLowestCoverageFiles = (
+    const formatLowestCoverageFiles = (
       driver as unknown as {
-        gatherLowestCoverageFiles: (maxFiles?: number) => Promise<string | null>;
+        formatLowestCoverageFiles: (s: Record<string, unknown>, maxFiles?: number) => string | null;
       }
-    ).gatherLowestCoverageFiles;
-    const result = await gatherLowestCoverageFiles.call(driver);
+    ).formatLowestCoverageFiles;
+    const result = formatLowestCoverageFiles.call(driver, summary);
 
     expect(result).toContain('Lowest Coverage Files');
     expect(result).toContain('src/core/build-executor.ts (45%)');
@@ -5344,43 +5375,43 @@ describe('code health metrics', () => {
     expect(result).not.toContain('logger.ts');
   });
 
-  it('returns null for lowest coverage when no coverage file exists', async () => {
+  it('returns null from formatLowestCoverageFiles when no files below 100%', () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ logger: mockLogger });
 
-    mockPathExists.mockResolvedValue(false);
+    const summary = {
+      total: { lines: { pct: 100 } },
+      'src/perfect.ts': { lines: { pct: 100 } },
+    };
 
-    const gatherLowestCoverageFiles = (
+    const formatLowestCoverageFiles = (
       driver as unknown as {
-        gatherLowestCoverageFiles: (maxFiles?: number) => Promise<string | null>;
+        formatLowestCoverageFiles: (s: Record<string, unknown>, maxFiles?: number) => string | null;
       }
-    ).gatherLowestCoverageFiles;
-    const result = await gatherLowestCoverageFiles.call(driver);
+    ).formatLowestCoverageFiles;
+    const result = formatLowestCoverageFiles.call(driver, summary);
 
     expect(result).toBeNull();
   });
 
-  it('limits lowest coverage files to maxFiles parameter', async () => {
+  it('limits formatted lowest coverage files to maxFiles parameter', () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ logger: mockLogger });
 
-    mockPathExists.mockResolvedValue(true);
-    mockReadFile.mockResolvedValue(
-      JSON.stringify({
-        total: { lines: { pct: 80 } },
-        'src/a.ts': { lines: { pct: 10 } },
-        'src/b.ts': { lines: { pct: 20 } },
-        'src/c.ts': { lines: { pct: 30 } },
-        'src/d.ts': { lines: { pct: 40 } },
-      })
-    );
+    const summary = {
+      total: { lines: { pct: 80 } },
+      'src/a.ts': { lines: { pct: 10 } },
+      'src/b.ts': { lines: { pct: 20 } },
+      'src/c.ts': { lines: { pct: 30 } },
+      'src/d.ts': { lines: { pct: 40 } },
+    };
 
-    const gatherLowestCoverageFiles = (
+    const formatLowestCoverageFiles = (
       driver as unknown as {
-        gatherLowestCoverageFiles: (maxFiles?: number) => Promise<string | null>;
+        formatLowestCoverageFiles: (s: Record<string, unknown>, maxFiles?: number) => string | null;
       }
-    ).gatherLowestCoverageFiles;
-    const result = await gatherLowestCoverageFiles.call(driver, 2);
+    ).formatLowestCoverageFiles;
+    const result = formatLowestCoverageFiles.call(driver, summary, 2);
 
     expect(result).toContain('src/a.ts (10%)');
     expect(result).toContain('src/b.ts (20%)');
