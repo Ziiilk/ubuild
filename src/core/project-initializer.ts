@@ -90,8 +90,8 @@ export class ProjectInitializer {
       await fs.ensureDir(configDir);
       createdFiles.push(configDir);
 
-      await this.createConfigFiles(directory);
-      createdFiles.push(path.join(configDir, 'DefaultEngine.ini'));
+      const configFiles = await this.createConfigFiles(directory);
+      createdFiles.push(...configFiles);
 
       Logger.success(`Project ${name} initialized successfully`);
 
@@ -555,8 +555,9 @@ A${name}GameModeBase::A${name}GameModeBase()
    * @param directory - Project directory path
    * @returns Promise resolving when config files are created
    */
-  private static async createConfigFiles(directory: string): Promise<void> {
+  private static async createConfigFiles(directory: string): Promise<string[]> {
     const configDir = path.join(directory, 'Config');
+    const createdFiles: string[] = [];
 
     const defaultEngineContent = `[/Script/EngineSettings.GeneralProjectSettings]
 ProjectID=${crypto.randomUUID()}
@@ -565,16 +566,24 @@ ProjectID=${crypto.randomUUID()}
 +ActiveGameNameRedirects=(OldGameName="/Script/Engine",NewGameName="/Script/Engine")
 +ActiveGameNameRedirects=(OldGameName="/Script/CoreUObject",NewGameName="/Script/CoreUObject")
 `;
-    await fs.writeFile(path.join(configDir, 'DefaultEngine.ini'), defaultEngineContent, 'utf-8');
+    const defaultEnginePath = path.join(configDir, 'DefaultEngine.ini');
+    await fs.writeFile(defaultEnginePath, defaultEngineContent, 'utf-8');
+    createdFiles.push(defaultEnginePath);
 
     const defaultGameContent = `[/Script/Engine.GameSession]
 `;
-    await fs.writeFile(path.join(configDir, 'DefaultGame.ini'), defaultGameContent, 'utf-8');
+    const defaultGamePath = path.join(configDir, 'DefaultGame.ini');
+    await fs.writeFile(defaultGamePath, defaultGameContent, 'utf-8');
+    createdFiles.push(defaultGamePath);
 
     const defaultEditorContent = `[/Script/UnrealEd.EditorEngine]
 +ActiveGameNameRedirects=(OldGameName="/Script/Engine",NewGameName="/Script/Engine")
 +ActiveGameNameRedirects=(OldGameName="/Script/CoreUObject",NewGameName="/Script/CoreUObject")
 `;
-    await fs.writeFile(path.join(configDir, 'DefaultEditor.ini'), defaultEditorContent, 'utf-8');
+    const defaultEditorPath = path.join(configDir, 'DefaultEditor.ini');
+    await fs.writeFile(defaultEditorPath, defaultEditorContent, 'utf-8');
+    createdFiles.push(defaultEditorPath);
+
+    return createdFiles;
   }
 }

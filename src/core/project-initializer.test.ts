@@ -107,6 +107,17 @@ describe('ProjectInitializer', () => {
       expect(result.createdFiles.length).toBeGreaterThan(0);
       expect(result.error).toBeUndefined();
 
+      // Verify all config files are tracked in createdFiles
+      expect(result.createdFiles).toContain(
+        path.join(options.directory!, 'Config', 'DefaultEngine.ini')
+      );
+      expect(result.createdFiles).toContain(
+        path.join(options.directory!, 'Config', 'DefaultGame.ini')
+      );
+      expect(result.createdFiles).toContain(
+        path.join(options.directory!, 'Config', 'DefaultEditor.ini')
+      );
+
       // Verify key files were created
       expect(await fs.pathExists(result.uprojectPath)).toBe(true);
       expect(await fs.pathExists(path.join(options.directory!, 'Source'))).toBe(true);
