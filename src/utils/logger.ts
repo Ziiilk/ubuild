@@ -126,10 +126,8 @@ export class Logger {
    * @param message - The message to log
    */
   debug(message: string): void {
-    if (this.silent) return;
-    if (process.env.DEBUG) {
-      this.stdout.write(chalk.gray('🔍') + ' ' + this.formatMessage(message) + '\n');
-    }
+    if (this.silent || !process.env.DEBUG) return;
+    this.stdout.write(chalk.gray('🔍') + ' ' + this.formatMessage(message) + '\n');
   }
 
   /**
