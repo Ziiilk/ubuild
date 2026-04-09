@@ -5684,7 +5684,7 @@ describe('coverage baseline gate', () => {
     const result = await checkCoverageBaseline.call(driver);
 
     expect(result.passed).toBe(false);
-    expect(result.details).toBe('failed to read coverage data');
+    expect(result.details).toBe('coverage-summary.json not found');
   });
 
   it('fails when coverage JSON is missing total section', async () => {

@@ -19,6 +19,14 @@ import type { SelfEvolverOptions, IterationResult, EvolutionRecord } from '../ty
 
 export type { SelfEvolverOptions, IterationResult, EvolutionRecord };
 
+/** Shape of the "total" section in coverage-summary.json used by coverage-related methods. */
+interface CoverageTotal {
+  branches?: { pct?: number };
+  functions?: { pct?: number };
+  lines?: { pct?: number };
+  statements?: { pct?: number };
+}
+
 /** Default sleep duration between iterations in milliseconds */
 const DEFAULT_SLEEP_MS = 5000;
 /** Default timeout for verification checks in milliseconds */
@@ -267,13 +275,13 @@ export class SelfDriver {
    * @returns A formatted string of coverage metrics, or null if unavailable
    */
   private formatCoverageMetrics(summary: Record<string, unknown>): string | null {
-    const total = summary?.total as Record<string, unknown> | undefined;
+    const total = summary?.total as CoverageTotal | undefined;
     if (!total) return null;
 
-    const b = (total.branches as { pct?: number } | undefined)?.pct ?? '?';
-    const f = (total.functions as { pct?: number } | undefined)?.pct ?? '?';
-    const l = (total.lines as { pct?: number } | undefined)?.pct ?? '?';
-    const s = (total.statements as { pct?: number } | undefined)?.pct ?? '?';
+    const b = total.branches?.pct ?? '?';
+    const f = total.functions?.pct ?? '?';
+    const l = total.lines?.pct ?? '?';
+    const s = total.statements?.pct ?? '?';
 
     return `- Test Coverage: branches ${b}%, functions ${f}%, lines ${l}%, statements ${s}%`;
   }
@@ -362,53 +370,47 @@ export class SelfDriver {
       return { passed: true, details: 'coverage gate disabled' };
     }
 
-    try {
-      const summaryPath = path.join(this.projectRoot, 'coverage', 'coverage-summary.json');
-      if (!(await fs.pathExists(summaryPath))) {
-        return { passed: false, details: 'coverage-summary.json not found' };
-      }
-
-      const raw = await fs.readFile(summaryPath, 'utf-8');
-      const summary = JSON.parse(raw);
-      const total = summary?.total;
-      if (!total) {
-        return { passed: false, details: 'coverage-summary.json missing total section' };
-      }
-
-      const failures: string[] = [];
-      const metrics: Array<{ key: string; actual: number; expected: number }> = [
-        {
-          key: 'branches',
-          actual: total.branches?.pct ?? 0,
-          expected: this.coverageBaseline.branches,
-        },
-        {
-          key: 'functions',
-          actual: total.functions?.pct ?? 0,
-          expected: this.coverageBaseline.functions,
-        },
-        { key: 'lines', actual: total.lines?.pct ?? 0, expected: this.coverageBaseline.lines },
-        {
-          key: 'statements',
-          actual: total.statements?.pct ?? 0,
-          expected: this.coverageBaseline.statements,
-        },
-      ];
-
-      for (const { key, actual, expected } of metrics) {
-        if (actual < expected) {
-          failures.push(`${key}: ${actual}% < ${expected}%`);
-        }
-      }
-
-      if (failures.length > 0) {
-        return { passed: false, details: failures.join(', ') };
-      }
-
-      return { passed: true, details: 'all coverage thresholds met' };
-    } catch {
-      return { passed: false, details: 'failed to read coverage data' };
+    const summary = await this.readCoverageSummary();
+    if (!summary) {
+      return { passed: false, details: 'coverage-summary.json not found' };
     }
+
+    const total = summary.total as CoverageTotal | undefined;
+    if (!total) {
+      return { passed: false, details: 'coverage-summary.json missing total section' };
+    }
+
+    const failures: string[] = [];
+    const metrics: Array<{ key: string; actual: number; expected: number }> = [
+      {
+        key: 'branches',
+        actual: total.branches?.pct ?? 0,
+        expected: this.coverageBaseline.branches,
+      },
+      {
+        key: 'functions',
+        actual: total.functions?.pct ?? 0,
+        expected: this.coverageBaseline.functions,
+      },
+      { key: 'lines', actual: total.lines?.pct ?? 0, expected: this.coverageBaseline.lines },
+      {
+        key: 'statements',
+        actual: total.statements?.pct ?? 0,
+        expected: this.coverageBaseline.statements,
+      },
+    ];
+
+    for (const { key, actual, expected } of metrics) {
+      if (actual < expected) {
+        failures.push(`${key}: ${actual}% < ${expected}%`);
+      }
+    }
+
+    if (failures.length > 0) {
+      return { passed: false, details: failures.join(', ') };
+    }
+
+    return { passed: true, details: 'all coverage thresholds met' };
   }
 
   /**
