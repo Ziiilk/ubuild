@@ -27,6 +27,13 @@ interface CoverageTotal {
   statements?: { pct?: number };
 }
 
+/** Shape of execa command results used internally for safe command execution. */
+interface ExecaResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
 /** Default sleep duration between iterations in milliseconds */
 const DEFAULT_SLEEP_MS = 5000;
 /** Default timeout for verification checks in milliseconds */
@@ -47,6 +54,8 @@ const DEFAULT_FORBIDDEN_PATHS = ['package.json', 'tsconfig.json', '.github/**'];
 const DEFAULT_ALLOWED_PATHS = ['src/**'];
 /** Default maximum number of changed lines per iteration (insertions + deletions) */
 const DEFAULT_MAX_DIFF_LINES = 200;
+/** Error detail when verification passes but AI fails to commit changes. */
+const COMMIT_MISSED_DETAIL = 'Verification passed but AI did not commit changes properly';
 
 export class SelfDriver {
   private log: (msg: string) => void;
@@ -84,6 +93,18 @@ export class SelfDriver {
   } | null;
 
   /**
+   * Validates that a numeric option is a positive number.
+   * @param value - The value to validate
+   * @param name - The option name for error messages
+   * @throws Error if the value is not positive
+   */
+  private static validatePositive(value: number, name: string): void {
+    if (value <= 0) {
+      throw new Error(`Invalid ${name}: ${value}. Must be a positive number.`);
+    }
+  }
+
+  /**
    * Creates a new SelfDriver instance.
    * @param options - Configuration options for the evolution process
    */
@@ -105,22 +126,12 @@ export class SelfDriver {
     this.coverageBaseline = options.coverageBaseline ?? null;
 
     // Validate options
-    if (this.sleepMs <= 0) {
-      throw new Error(`Invalid sleepMs: ${this.sleepMs}. Must be a positive number.`);
-    }
+    SelfDriver.validatePositive(this.sleepMs, 'sleepMs');
     if (this.maxRetries < -1) {
       throw new Error(`Invalid maxRetries: ${this.maxRetries}. Must be >= -1 (-1 for unlimited).`);
     }
-    if (this.verifyTimeoutMs <= 0) {
-      throw new Error(
-        `Invalid verifyTimeoutMs: ${this.verifyTimeoutMs}. Must be a positive number.`
-      );
-    }
-    if (this.opencodeTimeoutMs <= 0) {
-      throw new Error(
-        `Invalid opencodeTimeoutMs: ${this.opencodeTimeoutMs}. Must be a positive number.`
-      );
-    }
+    SelfDriver.validatePositive(this.verifyTimeoutMs, 'verifyTimeoutMs');
+    SelfDriver.validatePositive(this.opencodeTimeoutMs, 'opencodeTimeoutMs');
 
     this.setupSignalHandlers();
   }
@@ -423,7 +434,7 @@ export class SelfDriver {
     command: string,
     args: string[],
     options?: { cwd?: string; reject?: boolean; timeout?: number }
-  ): Promise<{ exitCode: number; stdout: string; stderr: string } | null> {
+  ): Promise<ExecaResult | null> {
     try {
       const result = await execa(command, args, {
         cwd: this.projectRoot,
@@ -750,7 +761,7 @@ export class SelfDriver {
         iteration: this.iterationCount,
         success: false,
         failureStage: 'commit',
-        failureDetail: 'Verification passed but AI did not commit changes properly',
+        failureDetail: COMMIT_MISSED_DETAIL,
         filesChanged,
       };
       await this.writeEvolutionRecord({
@@ -758,7 +769,7 @@ export class SelfDriver {
         timestamp: iterationTimestamp,
         success: false,
         failureStage: 'commit',
-        failureDetail: 'Verification passed but AI did not commit changes properly',
+        failureDetail: COMMIT_MISSED_DETAIL,
         durationMs,
       });
     }
@@ -1196,10 +1207,7 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
   /**
    * Logs a check failure with error details.
    */
-  private logCheckFailure(
-    name: string,
-    result: { exitCode: number; stdout: string; stderr: string } | null
-  ): void {
+  private logCheckFailure(name: string, result: ExecaResult | null): void {
     this.log(`  ❌ ${name} failed`);
     if (result?.stderr) {
       const stderrPreview = this.truncateOutput(result.stderr, VERIFY_ERROR_PREVIEW_LIMIT);
