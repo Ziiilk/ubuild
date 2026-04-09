@@ -96,17 +96,7 @@ export class CompileCommandsGenerator {
 
     const targetNames = targetName.split(' ').filter(Boolean);
 
-    const args = ['-mode=GenerateClangDatabase', `-Project=${projectPath}`];
-
-    for (const resolvedTarget of targetNames) {
-      args.push(`-Target="${resolvedTarget} ${platform} ${config}"`);
-    }
-
-    for (const { option, flag } of UBT_FLAG_OPTIONS) {
-      if (options[option]) {
-        args.push(flag);
-      }
-    }
+    const args = this.buildUbtArguments(projectPath, targetNames, platform, config, options);
 
     logger.info(
       `Generating compile commands for: ${chalk.bold(targetNames.join(', '))} | ${chalk.bold(platform)} | ${chalk.bold(config)}`
@@ -157,6 +147,39 @@ export class CompileCommandsGenerator {
     const resolved = await TargetResolver.resolveTargetName(projectPath, target);
     // If resolution fails (returns undefined), fall back to the original target
     return resolved ?? target;
+  }
+
+  /**
+   * Builds the command-line arguments for UnrealBuildTool invocation.
+   * Constructs the base mode and project arguments, adds target/platform/config
+   * for each resolved target, and appends any enabled UBT flag options.
+   * @param projectPath - Path to the .uproject file
+   * @param targetNames - Array of resolved target names to generate compile commands for
+   * @param platform - Target platform (e.g., Win64, Linux)
+   * @param config - Build configuration (e.g., Development, Shipping)
+   * @param options - Original generation options for flag extraction
+   * @returns Array of command-line arguments for UBT
+   */
+  private static buildUbtArguments(
+    projectPath: string,
+    targetNames: string[],
+    platform: string,
+    config: string,
+    options: CompileCommandsGenerateOptions
+  ): string[] {
+    const args = ['-mode=GenerateClangDatabase', `-Project=${projectPath}`];
+
+    for (const resolvedTarget of targetNames) {
+      args.push(`-Target="${resolvedTarget} ${platform} ${config}"`);
+    }
+
+    for (const { option, flag } of UBT_FLAG_OPTIONS) {
+      if (options[option]) {
+        args.push(flag);
+      }
+    }
+
+    return args;
   }
 
   /**
