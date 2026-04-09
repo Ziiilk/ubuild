@@ -685,11 +685,37 @@ export class SelfDriver {
       beforeHashError || afterHashError
     );
 
-    // Gather changed files and decision for iteration context
+    await this.recordIterationOutcome(
+      iterationTimestamp,
+      isClean,
+      hashChanged,
+      beforeCommitHash,
+      afterCommitHash
+    );
+
+    return shouldContinue ? 'completed' : 'stop';
+  }
+
+  /**
+   * Records the iteration outcome based on working tree state and commit status.
+   * Separates result-recording concerns from the iteration control flow.
+   * @param iterationTimestamp - ISO timestamp for the evolution log
+   * @param isClean - Whether the working tree is clean (pre-revert state)
+   * @param hashChanged - Whether the commit hash changed (indicating AI committed)
+   * @param beforeCommitHash - Commit hash before the iteration
+   * @param afterCommitHash - Commit hash after the iteration
+   */
+  private async recordIterationOutcome(
+    iterationTimestamp: string,
+    isClean: boolean,
+    hashChanged: boolean,
+    beforeCommitHash: string | null,
+    afterCommitHash: string | null
+  ): Promise<void> {
     const filesChanged = await this.getChangedFilesList(beforeCommitHash, afterCommitHash);
     const decision = hashChanged ? await this.detectDecisionFromCommit() : undefined;
-
     const durationMs = Date.now() - this.iterationStartTime;
+
     if (isClean && hashChanged) {
       this.lastIterationResult = {
         iteration: this.iterationCount,
@@ -734,8 +760,6 @@ export class SelfDriver {
         durationMs,
       });
     }
-
-    return shouldContinue ? 'completed' : 'stop';
   }
 
   /**
