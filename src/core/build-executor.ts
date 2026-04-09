@@ -65,17 +65,13 @@ export class BuildExecutor {
       let stderr = '';
       let exitCode = 0;
 
-      if (buildScriptExists) {
-        const result = await this.executeBuildBat(buildBatPath, validatedOptions);
-        stdout = result.stdout;
-        stderr = result.stderr;
-        exitCode = result.exitCode;
-      } else {
-        const result = await this.executeUnrealBuildTool(enginePath, validatedOptions);
-        stdout = result.stdout;
-        stderr = result.stderr;
-        exitCode = result.exitCode;
-      }
+      const result = buildScriptExists
+        ? await this.executeBuildBat(buildBatPath, validatedOptions)
+        : await this.executeUnrealBuildTool(enginePath, validatedOptions);
+
+      stdout = result.stdout;
+      stderr = result.stderr;
+      exitCode = result.exitCode;
 
       const duration = Date.now() - startTime;
       const success = exitCode === 0;
