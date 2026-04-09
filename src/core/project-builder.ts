@@ -9,7 +9,7 @@
 
 import chalk from 'chalk';
 import { Writable } from 'stream';
-import { Logger } from '../utils/logger';
+import { Logger, resolveLoggerStreams, type LoggableOptions } from '../utils/logger';
 import { Validator } from '../utils/validator';
 import { formatError } from '../utils/error';
 import { BuildExecutor } from './build-executor';
@@ -59,18 +59,11 @@ export class ProjectBuilder {
    * Creates a new ProjectBuilder instance.
    * @param options - Configuration options for logging and output streams
    */
-  constructor(
-    options: { logger?: Logger; stdout?: Writable; stderr?: Writable; silent?: boolean } = {}
-  ) {
-    this.stdout = options.stdout || process.stdout;
-    this.stderr = options.stderr || process.stderr;
-    this.logger =
-      options.logger ||
-      new Logger({
-        stdout: this.stdout,
-        stderr: this.stderr,
-        silent: options.silent,
-      });
+  constructor(options: LoggableOptions = {}) {
+    const { stdout, stderr, logger } = resolveLoggerStreams(options);
+    this.stdout = stdout;
+    this.stderr = stderr;
+    this.logger = logger;
   }
 
   /**
