@@ -4439,6 +4439,42 @@ describe('iteration result and failure context propagation', () => {
 
     expect(files).toBeUndefined();
   });
+
+  it('returns undefined and logs warning when stdout parsing throws', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    // Return a result where stdout.split() will throw due to non-string stdout
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('--name-only')) {
+        return {
+          exitCode: 0,
+          stdout: {
+            split: () => {
+              throw new Error('parse error');
+            },
+          },
+          stderr: '',
+        } as unknown as { exitCode: number; stdout: string; stderr: string };
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const getChangedFilesList = (
+      driver as unknown as {
+        getChangedFilesList: (
+          before: string | null,
+          after: string | null
+        ) => Promise<string[] | undefined>;
+      }
+    ).getChangedFilesList;
+    const files = await getChangedFilesList.call(driver, 'abc123', 'def456');
+
+    expect(files).toBeUndefined();
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Could not get changed files list')
+    );
+  });
 });
 
 describe('evolution log (writeEvolutionRecord)', () => {
