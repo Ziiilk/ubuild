@@ -843,6 +843,48 @@ describe('CompileCommandsGenerator', () => {
     });
   });
 
+  it('resolves project from current working directory when project option is omitted', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+      const projectDir = path.dirname(project.uprojectPath);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      const cwdSpy = jest.spyOn(process, 'cwd').mockReturnValue(projectDir);
+      try {
+        const result = await CompileCommandsGenerator.generate({
+          enginePath: engine.enginePath,
+        });
+        expect(result).toBe(path.join(projectDir, '.vscode', 'compile_commands.json'));
+      } finally {
+        cwdSpy.mockRestore();
+      }
+    });
+  });
+
+  it('handles null result from UBT process', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+
+      const stdout = new PassThrough();
+      const stderr = new PassThrough();
+      stdout.end();
+      stderr.end();
+      const nullChildProcess = Object.assign(Promise.resolve(null), { stdout, stderr });
+      mockExeca.mockReturnValueOnce(nullChildProcess as unknown as MockChildProcess);
+
+      await expect(
+        CompileCommandsGenerator.generate({
+          project: project.uprojectPath,
+          enginePath: engine.enginePath,
+        })
+      ).rejects.toThrow('Generate compile commands failed with exit code unknown');
+    });
+  });
+
   it('generates compile commands with all options specified', async () => {
     await withTempDir(async (rootDir) => {
       const project = await createFakeProject(rootDir, {
