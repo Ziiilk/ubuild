@@ -72,7 +72,11 @@ export class ProjectInitializer {
           break;
       }
 
-      const uprojectPath = await this.createUProjectFile(name, directory, enginePath, type);
+      // Compute engine association once — getEngineAssociationId performs
+      // expensive filesystem/registry lookups via EngineResolver.findEngineInstallations.
+      const engineAssociation = await this.getEngineAssociationId(enginePath);
+
+      const uprojectPath = await this.createUProjectFile(name, directory, engineAssociation, type);
       createdFiles.push(uprojectPath);
 
       if (type === 'cpp') {
@@ -99,7 +103,7 @@ export class ProjectInitializer {
         success: true,
         projectPath: directory,
         uprojectPath,
-        engineAssociation: await this.getEngineAssociationId(enginePath),
+        engineAssociation,
         createdFiles,
       };
     } catch (error) {
@@ -239,12 +243,10 @@ export class ProjectInitializer {
   private static async createUProjectFile(
     name: string,
     directory: string,
-    enginePath: string,
+    engineAssociation: string,
     type: ProjectType
   ): Promise<string> {
     const uprojectPath = path.join(directory, `${name}.uproject`);
-
-    const engineAssociation = await this.getEngineAssociationId(enginePath);
 
     const uproject = {
       FileVersion: 3,
