@@ -93,16 +93,6 @@ function getLauncherManifestPaths(): string[] {
   ];
 }
 
-/**
- * Engine resolver module for ubuild
- *
- * Resolves Unreal Engine installations from various sources including
- * Windows Registry, Epic Launcher, environment variables, and manual paths.
- * Provides engine version detection and project association resolution.
- *
- * @module core/engine-resolver
- */
-
 /** Priority order for engine detection sources (lower = higher priority). */
 const ENGINE_SOURCE_PRIORITY = {
   launcher: 0,
