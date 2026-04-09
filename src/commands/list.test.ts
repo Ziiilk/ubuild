@@ -487,4 +487,21 @@ describe('listCommand', () => {
       })
     );
   });
+
+  it('calls handleCommandError when executeList throws', async () => {
+    mockDetectProject.mockRejectedValue(new Error('Detection failed'));
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    const program = new Command();
+    listCommand(program);
+    const listCmd = program.commands.find((cmd) => cmd.name() === 'list');
+
+    await expect(listCmd?.parseAsync(['node', 'ubuild'])).rejects.toThrow('process.exit called');
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
 });
