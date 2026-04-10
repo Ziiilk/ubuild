@@ -190,3 +190,37 @@ export interface EvolutionRecord {
   /** Duration of the iteration in milliseconds */
   durationMs: number;
 }
+
+/**
+ * Aggregated summary of evolution history for reporting.
+ */
+export interface EvolutionReport {
+  /** Total number of iterations recorded */
+  totalIterations: number;
+  /** Number of successful iterations */
+  successCount: number;
+  /** Number of failed iterations */
+  failureCount: number;
+  /** Overall success rate (0–1) */
+  successRate: number;
+  /** Breakdown of iterations by decision type */
+  decisionDistribution: Record<string, { count: number; successes: number; failures: number }>;
+  /** Breakdown of failures by stage */
+  failureStages: Record<string, number>;
+  /** Most common failure details (top 5) */
+  topFailureReasons: Array<{ reason: string; count: number }>;
+  /** Average metric deltas across successful iterations */
+  averageMetricDelta: MetricDelta;
+  /** Average iteration duration in milliseconds */
+  averageDurationMs: number;
+  /** Total wall-clock time spent in milliseconds */
+  totalDurationMs: number;
+  /** Statistics for the most recent N iterations (for trend comparison) */
+  recentWindow: {
+    /** How many iterations are in this window */
+    size: number;
+    successRate: number;
+    decisionDistribution: Record<string, number>;
+    averageMetricDelta: MetricDelta;
+  };
+}

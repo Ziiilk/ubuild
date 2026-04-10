@@ -4568,8 +4568,6 @@ describe('evolution log (writeEvolutionRecord)', () => {
       'src/core/self-driver.ts',
       'src/core/self-driver.test.ts',
     ]);
-    expect(record.decisionGuidance.recommendedDecision).toBe('TEST');
-    expect(record.decisionGuidance.reasons.length).toBeGreaterThan(0);
     expect(record.metricsAfter.lintWarnings).toBe(1);
     expect(record.metricDelta.lintWarnings).toBe(-2);
     expect(record.durationMs).toBeGreaterThanOrEqual(0);
@@ -5547,7 +5545,6 @@ describe('code health metrics', () => {
     expect(result).toContain('Branch Coverage Hotspots');
     expect(result).toContain('src/core/engine-resolver.ts (55% branches)');
     expect(result).toContain('ESLint Warnings: 3');
-    expect(result).toContain('concrete bug path');
   });
 
   it('formats branch coverage hotspots from parsed summary', () => {
@@ -5722,30 +5719,20 @@ describe('code health metrics', () => {
           constitution: string,
           fileTree: string,
           lastResult?: IterationResult | null,
-          metricsSection?: string,
-          decisionGuidance?: {
-            recommendedDecision: string;
-            reasons: string[];
-            scores: Record<string, number>;
-          }
+          metricsSection?: string
         ) => string;
       }
     ).buildEvolutionPrompt;
 
     const metrics =
       '\n## Code Health Metrics\n- Test Coverage: branches 70%\n- Branch Coverage Hotspots:\n  - src/core/foo.ts (45% branches)\n- ESLint Warnings: 5';
-    const prompt = buildEvolutionPrompt.call(driver, '', 'src/index.ts', null, metrics, {
-      recommendedDecision: 'TEST',
-      reasons: ['Lowest branch hotspot is src/core/foo.ts at 45%.'],
-      scores: { FIX: 1, TEST: 6, REFACTOR: 0, FEATURE: 0, SKIP: 0 },
-    });
+    const prompt = buildEvolutionPrompt.call(driver, '', 'src/index.ts', null, metrics);
 
     expect(prompt).toContain('Code Health Metrics');
-    expect(prompt).toContain('Recommended Decision');
-    expect(prompt).toContain('System recommendation: TEST');
     expect(prompt).toContain('branches 70%');
-    expect(prompt).toContain('concrete missing branch or failure path');
     expect(prompt).toContain('ESLint Warnings: 5');
+    expect(prompt).not.toContain('Recommended Decision');
+    expect(prompt).not.toContain('System recommendation');
   });
 
   it('omits metrics section from prompt when metricsSection is empty', () => {
@@ -5767,111 +5754,38 @@ describe('code health metrics', () => {
 
     expect(prompt).not.toContain('Code Health Metrics');
   });
-});
 
-describe('decision guidance scoring', () => {
-  beforeEach(() => {
-    jest.resetAllMocks();
-    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
-    mockAppendFile.mockResolvedValue(undefined);
-  });
-
-  afterEach(() => {
-    if (driver) {
-      driver.cleanup();
-    }
-    jest.restoreAllMocks();
-    process.cwd = originalCwd;
-  });
-
-  it('recommends FIX when previous iteration failed and lint warnings remain', () => {
+  it('includes history summary in prompt when provided', () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ logger: mockLogger });
 
-    const buildDecisionGuidance = (
+    const buildEvolutionPrompt = (
       driver as unknown as {
-        buildDecisionGuidance: (
-          metrics: {
-            lintWarnings?: number;
-            coverage?: { branches: number; functions: number; lines: number; statements: number };
-            branchHotspots?: Array<{ file: string; branches: number }>;
-          } | null,
-          lastResult?: IterationResult | null
-        ) => { recommendedDecision: string; reasons: string[]; scores: Record<string, number> };
+        buildEvolutionPrompt: (
+          constitution: string,
+          fileTree: string,
+          lastResult?: IterationResult | null,
+          metricsSection?: string,
+          historySummary?: string
+        ) => string;
       }
-    ).buildDecisionGuidance;
+    ).buildEvolutionPrompt;
 
-    const guidance = buildDecisionGuidance.call(
+    const historySummary =
+      '## Evolution History (factual summary)\n\nTotal: 10 iterations, 7 success, 3 failed (70% success rate)\n\nDecision breakdown (all time):\n  TEST: 6 total, 3 accepted, 3 reverted (50% success)\n  FIX: 4 total, 4 accepted, 0 reverted (100% success)';
+
+    const prompt = buildEvolutionPrompt.call(
       driver,
-      {
-        lintWarnings: 2,
-        coverage: { branches: 92, functions: 95, lines: 95, statements: 95 },
-        branchHotspots: [{ file: 'src/core/foo.ts', branches: 91 }],
-      },
-      {
-        iteration: 3,
-        success: false,
-        failureStage: 'verification',
-      }
+      '',
+      'src/index.ts',
+      null,
+      '',
+      historySummary
     );
 
-    expect(guidance.recommendedDecision).toBe('FIX');
-    expect(guidance.scores.FIX).toBeGreaterThan(guidance.scores.TEST);
-    expect(guidance.reasons.join(' ')).toContain('Previous iteration failed');
-  });
-
-  it('recommends TEST when a core branch hotspot is weak', () => {
-    const mockLogger = jest.fn();
-    driver = new SelfDriver({ logger: mockLogger });
-
-    const buildDecisionGuidance = (
-      driver as unknown as {
-        buildDecisionGuidance: (
-          metrics: {
-            lintWarnings?: number;
-            coverage?: { branches: number; functions: number; lines: number; statements: number };
-            branchHotspots?: Array<{ file: string; branches: number }>;
-          } | null,
-          lastResult?: IterationResult | null
-        ) => { recommendedDecision: string; reasons: string[]; scores: Record<string, number> };
-      }
-    ).buildDecisionGuidance;
-
-    const guidance = buildDecisionGuidance.call(driver, {
-      lintWarnings: 0,
-      coverage: { branches: 88, functions: 90, lines: 91, statements: 91 },
-      branchHotspots: [{ file: 'src/core/engine-resolver.ts', branches: 55 }],
-    });
-
-    expect(guidance.recommendedDecision).toBe('TEST');
-    expect(guidance.reasons.join(' ')).toContain('src/core/engine-resolver.ts');
-  });
-
-  it('recommends SKIP when metrics are already healthy', () => {
-    const mockLogger = jest.fn();
-    driver = new SelfDriver({ logger: mockLogger });
-
-    const buildDecisionGuidance = (
-      driver as unknown as {
-        buildDecisionGuidance: (
-          metrics: {
-            lintWarnings?: number;
-            coverage?: { branches: number; functions: number; lines: number; statements: number };
-            branchHotspots?: Array<{ file: string; branches: number }>;
-          } | null,
-          lastResult?: IterationResult | null
-        ) => { recommendedDecision: string; reasons: string[]; scores: Record<string, number> };
-      }
-    ).buildDecisionGuidance;
-
-    const guidance = buildDecisionGuidance.call(driver, {
-      lintWarnings: 0,
-      coverage: { branches: 98, functions: 97, lines: 98, statements: 98 },
-      branchHotspots: [{ file: 'src/core/project-runner.ts', branches: 97 }],
-    });
-
-    expect(guidance.recommendedDecision).toBe('SKIP');
-    expect(guidance.scores.SKIP).toBeGreaterThan(guidance.scores.REFACTOR);
+    expect(prompt).toContain('Evolution History (factual summary)');
+    expect(prompt).toContain('10 iterations');
+    expect(prompt).toContain('TEST: 6 total');
   });
 });
 
@@ -6255,7 +6169,7 @@ describe('coverage baseline gate', () => {
     expect(mockExeca).toHaveBeenCalledWith('npm', ['test', '--', '--coverage'], expect.any(Object));
   });
 
-  it('does not add --coverage flag when coverageBaseline is not set', async () => {
+  it('always adds --coverage flag even when coverageBaseline is not set', async () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ logger: mockLogger });
 
@@ -6264,8 +6178,12 @@ describe('coverage baseline gate', () => {
     const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
     await verify.call(driver);
 
-    // Check that npm test was called without --coverage
-    expect(mockExeca).toHaveBeenCalledWith('npm', ['test'], expect.any(Object));
+    // Coverage is always collected for metrics and history
+    expect(mockExeca).toHaveBeenCalledWith(
+      'npm',
+      ['test', '--', '--coverage'],
+      expect.any(Object)
+    );
   });
 
   it('coverage gate failure stops verify', async () => {

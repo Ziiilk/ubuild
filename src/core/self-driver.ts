@@ -7,13 +7,11 @@
  *
  * @module core/self-driver
  */
-
 import { execa } from 'execa';
 import { Logger, formatTimestamp } from '../utils/logger';
 import { formatErrorWithPrefix } from '../utils/error';
 import fs from 'fs-extra';
 import path from 'path';
-
 import { EVOLUTION_VERIFY_COMMANDS } from '../types/evolve';
 import type {
   SelfEvolverOptions,
@@ -23,10 +21,9 @@ import type {
   BranchCoverageHotspot,
   VerificationMetrics,
   MetricDelta,
-  DecisionGuidance,
-  EvolutionDecision,
+  EvolutionReport,
 } from '../types/evolve';
-
+import { readEvolutionReport, formatHistorySummary } from './evolution-reporter';
 export type {
   SelfEvolverOptions,
   IterationResult,
@@ -35,10 +32,7 @@ export type {
   BranchCoverageHotspot,
   VerificationMetrics,
   MetricDelta,
-  DecisionGuidance,
-  EvolutionDecision,
 };
-
 /** Shape of the "total" section in coverage-summary.json used by coverage-related methods. */
 interface CoverageTotal {
   branches?: { pct?: number };
@@ -46,14 +40,12 @@ interface CoverageTotal {
   lines?: { pct?: number };
   statements?: { pct?: number };
 }
-
 /** Shape of execa command results used internally for safe command execution. */
 interface ExecaResult {
   exitCode: number;
   stdout: string;
   stderr: string;
 }
-
 /** Validation result for committed changes between two revisions. */
 interface CommittedChangeValidationResult {
   valid: boolean;
@@ -61,13 +53,11 @@ interface CommittedChangeValidationResult {
   total: number;
   withinLimit: boolean;
 }
-
 /** Validation result for whether a TEST decision cleared the minimum value bar. */
 interface TestDecisionValidationResult {
   valid: boolean;
   reason?: string;
 }
-
 /** Default sleep duration between iterations in milliseconds */
 const DEFAULT_SLEEP_MS = 5000;
 /** Default timeout for verification checks in milliseconds */
@@ -93,13 +83,6 @@ const COMMIT_MISSED_DETAIL = 'Verification passed but AI did not commit changes 
 /** Error detail when verification passes but AI leaves extra uncommitted changes. */
 const PARTIAL_COMMIT_DETAIL =
   'Verification passed but AI left uncommitted changes after partial commit';
-/** Coverage threshold below which tests should be strongly preferred. */
-const HOTSPOT_BRANCH_THRESHOLD = 85;
-/** Coverage threshold that still suggests unfinished test work. */
-const HEALTHY_BRANCH_THRESHOLD = 95;
-/** Lint warning count that should push the system toward FIX. */
-const LINT_WARNING_THRESHOLD = 1;
-
 export class SelfDriver {
   private log: (msg: string) => void;
   private projectRoot: string;
@@ -134,7 +117,6 @@ export class SelfDriver {
     lines: number;
     statements: number;
   } | null;
-
   /**
    * Validates that a numeric option is a positive number.
    * @param value - The value to validate
@@ -146,7 +128,6 @@ export class SelfDriver {
       throw new Error(`Invalid ${name}: ${value}. Must be a positive number.`);
     }
   }
-
   /**
    * Creates a new SelfDriver instance.
    * @param options - Configuration options for the evolution process
@@ -167,7 +148,6 @@ export class SelfDriver {
     this.allowedPaths = options.allowedPaths ?? DEFAULT_ALLOWED_PATHS;
     this.maxDiffLines = options.maxDiffLines ?? DEFAULT_MAX_DIFF_LINES;
     this.coverageBaseline = options.coverageBaseline ?? null;
-
     // Validate options
     SelfDriver.validatePositive(this.sleepMs, 'sleepMs');
     if (this.maxRetries < -1) {
@@ -175,10 +155,8 @@ export class SelfDriver {
     }
     SelfDriver.validatePositive(this.verifyTimeoutMs, 'verifyTimeoutMs');
     SelfDriver.validatePositive(this.opencodeTimeoutMs, 'opencodeTimeoutMs');
-
     this.setupSignalHandlers();
   }
-
   /**
    * Truncates output to the specified maximum length for log display.
    * @param output - The string to potentially truncate
@@ -188,7 +166,6 @@ export class SelfDriver {
   private truncateOutput(output: string, maxLength: number): string {
     return output.length > maxLength ? output.slice(0, maxLength) + '...(truncated)' : output;
   }
-
   /**
    * Writes a structured evolution record to the JSONL log file.
    * Failures are logged as warnings but do not interrupt the evolution process.
@@ -202,7 +179,6 @@ export class SelfDriver {
       this.log(`⚠️  ${formatErrorWithPrefix('Could not write evolution log', error)}`);
     }
   }
-
   /**
    * Checks whether a repository file should be treated as a core production file.
    * Excludes tests, test utilities, and pure type barrels from hotspot prioritization.
@@ -217,26 +193,21 @@ export class SelfDriver {
       !normalized.startsWith('src/types/')
     );
   }
-
   /**
    * Parses git shortstat output and returns the total changed lines.
    */
   private parseDiffTotal(output: string): number {
     const trimmed = output.trim();
     if (!trimmed) return 0;
-
     const insertions = trimmed.match(/(\d+)\s+insertion/);
     const deletions = trimmed.match(/(\d+)\s+deletion/);
-
     return parseInt(insertions?.[1] ?? '0', 10) + parseInt(deletions?.[1] ?? '0', 10);
   }
-
   /**
    * Collects path policy violations for a set of changed files.
    */
   private collectPathViolations(changedFiles: string[]): string[] {
     const violations: string[] = [];
-
     for (const file of changedFiles) {
       let isForbidden = false;
       for (const pattern of this.forbiddenPaths) {
@@ -246,7 +217,6 @@ export class SelfDriver {
           break;
         }
       }
-
       if (!isForbidden && this.allowedPaths.length > 0) {
         const isAllowed = this.allowedPaths.some((pattern) => this.matchesGlobPattern(file, pattern));
         if (!isAllowed) {
@@ -254,10 +224,8 @@ export class SelfDriver {
         }
       }
     }
-
     return violations;
   }
-
   /**
    * Extracts total coverage values from a parsed coverage summary.
    */
@@ -266,7 +234,6 @@ export class SelfDriver {
     if (!total) {
       return null;
     }
-
     return {
       branches: total.branches?.pct ?? 0,
       functions: total.functions?.pct ?? 0,
@@ -274,7 +241,6 @@ export class SelfDriver {
       statements: total.statements?.pct ?? 0,
     };
   }
-
   /**
    * Collects the lowest branch-coverage core files from a parsed coverage summary.
    */
@@ -283,23 +249,19 @@ export class SelfDriver {
     maxFiles = 3
   ): BranchCoverageHotspot[] {
     const hotspots: BranchCoverageHotspot[] = [];
-
     for (const [key, value] of Object.entries(summary)) {
       if (key === 'total' || !this.isCoreSourceFile(key)) {
         continue;
       }
-
       const entry = value as { branches?: { pct?: number } };
       const pct = entry.branches?.pct;
       if (typeof pct === 'number' && pct < 100) {
         hotspots.push({ file: key, branches: pct });
       }
     }
-
     hotspots.sort((left, right) => left.branches - right.branches);
     return hotspots.slice(0, maxFiles);
   }
-
   /**
    * Formats the branch-coverage hotspots section for the evolution prompt.
    */
@@ -311,12 +273,10 @@ export class SelfDriver {
     if (hotspots.length === 0) {
       return null;
     }
-
     return `- Branch Coverage Hotspots:\n${hotspots
       .map((hotspot) => `  - ${hotspot.file} (${hotspot.branches}% branches)`)
       .join('\n')}`;
   }
-
   /**
    * Parses ESLint JSON output and returns the total warning count.
    */
@@ -325,15 +285,12 @@ export class SelfDriver {
     if (!Array.isArray(parsed)) {
       return null;
     }
-
     let totalWarnings = 0;
     for (const file of parsed) {
       totalWarnings += file.warningCount ?? 0;
     }
-
     return totalWarnings;
   }
-
   /**
    * Reads the current ESLint warning count in JSON form for logging and metric deltas.
    */
@@ -343,14 +300,12 @@ export class SelfDriver {
         timeout: this.verifyTimeoutMs,
       });
       if (!result) return null;
-
       return this.countLintWarnings(result.stdout);
     } catch (error) {
       this.log(`⚠️  ${formatErrorWithPrefix('Could not gather lint warnings', error)}`);
       return null;
     }
   }
-
   /**
    * Captures verification metrics for evolution logging and metric delta computation.
    */
@@ -359,21 +314,17 @@ export class SelfDriver {
       this.readCoverageSummary(),
       this.readLintWarningCount(),
     ]);
-
     const coverage = summary ? this.extractCoverageSnapshot(summary) : null;
     const branchHotspots = summary ? this.collectBranchCoverageHotspots(summary) : [];
-
     if (!coverage && lintWarnings === null && branchHotspots.length === 0) {
       return null;
     }
-
     return {
       coverage: coverage ?? undefined,
       lintWarnings: lintWarnings ?? undefined,
       branchHotspots: branchHotspots.length > 0 ? branchHotspots : undefined,
     };
   }
-
   /**
    * Computes metric deltas between the pre- and post-iteration snapshots.
    */
@@ -382,133 +333,17 @@ export class SelfDriver {
     after: VerificationMetrics | null
   ): MetricDelta | undefined {
     const delta: MetricDelta = {};
-
     if (before?.coverage && after?.coverage) {
       delta.branches = after.coverage.branches - before.coverage.branches;
       delta.functions = after.coverage.functions - before.coverage.functions;
       delta.lines = after.coverage.lines - before.coverage.lines;
       delta.statements = after.coverage.statements - before.coverage.statements;
     }
-
     if (typeof before?.lintWarnings === 'number' && typeof after?.lintWarnings === 'number') {
       delta.lintWarnings = after.lintWarnings - before.lintWarnings;
     }
-
     return Object.keys(delta).length > 0 ? delta : undefined;
   }
-
-  /**
-   * Builds an explicit decision recommendation from metrics and prior iteration context.
-   */
-  private buildDecisionGuidance(
-    metrics: VerificationMetrics | null,
-    lastResult?: IterationResult | null
-  ): DecisionGuidance {
-    const scores: Record<EvolutionDecision, number> = {
-      FIX: 0,
-      TEST: 0,
-      REFACTOR: 0,
-      FEATURE: 0,
-      SKIP: 0,
-    };
-    const reasons: string[] = [];
-
-    if (lastResult && !lastResult.success) {
-      scores.FIX += 5;
-      reasons.push(
-        `Previous iteration failed at ${lastResult.failureStage ?? 'unknown'} stage, so stabilize that path first.`
-      );
-    }
-
-    const lintWarnings = metrics?.lintWarnings ?? 0;
-    if (lintWarnings >= LINT_WARNING_THRESHOLD) {
-      scores.FIX += 4;
-      reasons.push(`ESLint still reports ${lintWarnings} warning(s), so cleanup and bug fixing outrank new churn.`);
-    }
-
-    const coverage = metrics?.coverage;
-    if (coverage) {
-      const lowCoverageAreas = [
-        coverage.branches < HOTSPOT_BRANCH_THRESHOLD ? 'branches' : null,
-        coverage.functions < HOTSPOT_BRANCH_THRESHOLD ? 'functions' : null,
-        coverage.lines < HOTSPOT_BRANCH_THRESHOLD ? 'lines' : null,
-        coverage.statements < HOTSPOT_BRANCH_THRESHOLD ? 'statements' : null,
-      ].filter((area): area is string => area !== null);
-
-      if (lowCoverageAreas.length > 0) {
-        scores.TEST += 3;
-        reasons.push(`Global coverage is still weak in ${lowCoverageAreas.join(', ')}, so tests have clear value.`);
-      }
-    }
-
-    const worstHotspot = metrics?.branchHotspots?.[0];
-    if (worstHotspot) {
-      if (worstHotspot.branches < HOTSPOT_BRANCH_THRESHOLD) {
-        scores.TEST += 5;
-        reasons.push(
-          `Lowest branch hotspot is ${worstHotspot.file} at ${worstHotspot.branches}%, so target a concrete missing branch there.`
-        );
-      } else if (worstHotspot.branches < HEALTHY_BRANCH_THRESHOLD) {
-        scores.TEST += 2;
-        reasons.push(
-          `Branch hotspots remain in core files, led by ${worstHotspot.file} at ${worstHotspot.branches}%.`
-        );
-      }
-    }
-
-    const metricsHealthy =
-      lintWarnings === 0 &&
-      (!coverage ||
-        (coverage.branches >= HEALTHY_BRANCH_THRESHOLD &&
-          coverage.functions >= HOTSPOT_BRANCH_THRESHOLD &&
-          coverage.lines >= HOTSPOT_BRANCH_THRESHOLD &&
-          coverage.statements >= HOTSPOT_BRANCH_THRESHOLD)) &&
-      (!worstHotspot || worstHotspot.branches >= HEALTHY_BRANCH_THRESHOLD);
-
-    if (metricsHealthy) {
-      scores.SKIP += 4;
-      scores.REFACTOR += 2;
-      reasons.push('Lint and branch hotspots are already healthy, so broad churn is likely low value.');
-    } else if (lintWarnings === 0) {
-      scores.REFACTOR += 1;
-    }
-
-    const recommendedDecision = (Object.entries(scores) as Array<[EvolutionDecision, number]>).sort(
-      (left, right) => right[1] - left[1]
-    )[0][0];
-
-    if (reasons.length === 0) {
-      reasons.push('No urgent signal detected; prefer the smallest useful change or SKIP.');
-    }
-
-    return {
-      recommendedDecision,
-      reasons,
-      scores,
-    };
-  }
-
-  /**
-   * Formats the decision recommendation section for the evolution prompt.
-   */
-  private buildDecisionGuidanceSection(guidance: DecisionGuidance): string {
-    const scoreLines = (Object.entries(guidance.scores) as Array<[EvolutionDecision, number]>).map(
-      ([decision, score]) => `- ${decision}: ${score}`
-    );
-
-    return [
-      '',
-      '## Recommended Decision',
-      `System recommendation: ${guidance.recommendedDecision}`,
-      'Why:',
-      ...guidance.reasons.map((reason) => `- ${reason}`),
-      'Scorecard:',
-      ...scoreLines,
-      '',
-      'If you choose a different decision, make sure the codebase evidence clearly justifies it.',
-    ].join('\n');
-  }
-
   /**
    * Checks whether a file is a Jest test file.
    */
@@ -516,7 +351,6 @@ export class SelfDriver {
     const normalized = filePath.replace(/\\/g, '/');
     return normalized.endsWith('.test.ts') || normalized.endsWith('.spec.ts');
   }
-
   /**
    * Normalizes a file path to a module identity so source and colocated test files can be matched.
    */
@@ -526,14 +360,12 @@ export class SelfDriver {
       .replace(/\.(test|spec)(?=\.ts$)/, '')
       .replace(/\.ts$/, '');
   }
-
   /**
    * Determines whether two files belong to the same source/test module area.
    */
   private areRelatedModuleFiles(left: string, right: string): boolean {
     return this.toModuleIdentity(left) === this.toModuleIdentity(right);
   }
-
   /**
    * Enforces a minimum-value bar for committed TEST decisions.
    * TEST commits must either target an existing hotspot, cover a prior failure path,
@@ -549,7 +381,6 @@ export class SelfDriver {
     if (decision !== 'TEST') {
       return { valid: true };
     }
-
     const changedFiles = filesChanged ?? [];
     const changedTestFiles = changedFiles.filter((file) => this.isTestFile(file));
     if (changedTestFiles.length === 0) {
@@ -558,19 +389,16 @@ export class SelfDriver {
         reason: 'TEST decision did not modify any test files',
       };
     }
-
     const targetsHotspot =
       metricsBefore?.branchHotspots?.some((hotspot) =>
         changedFiles.some((file) => this.areRelatedModuleFiles(file, hotspot.file))
       ) ?? false;
-
     const targetsFailurePath =
       (!!lastResult &&
         !lastResult.success &&
         !!lastResult.filesChanged?.some((previousFile) =>
           changedFiles.some((file) => this.areRelatedModuleFiles(file, previousFile))
         )) ?? false;
-
     const coverageImproved =
       !!metricsBefore?.coverage &&
       !!metricsAfter?.coverage &&
@@ -578,18 +406,15 @@ export class SelfDriver {
         metricsAfter.coverage.functions > metricsBefore.coverage.functions ||
         metricsAfter.coverage.lines > metricsBefore.coverage.lines ||
         metricsAfter.coverage.statements > metricsBefore.coverage.statements);
-
     if (targetsHotspot || targetsFailurePath || coverageImproved) {
       return { valid: true };
     }
-
     return {
       valid: false,
       reason:
         'TEST decision did not target a hotspot, did not cover a prior failure path, and did not improve coverage',
     };
   }
-
   /**
    * Checks if a file path matches a glob pattern.
    * Supports exact match and directory prefix (ending with /**).
@@ -597,19 +422,15 @@ export class SelfDriver {
   private matchesGlobPattern(filePath: string, pattern: string): boolean {
     const normalized = filePath.replace(/\\/g, '/');
     const normalizedPattern = pattern.replace(/\\/g, '/');
-
     // Exact match
     if (normalized === normalizedPattern) return true;
-
     // Directory glob: "dir/**" matches any file under that directory
     if (normalizedPattern.endsWith('/**')) {
       const prefix = normalizedPattern.slice(0, -2);
       if (normalized.startsWith(prefix)) return true;
     }
-
     return false;
   }
-
   /**
    * Validates that changed files do not violate forbidden path patterns
    * and are within the allowed paths whitelist.
@@ -619,28 +440,22 @@ export class SelfDriver {
     if (this.forbiddenPaths.length === 0 && this.allowedPaths.length === 0) {
       return { valid: true, violations: [] };
     }
-
     // Use HEAD to include both staged and unstaged changes
     const result = await this.safeExeca('git', ['diff', '--name-only', 'HEAD']);
     if (!result) {
       this.log('⚠️  Could not determine changed files, skipping file validation');
       return { valid: true, violations: [] };
     }
-
     const changedFiles = result.stdout
       .split('\n')
       .map((f) => f.trim())
       .filter((f) => f.length > 0);
-
     if (changedFiles.length === 0) {
       return { valid: true, violations: [] };
     }
-
     const violations = this.collectPathViolations(changedFiles);
-
     return { valid: violations.length === 0, violations };
   }
-
   /**
    * Checks if the total number of changed lines exceeds the configured limit.
    * Parses `git diff --shortstat` output like " 3 files changed, 10 insertions(+), 5 deletions(-)"
@@ -650,23 +465,19 @@ export class SelfDriver {
     if (this.maxDiffLines <= 0) {
       return { total: 0, withinLimit: true };
     }
-
     // Use HEAD to include both staged and unstaged changes
     const result = await this.safeExeca('git', ['diff', '--shortstat', 'HEAD']);
     if (!result) {
       this.log('⚠️  Could not determine diff size, skipping size check');
       return { total: 0, withinLimit: true };
     }
-
     const output = result.stdout.trim();
     if (output.length === 0) {
       return { total: 0, withinLimit: true };
     }
-
     const total = this.parseDiffTotal(output);
     return { total, withinLimit: total <= this.maxDiffLines };
   }
-
   /**
    * Reads and parses the coverage-summary.json file from the last test run.
    * @returns The parsed coverage summary object, or null if unavailable
@@ -684,7 +495,6 @@ export class SelfDriver {
       return null;
     }
   }
-
   /**
    * Formats total coverage metrics from a parsed coverage summary.
    * @param summary - The parsed coverage-summary.json object
@@ -693,15 +503,12 @@ export class SelfDriver {
   private formatCoverageMetrics(summary: Record<string, unknown>): string | null {
     const total = summary?.total as CoverageTotal | undefined;
     if (!total) return null;
-
     const b = total.branches?.pct ?? '?';
     const f = total.functions?.pct ?? '?';
     const l = total.lines?.pct ?? '?';
     const s = total.statements?.pct ?? '?';
-
     return `- Test Coverage: branches ${b}%, functions ${f}%, lines ${l}%, statements ${s}%`;
   }
-
   /**
    * Finds and formats the files with the lowest line coverage from a parsed summary.
    * @param summary - The parsed coverage-summary.json object
@@ -718,15 +525,11 @@ export class SelfDriver {
         fileEntries.push({ file: key, pct });
       }
     }
-
     if (fileEntries.length === 0) return null;
-
     fileEntries.sort((a, b) => a.pct - b.pct);
     const lowest = fileEntries.slice(0, maxFiles);
-
     return `- Lowest Coverage Files:\n${lowest.map((f) => `  - ${f.file} (${f.pct}%)`).join('\n')}`;
   }
-
   /**
    * Gathers ESLint warning count from the project.
    * Runs eslint in JSON format and counts warnings.
@@ -736,7 +539,6 @@ export class SelfDriver {
     const totalWarnings = await this.readLintWarningCount();
     return totalWarnings === null ? null : `- ESLint Warnings: ${totalWarnings}`;
   }
-
   /**
    * Gathers code health metrics (coverage + lint warnings) for the evolution prompt.
    * Returns a formatted section string, or empty string if no metrics are available.
@@ -746,22 +548,17 @@ export class SelfDriver {
       this.readCoverageSummary(),
       this.gatherLintWarnings(),
     ]);
-
     const coverage = summary ? this.formatCoverageMetrics(summary) : null;
     const branchHotspots = summary ? this.formatBranchCoverageHotspots(summary) : null;
     const lowestFiles = summary ? this.formatLowestCoverageFiles(summary) : null;
-
     const lines: string[] = [];
     if (coverage) lines.push(coverage);
     if (branchHotspots) lines.push(branchHotspots);
     if (lowestFiles) lines.push(lowestFiles);
     if (lint) lines.push(lint);
-
     if (lines.length === 0) return '';
-
-    return `\n## Code Health Metrics\n${lines.join('\n')}\n\nPrioritize:\n- First target the listed branch hotspots in core production files\n- If you choose TEST, cover a concrete bug path, failure path, or missing branch from those hotspots\n- If lint warnings > 0, prefer FIX over adding low-value tests\n- Prefer SKIP over broad churn when hotspots and lint are already healthy`;
+    return `\n## Code Health Metrics\n${lines.join('\n')}`;
   }
-
   /**
    * Checks if code coverage meets the configured baseline thresholds.
    * Reads coverage-summary.json and compares each metric against the baseline.
@@ -771,17 +568,14 @@ export class SelfDriver {
     if (!this.coverageBaseline) {
       return { passed: true, details: 'coverage gate disabled' };
     }
-
     const summary = await this.readCoverageSummary();
     if (!summary) {
       return { passed: false, details: 'coverage-summary.json not found' };
     }
-
     const total = summary.total as CoverageTotal | undefined;
     if (!total) {
       return { passed: false, details: 'coverage-summary.json missing total section' };
     }
-
     const failures: string[] = [];
     const metrics: Array<{ key: string; actual: number; expected: number }> = [
       {
@@ -801,20 +595,16 @@ export class SelfDriver {
         expected: this.coverageBaseline.statements,
       },
     ];
-
     for (const { key, actual, expected } of metrics) {
       if (actual < expected) {
         failures.push(`${key}: ${actual}% < ${expected}%`);
       }
     }
-
     if (failures.length > 0) {
       return { passed: false, details: failures.join(', ') };
     }
-
     return { passed: true, details: 'all coverage thresholds met' };
   }
-
   /**
    * Validates the committed diff between two revisions against path and size policies.
    */
@@ -824,10 +614,8 @@ export class SelfDriver {
   ): Promise<CommittedChangeValidationResult> {
     const changedFiles = (await this.getChangedFilesList(beforeHash, afterHash)) ?? [];
     const violations = this.collectPathViolations(changedFiles);
-
     let total = 0;
     let withinLimit = true;
-
     if (this.maxDiffLines > 0) {
       const diffResult = await this.safeExeca('git', ['diff', '--shortstat', beforeHash, afterHash]);
       if (!diffResult) {
@@ -837,7 +625,6 @@ export class SelfDriver {
         withinLimit = total <= this.maxDiffLines;
       }
     }
-
     return {
       valid: violations.length === 0 && withinLimit,
       violations,
@@ -845,7 +632,6 @@ export class SelfDriver {
       withinLimit,
     };
   }
-
   /**
    * Reverts a committed iteration back to the known-safe commit hash.
    */
@@ -855,7 +641,6 @@ export class SelfDriver {
       this.log('⚠️  Git hard reset failed');
       return false;
     }
-
     if (!this.keepUntracked) {
       const cleanResult = await this.safeExeca('git', ['clean', '-fd']);
       if (!cleanResult || cleanResult.exitCode !== 0) {
@@ -865,11 +650,9 @@ export class SelfDriver {
     } else {
       this.log('ℹ️  Preserving untracked files (--keep-untracked)');
     }
-
     this.log(`🔄 Reverted committed iteration to ${beforeHash}`);
     return true;
   }
-
   /**
    * Safely executes a command with execa, catching errors and returning null on failure.
    * Logs errors with context for debugging.
@@ -891,7 +674,6 @@ export class SelfDriver {
       return null;
     }
   }
-
   /**
    * Sets up signal handlers for graceful interruption (Ctrl+C, SIGTERM).
    */
@@ -900,7 +682,6 @@ export class SelfDriver {
     if (this.sigintHandler && this.sigtermHandler) {
       return;
     }
-
     this.sigintHandler = (): void => {
       this.interrupted = true;
       this.log('\n\n⚠️  Interrupted by user (Ctrl+C)');
@@ -911,7 +692,6 @@ export class SelfDriver {
       this.log('\n\n⚠️  Interrupted by SIGTERM');
       this.interruptSleep();
     };
-
     // Increase max listeners once to prevent memory leak warnings with multiple handlers
     // Track whether THIS instance increased it so we only restore if we did
     const currentMax = process.getMaxListeners();
@@ -920,11 +700,9 @@ export class SelfDriver {
       this.increasedMaxListeners = true;
       process.setMaxListeners(MIN_MAX_LISTENERS);
     }
-
     process.on('SIGINT', this.sigintHandler);
     process.on('SIGTERM', this.sigtermHandler);
   }
-
   /**
    * Immediately resolves any pending sleep promise and clears the timer.
    * Used by signal handlers to provide responsive Ctrl+C behavior.
@@ -939,7 +717,6 @@ export class SelfDriver {
       this.sleepResolve = null;
     }
   }
-
   /**
    * Cleans up signal handlers to prevent memory leaks.
    * Should be called when the driver is no longer needed.
@@ -950,7 +727,6 @@ export class SelfDriver {
     this.interrupted = true;
     this.sleepCancelled = true;
     this.log('🧹 Cleaning up signal handlers and timers...');
-
     if (this.sigintHandler) {
       process.removeListener('SIGINT', this.sigintHandler);
       this.sigintHandler = null;
@@ -970,7 +746,6 @@ export class SelfDriver {
     this.interruptSleep();
     this.log('✅ Cleanup completed');
   }
-
   /**
    * Checks if current directory is a git repository.
    */
@@ -978,7 +753,6 @@ export class SelfDriver {
     const result = await this.safeExeca('git', ['rev-parse', '--git-dir']);
     return result?.exitCode === 0;
   }
-
   /**
    * Checks if OpenCode CLI is installed and available in PATH.
    */
@@ -986,7 +760,6 @@ export class SelfDriver {
     const result = await this.safeExeca('opencode', ['--version']);
     return result?.exitCode === 0;
   }
-
   /**
    * Runs pre-flight checks before starting evolution.
    * @returns true if all checks pass, false otherwise
@@ -999,7 +772,6 @@ export class SelfDriver {
       this.log(`   Current directory: ${this.projectRoot}`);
       return false;
     }
-
     const isClean = await this.isWorkingTreeClean();
     if (!isClean) {
       this.log('❌ Error: Working tree has uncommitted changes');
@@ -1007,7 +779,6 @@ export class SelfDriver {
       this.log('   Commit or stash your changes before running evolve.');
       return false;
     }
-
     const isOpenCodeInstalled = await this.isOpenCodeInstalled();
     if (!isOpenCodeInstalled) {
       this.log('❌ Error: OpenCode is not installed or not in PATH');
@@ -1015,10 +786,8 @@ export class SelfDriver {
       this.log('   Install it with: npm install -g opencode');
       return false;
     }
-
     return true;
   }
-
   /**
    * Resets internal state for a fresh run.
    * Called at the start of `run()` to support re-running after cleanup.
@@ -1031,7 +800,6 @@ export class SelfDriver {
     this.iterationCount = 0;
     this.lastIterationResult = null;
   }
-
   /**
    * Displays dry-run information showing what would be done without executing.
    */
@@ -1052,7 +820,6 @@ export class SelfDriver {
     }
     this.log('\n✨ Dry run complete - no changes made');
   }
-
   /**
    * Displays the start banner for the evolution process.
    */
@@ -1061,7 +828,6 @@ export class SelfDriver {
     this.log(`📁 Project: ${this.projectRoot}`);
     this.log('💡 Press Ctrl+C to stop\n');
   }
-
   /**
    * Runs a single evolution iteration: execute → verify → commit check.
    * @returns 'stop' if evolution should stop entirely, 'retry' if the iteration
@@ -1073,19 +839,17 @@ export class SelfDriver {
     this.iterationStartTime = Date.now();
     const iterationTimestamp = new Date().toISOString();
     this.log(`\n📊 Iteration ${this.iterationCount} starting...`);
-
     // Capture git commit hash before evolution to detect if changes were committed
     const beforeCommitHash = await this.getHeadCommitHash();
     const metricsBefore = await this.captureVerificationMetrics();
-    const decisionGuidance = this.buildDecisionGuidance(metricsBefore, this.lastIterationResult);
-
+    const historyReport = await readEvolutionReport(
+      path.join(this.projectRoot, this.logFile)
+    );
     // 1. Read constitution file
     const constitution = await this.readConstitution();
-
     // 2. AI analyzes, executes, and commits autonomously
     this.log('\n🤖 AI analyzing and evolving...');
-    const executed = await this.evolveWithOpenCode(constitution, decisionGuidance);
-
+    const executed = await this.evolveWithOpenCode(constitution, historyReport);
     if (!executed) {
       this.lastIterationResult = {
         iteration: this.iterationCount,
@@ -1100,17 +864,14 @@ export class SelfDriver {
         failureStage: 'execution',
         failureDetail: 'OpenCode execution failed or timed out',
         metricsBefore: metricsBefore ?? undefined,
-        decisionGuidance,
         durationMs: Date.now() - this.iterationStartTime,
       });
       const shouldStop = this.handleEvolutionFailure('Evolution execution issue');
       return shouldStop ? 'stop' : 'retry';
     }
-
     // 3. Verify (the only gate)
     this.log('\n🔍 Verifying changes...');
-    const verified = await this.verify(decisionGuidance);
-
+    const verified = await this.verify();
     if (!verified) {
       this.lastIterationResult = {
         iteration: this.iterationCount,
@@ -1125,18 +886,15 @@ export class SelfDriver {
         failureStage: 'verification',
         failureDetail: 'Build, test, or lint checks failed after AI changes',
         metricsBefore: metricsBefore ?? undefined,
-        decisionGuidance,
         durationMs: Date.now() - this.iterationStartTime,
       });
       this.log('❌ Verification failed, reverting...');
       const revertSuccess = await this.revert();
       return this.handleRevertFailure(revertSuccess, 'Verification failed') ? 'completed' : 'stop';
     }
-
     // Verification passed, check if AI has committed by comparing commit hashes
     const isClean = await this.isWorkingTreeClean();
     const afterCommitHash = await this.getHeadCommitHash();
-
     // Track hash comparison state - null means we couldn't determine the hash
     const beforeHashError = beforeCommitHash === null;
     const afterHashError = afterCommitHash === null;
@@ -1155,7 +913,6 @@ export class SelfDriver {
       metricsAfter,
       this.lastIterationResult
     );
-
     const shouldContinue = await this.handlePostVerificationState(
       isClean,
       hashChanged,
@@ -1165,7 +922,6 @@ export class SelfDriver {
       decision,
       testDecisionValidation
     );
-
     await this.recordIterationOutcome(
       iterationTimestamp,
       isClean,
@@ -1176,13 +932,10 @@ export class SelfDriver {
       committedValidation,
       testDecisionValidation,
       metricsBefore,
-      metricsAfter,
-      decisionGuidance
+      metricsAfter
     );
-
     return shouldContinue ? 'completed' : 'stop';
   }
-
   /**
    * Records the iteration outcome based on working tree state and commit status.
    * Separates result-recording concerns from the iteration control flow.
@@ -1202,16 +955,13 @@ export class SelfDriver {
     committedValidation: CommittedChangeValidationResult | null,
     testDecisionValidation: TestDecisionValidationResult,
     metricsBefore: VerificationMetrics | null,
-    metricsAfter: VerificationMetrics | null,
-    decisionGuidance: DecisionGuidance
+    metricsAfter: VerificationMetrics | null
   ): Promise<void> {
     const durationMs = Date.now() - this.iterationStartTime;
     const metricDelta = this.calculateMetricDelta(metricsBefore, metricsAfter);
-
     if (isClean && hashChanged && !testDecisionValidation.valid) {
       const failureDetail =
         testDecisionValidation.reason ?? 'TEST decision did not clear the minimum value bar';
-
       this.lastIterationResult = {
         iteration: this.iterationCount,
         success: false,
@@ -1232,17 +982,14 @@ export class SelfDriver {
         metricsBefore: metricsBefore ?? undefined,
         metricsAfter: metricsAfter ?? undefined,
         metricDelta,
-        decisionGuidance,
         durationMs,
       });
       return;
     }
-
     if (isClean && hashChanged && committedValidation && !committedValidation.valid) {
       const failureDetail = committedValidation.violations.length > 0
         ? `Committed changes violated file restrictions: ${committedValidation.violations.join(', ')}`
         : `Committed changes exceeded diff size limit: ${committedValidation.total} lines changed (limit: ${this.maxDiffLines})`;
-
       this.lastIterationResult = {
         iteration: this.iterationCount,
         success: false,
@@ -1263,12 +1010,10 @@ export class SelfDriver {
         metricsBefore: metricsBefore ?? undefined,
         metricsAfter: metricsAfter ?? undefined,
         metricDelta,
-        decisionGuidance,
         durationMs,
       });
       return;
     }
-
     if (isClean && hashChanged) {
       this.lastIterationResult = {
         iteration: this.iterationCount,
@@ -1286,7 +1031,6 @@ export class SelfDriver {
         metricsBefore: metricsBefore ?? undefined,
         metricsAfter: metricsAfter ?? undefined,
         metricDelta,
-        decisionGuidance,
         durationMs,
       });
     } else if (isClean && !hashChanged) {
@@ -1304,7 +1048,6 @@ export class SelfDriver {
         metricsBefore: metricsBefore ?? undefined,
         metricsAfter: metricsAfter ?? undefined,
         metricDelta,
-        decisionGuidance,
         durationMs,
       });
     } else {
@@ -1329,56 +1072,45 @@ export class SelfDriver {
         metricsBefore: metricsBefore ?? undefined,
         metricsAfter: metricsAfter ?? undefined,
         metricDelta,
-        decisionGuidance,
         durationMs,
       });
     }
   }
-
   /**
    * Runs the self-evolution loop - continues indefinitely until interrupted by user.
    */
   async run(): Promise<void> {
     this.resetState();
-
     // Re-register signal handlers if they were cleaned up (allows re-run after cleanup)
     this.setupSignalHandlers();
-
     const preFlightPassed = await this.runPreFlightChecks();
     if (!preFlightPassed) {
       this.cleanup();
       return;
     }
-
     if (this.dryRun) {
       this.displayDryRunInfo();
       this.cleanup();
       return;
     }
-
     this.logStartBanner();
-
     while (!this.interrupted) {
       const result = await this.runIteration();
       if (result === 'stop') {
         return;
       }
-
       // Only check --once for completed iterations (not retries from execution failure)
       if (result === 'completed' && this.once) {
         this.log('\n✨ Single iteration complete (--once flag set)');
         this.cleanup();
         return;
       }
-
       this.log(`\n💤 Waiting ${this.sleepMs / 1000}s before next iteration...`);
       await this.sleep(this.sleepMs);
     }
-
     this.log('\n✨ Evolution stopped');
     this.cleanup();
   }
-
   /**
    * Reads the constitution file (EVOLVE.md).
    */
@@ -1394,7 +1126,6 @@ export class SelfDriver {
     }
     return '';
   }
-
   /**
    * Gets the file tree for context, including source files, config files, and documentation.
    * Includes both tracked and untracked files to provide complete context for evolution.
@@ -1416,18 +1147,15 @@ export class SelfDriver {
       'bin/',
       'src/',
     ]);
-
     if (!result || !result.stdout.trim()) {
       const exitCode = result?.exitCode ?? 'unknown';
       return `Project files (unable to list - git exit code ${exitCode})`;
     }
-
     // Categorize files by type
     const files = result.stdout.split('\n').filter((f) => f.trim());
     const configFiles: string[] = [];
     const binFiles: string[] = [];
     const srcFiles: string[] = [];
-
     for (const file of files) {
       if (file.startsWith('src/')) {
         srcFiles.push(file);
@@ -1443,28 +1171,21 @@ export class SelfDriver {
         configFiles.push(file);
       }
     }
-
     const parts: string[] = [];
-
     if (configFiles.length > 0) {
       parts.push('## Configuration Files\n' + configFiles.join('\n'));
     }
-
     if (binFiles.length > 0) {
       parts.push('## Bin Files\n' + binFiles.join('\n'));
     }
-
     if (srcFiles.length > 0) {
       parts.push('## Source Files\n' + srcFiles.join('\n'));
     }
-
     if (parts.length === 0) {
       return 'Project files (unable to list)';
     }
-
     return parts.join('\n\n');
   }
-
   /**
    * Builds the file restriction section for the evolution prompt.
    * Includes allowed paths and forbidden paths when configured.
@@ -1474,22 +1195,17 @@ export class SelfDriver {
     if (this.forbiddenPaths.length === 0 && this.allowedPaths.length === 0) {
       return '';
     }
-
     const parts: string[] = ['\n## File Restrictions'];
-
     if (this.allowedPaths.length > 0) {
       parts.push('Only modify files under:');
       parts.push(...this.allowedPaths.map((p) => `- ${p}`));
     }
-
     if (this.forbiddenPaths.length > 0) {
       parts.push('Do NOT modify these files/paths:');
       parts.push(...this.forbiddenPaths.map((p) => `- ${p}`));
     }
-
     return parts.join('\n') + '\n';
   }
-
   /**
    * Builds the change size limit section for the evolution prompt.
    * @returns Formatted section string, or empty string if no limit set
@@ -1498,7 +1214,6 @@ export class SelfDriver {
     if (this.maxDiffLines <= 0) {
       return '';
     }
-
     return [
       '',
       '## Change Size Limit',
@@ -1507,7 +1222,6 @@ export class SelfDriver {
       '',
     ].join('\n');
   }
-
   /**
    * Builds the previous iteration context section for the evolution prompt.
    * @param lastResult - The result from the previous iteration
@@ -1516,7 +1230,6 @@ export class SelfDriver {
   private buildPreviousIterationSection(lastResult: IterationResult): string {
     const resultLabel = lastResult.success ? 'SUCCESS' : 'FAILED';
     const parts = [`- Result: ${resultLabel}`];
-
     if (lastResult.decision) {
       parts.push(`- Decision: ${lastResult.decision}`);
     }
@@ -1529,7 +1242,6 @@ export class SelfDriver {
     if (lastResult.filesChanged && lastResult.filesChanged.length > 0) {
       parts.push(`- Files Changed: ${lastResult.filesChanged.join(', ')}`);
     }
-
     return [
       '',
       `## Previous Iteration (#${lastResult.iteration})`,
@@ -1538,7 +1250,6 @@ export class SelfDriver {
       'Do NOT repeat the same approach that failed. Try a different strategy.',
     ].join('\n');
   }
-
   /**
    * Builds the evolution prompt for OpenCode with constitution and file tree.
    * Optionally includes context from the previous iteration to avoid repeated failures.
@@ -1548,99 +1259,79 @@ export class SelfDriver {
     fileTree: string,
     lastResult?: IterationResult | null,
     metricsSection?: string,
-    decisionGuidance?: DecisionGuidance
+    historySummary?: string
   ): string {
     const runner = this.getCommandRunner();
     const cliVerifyCommands = EVOLUTION_VERIFY_COMMANDS.map(
       (cmd) => `   - ${runner.file} ${runner.prefixArgs.join(' ')} ${cmd} --help`
     ).join('\n');
-
     const previousIterationSection = lastResult
       ? this.buildPreviousIterationSection(lastResult)
       : '';
-
     const fileRestrictionSection = this.buildFileRestrictionSection();
     const changeSizeLimitSection = this.buildChangeSizeLimitSection();
-    const decisionGuidanceSection = decisionGuidance
-      ? this.buildDecisionGuidanceSection(decisionGuidance)
-      : '';
-
     const metricsBlock = metricsSection ? `${metricsSection}\n` : '';
-
+    const historyBlock = historySummary ? `\n${historySummary}\n` : '';
     return `${constitution}
 ## Current Codebase
-
 Source files:
 ${fileTree}
-${metricsBlock}${decisionGuidanceSection}## Your Task
-
+${metricsBlock}${historyBlock}## Your Task
 Read and analyze the codebase, then decide:
-
 1. FIX - Fix bugs, errors, or broken functionality
 2. TEST - Add tests for uncovered code
 3. REFACTOR - Simplify complex code
 4. FEATURE - Add small, useful new functionality (only if base is solid)
 5. SKIP - Codebase is healthy, no changes needed this round
-
 Execute your decision. Make minimal, focused changes.
-If you choose TEST, target a concrete missing branch or failure path from the branch hotspots first.
-Prefer SKIP over low-value churn when the remaining work is mostly metric polishing.
 ${fileRestrictionSection}${changeSizeLimitSection}## After Changes
-
 1. **Verify** all pass:
    - npm run build
    - npm test
    - npm run lint
 ${cliVerifyCommands}
-
 2. **Commit** if verification passes:
    \`\`\`bash
    git add -A
    git commit -m "type: description"
    \`\`\`
-
     Use conventional commit types:
     - \`fix:\` - bug fixes
     - \`test:\` - adding tests
     - \`refactor:\` - code improvements
     - \`feat:\` - new features
-
 If verification fails, do NOT commit - the system will revert automatically.${previousIterationSection}`;
   }
-
   /**
    * Invokes OpenCode to apply improvements.
    */
   private async evolveWithOpenCode(
     constitution: string,
-    decisionGuidance: DecisionGuidance
+    historyReport?: EvolutionReport | null
   ): Promise<boolean> {
     const fileTree = await this.getFileTree();
     const metricsSection = await this.gatherCodeHealthMetrics();
+    const historySummary = historyReport ? formatHistorySummary(historyReport) : '';
     const prompt = this.buildEvolutionPrompt(
       constitution,
       fileTree,
       this.lastIterationResult,
       metricsSection,
-      decisionGuidance
+      historySummary
     );
-
     try {
       this.log('🚀 Executing OpenCode...');
-
       const result = await execa('opencode', ['run', prompt], {
         cwd: this.projectRoot,
         stdio: ['inherit', 'pipe', 'pipe'], // Capture stdout/stderr for debugging
         reject: false,
         timeout: this.opencodeTimeoutMs, // 10 minutes timeout to prevent indefinite hangs
       });
-
       // Log stderr if present for debugging
       if (result.stderr && result.stderr.trim()) {
         const stderrPreview = this.truncateOutput(result.stderr, OPENCODE_STDERR_PREVIEW_LIMIT);
         this.log(`OpenCode stderr: ${stderrPreview}`);
       }
-
       // Check if OpenCode timed out - revert any partial changes
       if (result.timedOut) {
         this.log('⚠️  OpenCode timed out, reverting any partial changes...');
@@ -1650,12 +1341,10 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
         }
         return false;
       }
-
       if (result.exitCode !== 0) {
         this.log(`⚠️  OpenCode exited with code ${result.exitCode}`);
         return false;
       }
-
       this.log('✅ OpenCode execution completed');
       return true;
     } catch (error) {
@@ -1663,7 +1352,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       return false;
     }
   }
-
   /**
    * Returns the command runner configuration based on the useTsNode setting.
    * Centralizes the ts-node vs dist branching used by both verify() and buildEvolutionPrompt().
@@ -1673,13 +1361,12 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       ? { file: 'npx', prefixArgs: ['ts-node', 'src/cli/index.ts'] }
       : { file: 'node', prefixArgs: ['dist/cli/index.js'] };
   }
-
   /**
    * Comprehensive verification - includes self-verification.
    * Uses EVOLUTION_VERIFY_COMMANDS to dynamically check all CLI commands.
    * When adding new commands, add them to EVOLUTION_VERIFY_COMMANDS in types/evolve.ts.
    */
-  private async verify(decisionGuidance?: DecisionGuidance): Promise<boolean> {
+  private async verify(): Promise<boolean> {
     // Check forbidden file changes before running expensive build/test/lint
     const { valid, violations } = await this.validateChangedFiles();
     if (!valid) {
@@ -1689,21 +1376,18 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       }
       return false;
     }
-
     // Check diff size limit
     const { total, withinLimit } = await this.checkDiffSize();
     if (!withinLimit) {
       this.log(`  ❌ Change too large: ${total} lines changed (limit: ${this.maxDiffLines})`);
       return false;
     }
-
     const runner = this.getCommandRunner();
     const commandChecks = EVOLUTION_VERIFY_COMMANDS.map((cmd) => ({
       name: `${cmd.charAt(0).toUpperCase() + cmd.slice(1)} command`,
       file: runner.file,
       args: [...runner.prefixArgs, cmd, '--help'],
     }));
-
     // Stage 1: Build (must succeed first to produce dist/ artifacts)
     const buildCheck = { name: 'Build', file: 'npm', args: ['run', 'build'] };
     this.log(`  Checking ${buildCheck.name}...`);
@@ -1715,16 +1399,13 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       return false;
     }
     this.log(`  ✅ ${buildCheck.name} passed`);
-
     // Stage 2: Tests + Lint (independent, can run in parallel)
-    const shouldCollectCoverage =
-      !!this.coverageBaseline || decisionGuidance?.recommendedDecision === 'TEST';
-    const testArgs = shouldCollectCoverage ? ['test', '--', '--coverage'] : ['test'];
+    // Always collect coverage — the data is needed for TEST validation and metric logging.
+    const testArgs = ['test', '--', '--coverage'];
     const parallelChecks = [
       { name: 'Tests', file: 'npm', args: testArgs },
       { name: 'Lint', file: 'npm', args: ['run', 'lint'] },
     ];
-
     this.log(`  Checking Tests and Lint in parallel...`);
     const parallelResults = await Promise.all(
       parallelChecks.map(async (check) => {
@@ -1734,7 +1415,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
         return { check, result };
       })
     );
-
     for (const { check, result } of parallelResults) {
       if (!result || result.exitCode !== 0) {
         this.logCheckFailure(check.name, result);
@@ -1742,7 +1422,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       }
       this.log(`  ✅ ${check.name} passed`);
     }
-
     // Stage 2.5: Coverage gate (runs after tests generate coverage data)
     if (this.coverageBaseline) {
       this.log(`  Checking coverage baseline...`);
@@ -1753,7 +1432,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       }
       this.log(`  ✅ Coverage gate passed`);
     }
-
     // Stage 3: CLI command checks (all independent, can run in parallel)
     this.log(`  Checking CLI commands in parallel...`);
     const commandResults = await Promise.all(
@@ -1764,7 +1442,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
         return { check, result };
       })
     );
-
     for (const { check, result } of commandResults) {
       if (!result || result.exitCode !== 0) {
         this.logCheckFailure(check.name, result);
@@ -1772,10 +1449,8 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       }
       this.log(`  ✅ ${check.name} passed`);
     }
-
     return true;
   }
-
   /**
    * Logs a check failure with error details.
    */
@@ -1792,7 +1467,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       }
     }
   }
-
   /**
    * Handles evolution failure by incrementing failure counter and checking max retries.
    * @param reason - The reason for the failure (for logging)
@@ -1801,7 +1475,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
   private handleEvolutionFailure(reason: string): boolean {
     this.consecutiveFailures++;
     const shouldStop = this.maxRetries >= 0 && this.consecutiveFailures >= this.maxRetries;
-
     if (shouldStop) {
       this.log(`❌ ${reason} - Max retries (${this.maxRetries}) reached, stopping evolution`);
       this.cleanup();
@@ -1811,10 +1484,8 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
         `⚠️  ${reason} (${this.consecutiveFailures}/${retryLabel}), retrying next iteration...`
       );
     }
-
     return shouldStop;
   }
-
   /**
    * Handles revert failure by logging error and cleaning up if necessary.
    * @param revertSuccess - Whether the revert operation succeeded
@@ -1830,7 +1501,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     const shouldStop = this.handleEvolutionFailure(reason);
     return !shouldStop;
   }
-
   /**
    * Attempts to revert changes and reset the consecutive failure counter on success.
    * @returns true if revert succeeded (failure counter reset), false if revert failed (stops evolution)
@@ -1845,7 +1515,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     this.consecutiveFailures = 0;
     return true;
   }
-
   /**
    * Handles post-verification state by checking working tree cleanliness and commit status.
    * @param isClean - Whether the working tree is clean
@@ -1874,23 +1543,19 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       this.log('⚠️  Working tree is not clean, reverting to be safe...');
       return this.revertOrFailOrResetFailures();
     }
-
     if (isClean && hashChanged) {
       if (!testDecisionValidation.valid) {
         this.log(`⚠️  ${testDecisionValidation.reason}`);
-
         if (!beforeCommitHash) {
           this.cleanup();
           return false;
         }
-
         const reverted = await this.revertCommittedIteration(beforeCommitHash);
         return this.handleRevertFailure(
           reverted,
           testDecisionValidation.reason ?? 'Invalid TEST decision'
         );
       }
-
       if (committedValidation && !committedValidation.valid) {
         if (committedValidation.violations.length > 0) {
           this.log('⚠️  Committed changes violated file restrictions:');
@@ -1902,19 +1567,16 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
             `⚠️  Committed changes exceeded diff size limit: ${committedValidation.total} lines changed (limit: ${this.maxDiffLines})`
           );
         }
-
         if (!beforeCommitHash) {
           this.cleanup();
           return false;
         }
-
         const reverted = await this.revertCommittedIteration(beforeCommitHash);
         const failureReason = committedValidation.violations.length > 0
           ? 'Committed changes violated file restrictions'
           : 'Committed changes exceeded diff size limit';
         return this.handleRevertFailure(reverted, failureReason);
       }
-
       if (decision === 'TEST') {
         this.log('✅ TEST decision cleared the value bar');
       }
@@ -1922,13 +1584,11 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       this.consecutiveFailures = 0; // Reset on success
       return true;
     }
-
     if (isClean && !hashChanged) {
       this.log('ℹ️  AI made no changes this iteration (SKIP)');
       this.consecutiveFailures = 0; // Not a failure
       return true;
     }
-
     // Not clean = some changes left uncommitted
     if (hashChanged) {
       this.log('⚠️  Verification passed but AI left uncommitted changes after partial commit');
@@ -1945,7 +1605,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       return this.handleRevertFailure(await this.revert(), COMMIT_MISSED_DETAIL);
     }
   }
-
   /**
    * Checks if working tree is clean (all changes committed).
    */
@@ -1953,7 +1612,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     const result = await this.safeExeca('git', ['status', '--porcelain']);
     return result ? result.stdout.trim().length === 0 : false;
   }
-
   /**
    * Gets the current HEAD commit hash.
    * @returns The commit hash string, or null if not in a git repo or on error
@@ -1966,7 +1624,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     const hash = result.stdout.trim();
     return hash.length > 0 ? hash : null;
   }
-
   /**
    * Gets the list of files changed between two commit hashes, or in the working tree.
    * @returns Array of changed file paths, or undefined if unavailable
@@ -1993,7 +1650,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       return undefined;
     }
   }
-
   /**
    * Detects the AI's decision from the most recent commit message.
    * Maps conventional commit prefixes to decision labels.
@@ -2009,7 +1665,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     if (msg.startsWith('feat:') || msg.startsWith('feat(')) return 'FEATURE';
     return undefined;
   }
-
   /**
    * Reverts changes (both staged and unstaged).
    * @returns true if revert succeeded, false otherwise
@@ -2021,13 +1676,11 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       this.log('⚠️  Git reset failed');
       return false;
     }
-
     const checkoutResult = await this.safeExeca('git', ['checkout', '.']);
     if (!checkoutResult || checkoutResult.exitCode !== 0) {
       this.log('⚠️  Git checkout failed');
       return false;
     }
-
     // Remove untracked files and directories to prevent accumulation across iterations
     // Skip if keepUntracked is true to preserve new files created during evolution
     if (!this.keepUntracked) {
@@ -2039,11 +1692,9 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     } else {
       this.log('ℹ️  Preserving untracked files (--keep-untracked)');
     }
-
     this.log('🔄 Reverted changes');
     return true;
   }
-
   /**
    * Sleeps for the specified duration.
    * Clears the timer if interrupted to prevent memory leaks.
@@ -2054,11 +1705,9 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     if (this.cleanedUp) {
       return Promise.resolve();
     }
-
     return new Promise((resolve) => {
       // Store the resolve function so cleanup can call it
       this.sleepResolve = resolve;
-
       this.sleepTimer = setTimeout(() => {
         this.sleepTimer = null;
         // Only resolve if not cancelled and resolve still exists
@@ -2069,7 +1718,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       }, ms);
     });
   }
-
   /**
    * Gets the current status of the driver for debugging purposes.
    * @returns Object containing driver state information
@@ -2098,7 +1746,6 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     };
   }
 }
-
 /**
  * Convenience function to run the self-evolution process.
  * @param options - Optional configuration for the self-evolution process
