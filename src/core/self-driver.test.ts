@@ -5159,6 +5159,75 @@ describe('file change validation (forbiddenPaths)', () => {
   });
 });
 
+describe('matchesGlobPattern directory boundary', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+    driver = new SelfDriver();
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('enforces directory boundary for glob patterns via validateChangedFiles', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({
+      logger: mockLogger,
+      forbiddenPaths: [],
+      allowedPaths: ['src/**'],
+    });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('diff') && args?.includes('--name-only')) {
+        // 'src-backup/file.ts' shares the 'src' prefix but is NOT under 'src/'
+        return mockExecaResult(0, 'src-backup/file.ts', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const validateChangedFiles = (
+      driver as unknown as {
+        validateChangedFiles: () => Promise<{ valid: boolean; violations: string[] }>;
+      }
+    ).validateChangedFiles;
+    const result = await validateChangedFiles.call(driver);
+
+    expect(result.valid).toBe(false);
+    expect(result.violations).toContain('src-backup/file.ts');
+  });
+
+  it('does not false-positive on paths sharing a prefix with allowed directory', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({
+      logger: mockLogger,
+      forbiddenPaths: [],
+      allowedPaths: ['src/**'],
+    });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('diff') && args?.includes('--name-only')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const validateChangedFiles = (
+      driver as unknown as {
+        validateChangedFiles: () => Promise<{ valid: boolean; violations: string[] }>;
+      }
+    ).validateChangedFiles;
+    const result = await validateChangedFiles.call(driver);
+
+    expect(result.valid).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
+});
+
 describe('diff size limit (maxDiffLines)', () => {
   beforeEach(() => {
     jest.resetAllMocks();

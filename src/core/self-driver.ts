@@ -218,7 +218,9 @@ export class SelfDriver {
         }
       }
       if (!isForbidden && this.allowedPaths.length > 0) {
-        const isAllowed = this.allowedPaths.some((pattern) => this.matchesGlobPattern(file, pattern));
+        const isAllowed = this.allowedPaths.some((pattern) =>
+          this.matchesGlobPattern(file, pattern)
+        );
         if (!isAllowed) {
           violations.push(file);
         }
@@ -398,7 +400,8 @@ export class SelfDriver {
         !lastResult.success &&
         !!lastResult.filesChanged?.some((previousFile) =>
           changedFiles.some((file) => this.areRelatedModuleFiles(file, previousFile))
-        )) ?? false;
+        )) ??
+      false;
     const coverageImproved =
       !!metricsBefore?.coverage &&
       !!metricsAfter?.coverage &&
@@ -426,8 +429,8 @@ export class SelfDriver {
     if (normalized === normalizedPattern) return true;
     // Directory glob: "dir/**" matches any file under that directory
     if (normalizedPattern.endsWith('/**')) {
-      const prefix = normalizedPattern.slice(0, -2);
-      if (normalized.startsWith(prefix)) return true;
+      const prefix = normalizedPattern.slice(0, -3);
+      if (normalized === prefix || normalized.startsWith(prefix + '/')) return true;
     }
     return false;
   }
@@ -617,9 +620,16 @@ export class SelfDriver {
     let total = 0;
     let withinLimit = true;
     if (this.maxDiffLines > 0) {
-      const diffResult = await this.safeExeca('git', ['diff', '--shortstat', beforeHash, afterHash]);
+      const diffResult = await this.safeExeca('git', [
+        'diff',
+        '--shortstat',
+        beforeHash,
+        afterHash,
+      ]);
       if (!diffResult) {
-        this.log('⚠️  Could not determine committed diff size, skipping post-commit size validation');
+        this.log(
+          '⚠️  Could not determine committed diff size, skipping post-commit size validation'
+        );
       } else {
         total = this.parseDiffTotal(diffResult.stdout);
         withinLimit = total <= this.maxDiffLines;
@@ -842,9 +852,7 @@ export class SelfDriver {
     // Capture git commit hash before evolution to detect if changes were committed
     const beforeCommitHash = await this.getHeadCommitHash();
     const metricsBefore = await this.captureVerificationMetrics();
-    const historyReport = await readEvolutionReport(
-      path.join(this.projectRoot, this.logFile)
-    );
+    const historyReport = await readEvolutionReport(path.join(this.projectRoot, this.logFile));
     // 1. Read constitution file
     const constitution = await this.readConstitution();
     // 2. AI analyzes, executes, and commits autonomously
@@ -987,9 +995,10 @@ export class SelfDriver {
       return;
     }
     if (isClean && hashChanged && committedValidation && !committedValidation.valid) {
-      const failureDetail = committedValidation.violations.length > 0
-        ? `Committed changes violated file restrictions: ${committedValidation.violations.join(', ')}`
-        : `Committed changes exceeded diff size limit: ${committedValidation.total} lines changed (limit: ${this.maxDiffLines})`;
+      const failureDetail =
+        committedValidation.violations.length > 0
+          ? `Committed changes violated file restrictions: ${committedValidation.violations.join(', ')}`
+          : `Committed changes exceeded diff size limit: ${committedValidation.total} lines changed (limit: ${this.maxDiffLines})`;
       this.lastIterationResult = {
         iteration: this.iterationCount,
         success: false,
@@ -1573,9 +1582,10 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
           return false;
         }
         const reverted = await this.revertCommittedIteration(beforeCommitHash);
-        const failureReason = committedValidation.violations.length > 0
-          ? 'Committed changes violated file restrictions'
-          : 'Committed changes exceeded diff size limit';
+        const failureReason =
+          committedValidation.violations.length > 0
+            ? 'Committed changes violated file restrictions'
+            : 'Committed changes exceeded diff size limit';
         return this.handleRevertFailure(reverted, failureReason);
       }
       if (decision === 'TEST') {
