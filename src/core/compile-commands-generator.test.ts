@@ -340,6 +340,38 @@ describe('CompileCommandsGenerator', () => {
     });
   });
 
+  it('uses existing compile_commands.json at target when engine file is absent', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+      const engine = await createFakeEngine(rootDir);
+      const projectDir = path.dirname(project.uprojectPath);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      // Pre-create compile_commands.json at target location only (no engine file)
+      // This simulates re-running generation after a previous successful run
+      const vscodeDir = path.join(projectDir, '.vscode');
+      await fs.ensureDir(vscodeDir);
+      const existingContent = [
+        { file: 'Existing.cpp', directory: projectDir, command: 'clang++ -c Existing.cpp' },
+      ];
+      await fs.writeJson(path.join(vscodeDir, 'compile_commands.json'), existingContent, {
+        spaces: 2,
+      });
+
+      const result = await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+      });
+
+      expect(result).toBe(path.join(projectDir, '.vscode', 'compile_commands.json'));
+
+      // Content should remain unchanged since no engine file was moved
+      const content = await fs.readJson(result);
+      expect(content).toEqual(existingContent);
+    });
+  });
+
   it('uses Editor target when target type is Editor', async () => {
     await withTempDir(async (rootDir) => {
       const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
