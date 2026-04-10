@@ -61,17 +61,9 @@ export class BuildExecutor {
       const buildBatPath = path.join(enginePath, 'Engine', 'Build', 'BatchFiles', 'Build.bat');
       const buildScriptExists = await fs.pathExists(buildBatPath);
 
-      let stdout = '';
-      let stderr = '';
-      let exitCode = 0;
-
-      const result = buildScriptExists
+      const { stdout, stderr, exitCode } = buildScriptExists
         ? await this.executeBuildBat(buildBatPath, validatedOptions)
         : await this.executeUnrealBuildTool(enginePath, validatedOptions);
-
-      stdout = result.stdout;
-      stderr = result.stderr;
-      exitCode = result.exitCode;
 
       const duration = Date.now() - startTime;
       const success = exitCode === 0;
