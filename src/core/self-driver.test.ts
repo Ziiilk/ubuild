@@ -4400,6 +4400,27 @@ describe('iteration result and failure context propagation', () => {
     expect(decision).toBeUndefined();
   });
 
+  it('detects decision from commit with [evolve] prefix', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('log') && args?.includes('--format=%s')) {
+        return mockExecaResult(0, '[evolve] test: add branch coverage for resolver', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const detectDecisionFromCommit = (
+      driver as unknown as {
+        detectDecisionFromCommit: () => Promise<string | undefined>;
+      }
+    ).detectDecisionFromCommit;
+    const decision = await detectDecisionFromCommit.call(driver);
+
+    expect(decision).toBe('TEST');
+  });
+
   it('gets changed files list between commits', async () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ logger: mockLogger });

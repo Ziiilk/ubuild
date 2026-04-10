@@ -1293,8 +1293,9 @@ ${cliVerifyCommands}
 2. **Commit** if verification passes:
    \`\`\`bash
    git add -A
-   git commit -m "type: description"
+   git commit -m "[evolve] type: description"
    \`\`\`
+    Always prefix with \`[evolve]\` so commits are identifiable in git log.
     Use conventional commit types:
     - \`fix:\` - bug fixes
     - \`test:\` - adding tests
@@ -1658,7 +1659,11 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
   private async detectDecisionFromCommit(): Promise<string | undefined> {
     const result = await this.safeExeca('git', ['log', '-1', '--format=%s']);
     if (!result || result.exitCode !== 0) return undefined;
-    const msg = result.stdout.trim().toLowerCase();
+    let msg = result.stdout.trim().toLowerCase();
+    // Strip the [evolve] prefix if present so conventional-commit detection works
+    if (msg.startsWith('[evolve]')) {
+      msg = msg.slice('[evolve]'.length).trimStart();
+    }
     if (msg.startsWith('fix:') || msg.startsWith('fix(')) return 'FIX';
     if (msg.startsWith('test:') || msg.startsWith('test(')) return 'TEST';
     if (msg.startsWith('refactor:') || msg.startsWith('refactor(')) return 'REFACTOR';
