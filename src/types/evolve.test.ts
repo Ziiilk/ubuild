@@ -335,13 +335,13 @@ describe('IterationResult interface', () => {
   });
 });
 
-describe('DecisionGuidance types', () => {
-  it('accepts supported evolution decisions', () => {
+describe('DecisionGuidance types (deprecated, backward compat only)', () => {
+  it('accepts supported evolution decisions for old log deserialization', () => {
     const decision: EvolutionDecision = 'TEST';
     expect(decision).toBe('TEST');
   });
 
-  it('accepts explicit recommendation with reasons and scores', () => {
+  it('accepts old log records containing decisionGuidance field', () => {
     const guidance: DecisionGuidance = {
       recommendedDecision: 'FIX',
       reasons: ['Previous iteration failed at verification stage.'],

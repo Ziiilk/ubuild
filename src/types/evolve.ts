@@ -101,7 +101,10 @@ export interface IterationResult {
   filesChanged?: string[];
 }
 
-/** Supported decision classes for self-evolution planning and logging. */
+/**
+ * Supported decision classes for self-evolution planning and logging.
+ * @deprecated Retained only for backward compatibility with existing .evolve-history.jsonl records.
+ */
 export type EvolutionDecision = 'FIX' | 'TEST' | 'REFACTOR' | 'FEATURE' | 'SKIP';
 
 /** Snapshot of verification metrics captured around an evolution iteration. */
@@ -148,7 +151,11 @@ export interface MetricDelta {
   lintWarnings?: number;
 }
 
-/** Explicit planning recommendation derived from current metrics and failure history. */
+/**
+ * Explicit planning recommendation derived from current metrics and failure history.
+ * @deprecated No longer computed or written. Retained only for backward compatibility
+ * with existing .evolve-history.jsonl records that may contain this field.
+ */
 export interface DecisionGuidance {
   /** Highest-scoring recommended decision for the next iteration */
   recommendedDecision: EvolutionDecision;
@@ -185,7 +192,11 @@ export interface EvolutionRecord {
   metricsAfter?: VerificationMetrics;
   /** Delta between pre- and post-iteration metrics */
   metricDelta?: MetricDelta;
-  /** Explicit recommendation that was given to the AI before the iteration */
+  /**
+   * Explicit recommendation that was given to the AI before the iteration.
+   * @deprecated No longer populated. Present only for backward compatibility
+   * with older log records.
+   */
   decisionGuidance?: DecisionGuidance;
   /** Duration of the iteration in milliseconds */
   durationMs: number;
