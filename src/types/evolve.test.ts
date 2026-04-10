@@ -10,6 +10,8 @@ import type {
   EvolutionRecord,
   VerificationMetrics,
   MetricDelta,
+  DecisionGuidance,
+  EvolutionDecision,
 } from './evolve';
 import { EVOLUTION_VERIFY_COMMANDS } from './evolve';
 
@@ -333,6 +335,31 @@ describe('IterationResult interface', () => {
   });
 });
 
+describe('DecisionGuidance types', () => {
+  it('accepts supported evolution decisions', () => {
+    const decision: EvolutionDecision = 'TEST';
+    expect(decision).toBe('TEST');
+  });
+
+  it('accepts explicit recommendation with reasons and scores', () => {
+    const guidance: DecisionGuidance = {
+      recommendedDecision: 'FIX',
+      reasons: ['Previous iteration failed at verification stage.'],
+      scores: {
+        FIX: 7,
+        TEST: 3,
+        REFACTOR: 1,
+        FEATURE: 0,
+        SKIP: 0,
+      },
+    };
+
+    expect(guidance.recommendedDecision).toBe('FIX');
+    expect(guidance.reasons).toHaveLength(1);
+    expect(guidance.scores.TEST).toBe(3);
+  });
+});
+
 describe('EvolutionRecord interface', () => {
   it('accepts a complete successful record', () => {
     const record: EvolutionRecord = {
@@ -397,6 +424,17 @@ describe('EvolutionRecord interface', () => {
         lintWarnings: 2,
       },
       metricDelta: delta,
+      decisionGuidance: {
+        recommendedDecision: 'TEST',
+        reasons: ['Lowest branch hotspot is src/core/foo.ts at 55%.'],
+        scores: {
+          FIX: 1,
+          TEST: 6,
+          REFACTOR: 0,
+          FEATURE: 0,
+          SKIP: 0,
+        },
+      },
       durationMs: 1500,
     };
 
@@ -404,5 +442,6 @@ describe('EvolutionRecord interface', () => {
     expect(record.metricsBefore?.branchHotspots?.[0].file).toBe('src/core/foo.ts');
     expect(record.metricDelta?.branches).toBe(5);
     expect(record.metricDelta?.lintWarnings).toBe(-2);
+    expect(record.decisionGuidance?.recommendedDecision).toBe('TEST');
   });
 });

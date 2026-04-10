@@ -23,6 +23,8 @@ import type {
   BranchCoverageHotspot,
   VerificationMetrics,
   MetricDelta,
+  DecisionGuidance,
+  EvolutionDecision,
 } from '../types/evolve';
 
 export type {
@@ -33,6 +35,8 @@ export type {
   BranchCoverageHotspot,
   VerificationMetrics,
   MetricDelta,
+  DecisionGuidance,
+  EvolutionDecision,
 };
 
 /** Shape of the "total" section in coverage-summary.json used by coverage-related methods. */
@@ -83,6 +87,12 @@ const COMMIT_MISSED_DETAIL = 'Verification passed but AI did not commit changes 
 /** Error detail when verification passes but AI leaves extra uncommitted changes. */
 const PARTIAL_COMMIT_DETAIL =
   'Verification passed but AI left uncommitted changes after partial commit';
+/** Coverage threshold below which tests should be strongly preferred. */
+const HOTSPOT_BRANCH_THRESHOLD = 85;
+/** Coverage threshold that still suggests unfinished test work. */
+const HEALTHY_BRANCH_THRESHOLD = 95;
+/** Lint warning count that should push the system toward FIX. */
+const LINT_WARNING_THRESHOLD = 1;
 
 export class SelfDriver {
   private log: (msg: string) => void;
@@ -379,6 +389,118 @@ export class SelfDriver {
     }
 
     return Object.keys(delta).length > 0 ? delta : undefined;
+  }
+
+  /**
+   * Builds an explicit decision recommendation from metrics and prior iteration context.
+   */
+  private buildDecisionGuidance(
+    metrics: VerificationMetrics | null,
+    lastResult?: IterationResult | null
+  ): DecisionGuidance {
+    const scores: Record<EvolutionDecision, number> = {
+      FIX: 0,
+      TEST: 0,
+      REFACTOR: 0,
+      FEATURE: 0,
+      SKIP: 0,
+    };
+    const reasons: string[] = [];
+
+    if (lastResult && !lastResult.success) {
+      scores.FIX += 5;
+      reasons.push(
+        `Previous iteration failed at ${lastResult.failureStage ?? 'unknown'} stage, so stabilize that path first.`
+      );
+    }
+
+    const lintWarnings = metrics?.lintWarnings ?? 0;
+    if (lintWarnings >= LINT_WARNING_THRESHOLD) {
+      scores.FIX += 4;
+      reasons.push(`ESLint still reports ${lintWarnings} warning(s), so cleanup and bug fixing outrank new churn.`);
+    }
+
+    const coverage = metrics?.coverage;
+    if (coverage) {
+      const lowCoverageAreas = [
+        coverage.branches < HOTSPOT_BRANCH_THRESHOLD ? 'branches' : null,
+        coverage.functions < HOTSPOT_BRANCH_THRESHOLD ? 'functions' : null,
+        coverage.lines < HOTSPOT_BRANCH_THRESHOLD ? 'lines' : null,
+        coverage.statements < HOTSPOT_BRANCH_THRESHOLD ? 'statements' : null,
+      ].filter((area): area is string => area !== null);
+
+      if (lowCoverageAreas.length > 0) {
+        scores.TEST += 3;
+        reasons.push(`Global coverage is still weak in ${lowCoverageAreas.join(', ')}, so tests have clear value.`);
+      }
+    }
+
+    const worstHotspot = metrics?.branchHotspots?.[0];
+    if (worstHotspot) {
+      if (worstHotspot.branches < HOTSPOT_BRANCH_THRESHOLD) {
+        scores.TEST += 5;
+        reasons.push(
+          `Lowest branch hotspot is ${worstHotspot.file} at ${worstHotspot.branches}%, so target a concrete missing branch there.`
+        );
+      } else if (worstHotspot.branches < HEALTHY_BRANCH_THRESHOLD) {
+        scores.TEST += 2;
+        reasons.push(
+          `Branch hotspots remain in core files, led by ${worstHotspot.file} at ${worstHotspot.branches}%.`
+        );
+      }
+    }
+
+    const metricsHealthy =
+      lintWarnings === 0 &&
+      (!coverage ||
+        (coverage.branches >= HEALTHY_BRANCH_THRESHOLD &&
+          coverage.functions >= HOTSPOT_BRANCH_THRESHOLD &&
+          coverage.lines >= HOTSPOT_BRANCH_THRESHOLD &&
+          coverage.statements >= HOTSPOT_BRANCH_THRESHOLD)) &&
+      (!worstHotspot || worstHotspot.branches >= HEALTHY_BRANCH_THRESHOLD);
+
+    if (metricsHealthy) {
+      scores.SKIP += 4;
+      scores.REFACTOR += 2;
+      reasons.push('Lint and branch hotspots are already healthy, so broad churn is likely low value.');
+    } else if (lintWarnings === 0) {
+      scores.REFACTOR += 1;
+    }
+
+    const recommendedDecision = (Object.entries(scores) as Array<[EvolutionDecision, number]>).sort(
+      (left, right) => right[1] - left[1]
+    )[0][0];
+
+    if (reasons.length === 0) {
+      reasons.push('No urgent signal detected; prefer the smallest useful change or SKIP.');
+    }
+
+    return {
+      recommendedDecision,
+      reasons,
+      scores,
+    };
+  }
+
+  /**
+   * Formats the decision recommendation section for the evolution prompt.
+   */
+  private buildDecisionGuidanceSection(guidance: DecisionGuidance): string {
+    const scoreLines = (Object.entries(guidance.scores) as Array<[EvolutionDecision, number]>).map(
+      ([decision, score]) => `- ${decision}: ${score}`
+    );
+
+    return [
+      '',
+      '## Recommended Decision',
+      `System recommendation: ${guidance.recommendedDecision}`,
+      'Why:',
+      ...guidance.reasons.map((reason) => `- ${reason}`),
+      'Scorecard:',
+      ...scoreLines,
+      '',
+      'If you choose a different decision, make sure the codebase evidence clearly justifies it.',
+    ].join('\n');
   }
 
   /**
@@ -868,13 +990,14 @@ export class SelfDriver {
     // Capture git commit hash before evolution to detect if changes were committed
     const beforeCommitHash = await this.getHeadCommitHash();
     const metricsBefore = await this.captureVerificationMetrics();
+    const decisionGuidance = this.buildDecisionGuidance(metricsBefore, this.lastIterationResult);
 
     // 1. Read constitution file
     const constitution = await this.readConstitution();
 
     // 2. AI analyzes, executes, and commits autonomously
     this.log('\n🤖 AI analyzing and evolving...');
-    const executed = await this.evolveWithOpenCode(constitution);
+    const executed = await this.evolveWithOpenCode(constitution, decisionGuidance);
 
     if (!executed) {
       this.lastIterationResult = {
@@ -890,6 +1013,7 @@ export class SelfDriver {
         failureStage: 'execution',
         failureDetail: 'OpenCode execution failed or timed out',
         metricsBefore: metricsBefore ?? undefined,
+        decisionGuidance,
         durationMs: Date.now() - this.iterationStartTime,
       });
       const shouldStop = this.handleEvolutionFailure('Evolution execution issue');
@@ -914,6 +1038,7 @@ export class SelfDriver {
         failureStage: 'verification',
         failureDetail: 'Build, test, or lint checks failed after AI changes',
         metricsBefore: metricsBefore ?? undefined,
+        decisionGuidance,
         durationMs: Date.now() - this.iterationStartTime,
       });
       this.log('❌ Verification failed, reverting...');
@@ -951,7 +1076,8 @@ export class SelfDriver {
       afterCommitHash,
       committedValidation,
       metricsBefore,
-      metricsAfter
+      metricsAfter,
+      decisionGuidance
     );
 
     return shouldContinue ? 'completed' : 'stop';
@@ -974,7 +1100,8 @@ export class SelfDriver {
     afterCommitHash: string | null,
     committedValidation: CommittedChangeValidationResult | null,
     metricsBefore: VerificationMetrics | null,
-    metricsAfter: VerificationMetrics | null
+    metricsAfter: VerificationMetrics | null,
+    decisionGuidance: DecisionGuidance
   ): Promise<void> {
     const filesChanged = await this.getChangedFilesList(beforeCommitHash, afterCommitHash);
     const decision = hashChanged ? await this.detectDecisionFromCommit() : undefined;
@@ -1006,6 +1133,7 @@ export class SelfDriver {
         metricsBefore: metricsBefore ?? undefined,
         metricsAfter: metricsAfter ?? undefined,
         metricDelta,
+        decisionGuidance,
         durationMs,
       });
       return;
@@ -1028,6 +1156,7 @@ export class SelfDriver {
         metricsBefore: metricsBefore ?? undefined,
         metricsAfter: metricsAfter ?? undefined,
         metricDelta,
+        decisionGuidance,
         durationMs,
       });
     } else if (isClean && !hashChanged) {
@@ -1045,6 +1174,7 @@ export class SelfDriver {
         metricsBefore: metricsBefore ?? undefined,
         metricsAfter: metricsAfter ?? undefined,
         metricDelta,
+        decisionGuidance,
         durationMs,
       });
     } else {
@@ -1069,6 +1199,7 @@ export class SelfDriver {
         metricsBefore: metricsBefore ?? undefined,
         metricsAfter: metricsAfter ?? undefined,
         metricDelta,
+        decisionGuidance,
         durationMs,
       });
     }
@@ -1286,7 +1417,8 @@ export class SelfDriver {
     constitution: string,
     fileTree: string,
     lastResult?: IterationResult | null,
-    metricsSection?: string
+    metricsSection?: string,
+    decisionGuidance?: DecisionGuidance
   ): string {
     const runner = this.getCommandRunner();
     const cliVerifyCommands = EVOLUTION_VERIFY_COMMANDS.map(
@@ -1299,6 +1431,9 @@ export class SelfDriver {
 
     const fileRestrictionSection = this.buildFileRestrictionSection();
     const changeSizeLimitSection = this.buildChangeSizeLimitSection();
+    const decisionGuidanceSection = decisionGuidance
+      ? this.buildDecisionGuidanceSection(decisionGuidance)
+      : '';
 
     const metricsBlock = metricsSection ? `${metricsSection}\n` : '';
 
@@ -1307,7 +1442,7 @@ export class SelfDriver {
 
 Source files:
 ${fileTree}
-${metricsBlock}## Your Task
+${metricsBlock}${decisionGuidanceSection}## Your Task
 
 Read and analyze the codebase, then decide:
 
@@ -1346,14 +1481,18 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
   /**
    * Invokes OpenCode to apply improvements.
    */
-  private async evolveWithOpenCode(constitution: string): Promise<boolean> {
+  private async evolveWithOpenCode(
+    constitution: string,
+    decisionGuidance: DecisionGuidance
+  ): Promise<boolean> {
     const fileTree = await this.getFileTree();
     const metricsSection = await this.gatherCodeHealthMetrics();
     const prompt = this.buildEvolutionPrompt(
       constitution,
       fileTree,
       this.lastIterationResult,
-      metricsSection
+      metricsSection,
+      decisionGuidance
     );
 
     try {

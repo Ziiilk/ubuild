@@ -101,6 +101,9 @@ export interface IterationResult {
   filesChanged?: string[];
 }
 
+/** Supported decision classes for self-evolution planning and logging. */
+export type EvolutionDecision = 'FIX' | 'TEST' | 'REFACTOR' | 'FEATURE' | 'SKIP';
+
 /** Snapshot of verification metrics captured around an evolution iteration. */
 export interface CoverageSnapshot {
   /** Branch coverage percentage */
@@ -145,6 +148,16 @@ export interface MetricDelta {
   lintWarnings?: number;
 }
 
+/** Explicit planning recommendation derived from current metrics and failure history. */
+export interface DecisionGuidance {
+  /** Highest-scoring recommended decision for the next iteration */
+  recommendedDecision: EvolutionDecision;
+  /** Human-readable reasons for the recommendation */
+  reasons: string[];
+  /** Raw scorecard used to pick the recommendation */
+  scores: Record<EvolutionDecision, number>;
+}
+
 /**
  * Structured log record for a single evolution iteration.
  * Written as JSONL (one JSON object per line) to the evolution log file.
@@ -172,6 +185,8 @@ export interface EvolutionRecord {
   metricsAfter?: VerificationMetrics;
   /** Delta between pre- and post-iteration metrics */
   metricDelta?: MetricDelta;
+  /** Explicit recommendation that was given to the AI before the iteration */
+  decisionGuidance?: DecisionGuidance;
   /** Duration of the iteration in milliseconds */
   durationMs: number;
 }

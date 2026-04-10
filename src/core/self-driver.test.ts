@@ -4553,6 +4553,8 @@ describe('evolution log (writeEvolutionRecord)', () => {
       'src/core/self-driver.ts',
       'src/core/self-driver.test.ts',
     ]);
+    expect(record.decisionGuidance.recommendedDecision).toBe('FIX');
+    expect(record.decisionGuidance.reasons.length).toBeGreaterThan(0);
     expect(record.metricsAfter.lintWarnings).toBe(1);
     expect(record.metricDelta.lintWarnings).toBe(-2);
     expect(record.durationMs).toBeGreaterThanOrEqual(0);
@@ -5705,16 +5707,27 @@ describe('code health metrics', () => {
           constitution: string,
           fileTree: string,
           lastResult?: IterationResult | null,
-          metricsSection?: string
+          metricsSection?: string,
+          decisionGuidance?: {
+            recommendedDecision: string;
+            reasons: string[];
+            scores: Record<string, number>;
+          }
         ) => string;
       }
     ).buildEvolutionPrompt;
 
     const metrics =
       '\n## Code Health Metrics\n- Test Coverage: branches 70%\n- Branch Coverage Hotspots:\n  - src/core/foo.ts (45% branches)\n- ESLint Warnings: 5';
-    const prompt = buildEvolutionPrompt.call(driver, '', 'src/index.ts', null, metrics);
+    const prompt = buildEvolutionPrompt.call(driver, '', 'src/index.ts', null, metrics, {
+      recommendedDecision: 'TEST',
+      reasons: ['Lowest branch hotspot is src/core/foo.ts at 45%.'],
+      scores: { FIX: 1, TEST: 6, REFACTOR: 0, FEATURE: 0, SKIP: 0 },
+    });
 
     expect(prompt).toContain('Code Health Metrics');
+    expect(prompt).toContain('Recommended Decision');
+    expect(prompt).toContain('System recommendation: TEST');
     expect(prompt).toContain('branches 70%');
     expect(prompt).toContain('concrete missing branch or failure path');
     expect(prompt).toContain('ESLint Warnings: 5');
@@ -5738,6 +5751,112 @@ describe('code health metrics', () => {
     const prompt = buildEvolutionPrompt.call(driver, '', 'src/index.ts', null, '');
 
     expect(prompt).not.toContain('Code Health Metrics');
+  });
+});
+
+describe('decision guidance scoring', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+    mockAppendFile.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('recommends FIX when previous iteration failed and lint warnings remain', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    const buildDecisionGuidance = (
+      driver as unknown as {
+        buildDecisionGuidance: (
+          metrics: {
+            lintWarnings?: number;
+            coverage?: { branches: number; functions: number; lines: number; statements: number };
+            branchHotspots?: Array<{ file: string; branches: number }>;
+          } | null,
+          lastResult?: IterationResult | null
+        ) => { recommendedDecision: string; reasons: string[]; scores: Record<string, number> };
+      }
+    ).buildDecisionGuidance;
+
+    const guidance = buildDecisionGuidance.call(
+      driver,
+      {
+        lintWarnings: 2,
+        coverage: { branches: 92, functions: 95, lines: 95, statements: 95 },
+        branchHotspots: [{ file: 'src/core/foo.ts', branches: 91 }],
+      },
+      {
+        iteration: 3,
+        success: false,
+        failureStage: 'verification',
+      }
+    );
+
+    expect(guidance.recommendedDecision).toBe('FIX');
+    expect(guidance.scores.FIX).toBeGreaterThan(guidance.scores.TEST);
+    expect(guidance.reasons.join(' ')).toContain('Previous iteration failed');
+  });
+
+  it('recommends TEST when a core branch hotspot is weak', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    const buildDecisionGuidance = (
+      driver as unknown as {
+        buildDecisionGuidance: (
+          metrics: {
+            lintWarnings?: number;
+            coverage?: { branches: number; functions: number; lines: number; statements: number };
+            branchHotspots?: Array<{ file: string; branches: number }>;
+          } | null,
+          lastResult?: IterationResult | null
+        ) => { recommendedDecision: string; reasons: string[]; scores: Record<string, number> };
+      }
+    ).buildDecisionGuidance;
+
+    const guidance = buildDecisionGuidance.call(driver, {
+      lintWarnings: 0,
+      coverage: { branches: 88, functions: 90, lines: 91, statements: 91 },
+      branchHotspots: [{ file: 'src/core/engine-resolver.ts', branches: 55 }],
+    });
+
+    expect(guidance.recommendedDecision).toBe('TEST');
+    expect(guidance.reasons.join(' ')).toContain('src/core/engine-resolver.ts');
+  });
+
+  it('recommends SKIP when metrics are already healthy', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    const buildDecisionGuidance = (
+      driver as unknown as {
+        buildDecisionGuidance: (
+          metrics: {
+            lintWarnings?: number;
+            coverage?: { branches: number; functions: number; lines: number; statements: number };
+            branchHotspots?: Array<{ file: string; branches: number }>;
+          } | null,
+          lastResult?: IterationResult | null
+        ) => { recommendedDecision: string; reasons: string[]; scores: Record<string, number> };
+      }
+    ).buildDecisionGuidance;
+
+    const guidance = buildDecisionGuidance.call(driver, {
+      lintWarnings: 0,
+      coverage: { branches: 98, functions: 97, lines: 98, statements: 98 },
+      branchHotspots: [{ file: 'src/core/project-runner.ts', branches: 97 }],
+    });
+
+    expect(guidance.recommendedDecision).toBe('SKIP');
+    expect(guidance.scores.SKIP).toBeGreaterThan(guidance.scores.REFACTOR);
   });
 });
 
