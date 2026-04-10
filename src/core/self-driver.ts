@@ -15,9 +15,25 @@ import fs from 'fs-extra';
 import path from 'path';
 
 import { EVOLUTION_VERIFY_COMMANDS } from '../types/evolve';
-import type { SelfEvolverOptions, IterationResult, EvolutionRecord } from '../types/evolve';
+import type {
+  SelfEvolverOptions,
+  IterationResult,
+  EvolutionRecord,
+  CoverageSnapshot,
+  BranchCoverageHotspot,
+  VerificationMetrics,
+  MetricDelta,
+} from '../types/evolve';
 
-export type { SelfEvolverOptions, IterationResult, EvolutionRecord };
+export type {
+  SelfEvolverOptions,
+  IterationResult,
+  EvolutionRecord,
+  CoverageSnapshot,
+  BranchCoverageHotspot,
+  VerificationMetrics,
+  MetricDelta,
+};
 
 /** Shape of the "total" section in coverage-summary.json used by coverage-related methods. */
 interface CoverageTotal {
@@ -32,6 +48,14 @@ interface ExecaResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+}
+
+/** Validation result for committed changes between two revisions. */
+interface CommittedChangeValidationResult {
+  valid: boolean;
+  violations: string[];
+  total: number;
+  withinLimit: boolean;
 }
 
 /** Default sleep duration between iterations in milliseconds */
@@ -56,6 +80,9 @@ const DEFAULT_ALLOWED_PATHS = ['src/**'];
 const DEFAULT_MAX_DIFF_LINES = 200;
 /** Error detail when verification passes but AI fails to commit changes. */
 const COMMIT_MISSED_DETAIL = 'Verification passed but AI did not commit changes properly';
+/** Error detail when verification passes but AI leaves extra uncommitted changes. */
+const PARTIAL_COMMIT_DETAIL =
+  'Verification passed but AI left uncommitted changes after partial commit';
 
 export class SelfDriver {
   private log: (msg: string) => void;
@@ -161,6 +188,200 @@ export class SelfDriver {
   }
 
   /**
+   * Checks whether a repository file should be treated as a core production file.
+   * Excludes tests, test utilities, and pure type barrels from hotspot prioritization.
+   */
+  private isCoreSourceFile(filePath: string): boolean {
+    const normalized = filePath.replace(/\\/g, '/');
+    return (
+      normalized.startsWith('src/') &&
+      !normalized.endsWith('.test.ts') &&
+      !normalized.endsWith('.spec.ts') &&
+      !normalized.startsWith('src/test-utils/') &&
+      !normalized.startsWith('src/types/')
+    );
+  }
+
+  /**
+   * Parses git shortstat output and returns the total changed lines.
+   */
+  private parseDiffTotal(output: string): number {
+    const trimmed = output.trim();
+    if (!trimmed) return 0;
+
+    const insertions = trimmed.match(/(\d+)\s+insertion/);
+    const deletions = trimmed.match(/(\d+)\s+deletion/);
+
+    return parseInt(insertions?.[1] ?? '0', 10) + parseInt(deletions?.[1] ?? '0', 10);
+  }
+
+  /**
+   * Collects path policy violations for a set of changed files.
+   */
+  private collectPathViolations(changedFiles: string[]): string[] {
+    const violations: string[] = [];
+
+    for (const file of changedFiles) {
+      let isForbidden = false;
+      for (const pattern of this.forbiddenPaths) {
+        if (this.matchesGlobPattern(file, pattern)) {
+          violations.push(file);
+          isForbidden = true;
+          break;
+        }
+      }
+
+      if (!isForbidden && this.allowedPaths.length > 0) {
+        const isAllowed = this.allowedPaths.some((pattern) => this.matchesGlobPattern(file, pattern));
+        if (!isAllowed) {
+          violations.push(file);
+        }
+      }
+    }
+
+    return violations;
+  }
+
+  /**
+   * Extracts total coverage values from a parsed coverage summary.
+   */
+  private extractCoverageSnapshot(summary: Record<string, unknown>): CoverageSnapshot | null {
+    const total = summary.total as CoverageTotal | undefined;
+    if (!total) {
+      return null;
+    }
+
+    return {
+      branches: total.branches?.pct ?? 0,
+      functions: total.functions?.pct ?? 0,
+      lines: total.lines?.pct ?? 0,
+      statements: total.statements?.pct ?? 0,
+    };
+  }
+
+  /**
+   * Collects the lowest branch-coverage core files from a parsed coverage summary.
+   */
+  private collectBranchCoverageHotspots(
+    summary: Record<string, unknown>,
+    maxFiles = 3
+  ): BranchCoverageHotspot[] {
+    const hotspots: BranchCoverageHotspot[] = [];
+
+    for (const [key, value] of Object.entries(summary)) {
+      if (key === 'total' || !this.isCoreSourceFile(key)) {
+        continue;
+      }
+
+      const entry = value as { branches?: { pct?: number } };
+      const pct = entry.branches?.pct;
+      if (typeof pct === 'number' && pct < 100) {
+        hotspots.push({ file: key, branches: pct });
+      }
+    }
+
+    hotspots.sort((left, right) => left.branches - right.branches);
+    return hotspots.slice(0, maxFiles);
+  }
+
+  /**
+   * Formats the branch-coverage hotspots section for the evolution prompt.
+   */
+  private formatBranchCoverageHotspots(
+    summary: Record<string, unknown>,
+    maxFiles = 3
+  ): string | null {
+    const hotspots = this.collectBranchCoverageHotspots(summary, maxFiles);
+    if (hotspots.length === 0) {
+      return null;
+    }
+
+    return `- Branch Coverage Hotspots:\n${hotspots
+      .map((hotspot) => `  - ${hotspot.file} (${hotspot.branches}% branches)`)
+      .join('\n')}`;
+  }
+
+  /**
+   * Parses ESLint JSON output and returns the total warning count.
+   */
+  private countLintWarnings(payload: string): number | null {
+    const parsed = JSON.parse(payload);
+    if (!Array.isArray(parsed)) {
+      return null;
+    }
+
+    let totalWarnings = 0;
+    for (const file of parsed) {
+      totalWarnings += file.warningCount ?? 0;
+    }
+
+    return totalWarnings;
+  }
+
+  /**
+   * Reads the current ESLint warning count in JSON form for logging and metric deltas.
+   */
+  private async readLintWarningCount(): Promise<number | null> {
+    try {
+      const result = await this.safeExeca('npx', ['eslint', 'src', '--ext', '.ts', '-f', 'json'], {
+        timeout: this.verifyTimeoutMs,
+      });
+      if (!result) return null;
+
+      return this.countLintWarnings(result.stdout);
+    } catch (error) {
+      this.log(`⚠️  ${formatErrorWithPrefix('Could not gather lint warnings', error)}`);
+      return null;
+    }
+  }
+
+  /**
+   * Captures verification metrics for evolution logging and metric delta computation.
+   */
+  private async captureVerificationMetrics(): Promise<VerificationMetrics | null> {
+    const [summary, lintWarnings] = await Promise.all([
+      this.readCoverageSummary(),
+      this.readLintWarningCount(),
+    ]);
+
+    const coverage = summary ? this.extractCoverageSnapshot(summary) : null;
+    const branchHotspots = summary ? this.collectBranchCoverageHotspots(summary) : [];
+
+    if (!coverage && lintWarnings === null && branchHotspots.length === 0) {
+      return null;
+    }
+
+    return {
+      coverage: coverage ?? undefined,
+      lintWarnings: lintWarnings ?? undefined,
+      branchHotspots: branchHotspots.length > 0 ? branchHotspots : undefined,
+    };
+  }
+
+  /**
+   * Computes metric deltas between the pre- and post-iteration snapshots.
+   */
+  private calculateMetricDelta(
+    before: VerificationMetrics | null,
+    after: VerificationMetrics | null
+  ): MetricDelta | undefined {
+    const delta: MetricDelta = {};
+
+    if (before?.coverage && after?.coverage) {
+      delta.branches = after.coverage.branches - before.coverage.branches;
+      delta.functions = after.coverage.functions - before.coverage.functions;
+      delta.lines = after.coverage.lines - before.coverage.lines;
+      delta.statements = after.coverage.statements - before.coverage.statements;
+    }
+
+    if (typeof before?.lintWarnings === 'number' && typeof after?.lintWarnings === 'number') {
+      delta.lintWarnings = after.lintWarnings - before.lintWarnings;
+    }
+
+    return Object.keys(delta).length > 0 ? delta : undefined;
+  }
+
+  /**
    * Checks if a file path matches a glob pattern.
    * Supports exact match and directory prefix (ending with /**).
    */
@@ -206,28 +427,7 @@ export class SelfDriver {
       return { valid: true, violations: [] };
     }
 
-    const violations: string[] = [];
-    for (const file of changedFiles) {
-      // Check forbidden paths (blacklist)
-      let isForbidden = false;
-      for (const pattern of this.forbiddenPaths) {
-        if (this.matchesGlobPattern(file, pattern)) {
-          violations.push(file);
-          isForbidden = true;
-          break;
-        }
-      }
-
-      // Check allowed paths (whitelist) - only if not already forbidden
-      if (!isForbidden && this.allowedPaths.length > 0) {
-        const isAllowed = this.allowedPaths.some((pattern) =>
-          this.matchesGlobPattern(file, pattern)
-        );
-        if (!isAllowed) {
-          violations.push(file);
-        }
-      }
-    }
+    const violations = this.collectPathViolations(changedFiles);
 
     return { valid: violations.length === 0, violations };
   }
@@ -254,14 +454,7 @@ export class SelfDriver {
       return { total: 0, withinLimit: true };
     }
 
-    let insertions = 0;
-    let deletions = 0;
-    const insertMatch = output.match(/(\d+)\s+insertion/);
-    const deleteMatch = output.match(/(\d+)\s+deletion/);
-    if (insertMatch) insertions = parseInt(insertMatch[1], 10);
-    if (deleteMatch) deletions = parseInt(deleteMatch[1], 10);
-
-    const total = insertions + deletions;
+    const total = this.parseDiffTotal(output);
     return { total, withinLimit: total <= this.maxDiffLines };
   }
 
@@ -331,25 +524,8 @@ export class SelfDriver {
    * @returns A formatted string of lint warnings, or null if unavailable
    */
   private async gatherLintWarnings(): Promise<string | null> {
-    try {
-      const result = await this.safeExeca('npx', ['eslint', 'src', '--ext', '.ts', '-f', 'json'], {
-        timeout: this.verifyTimeoutMs,
-      });
-      if (!result) return null;
-
-      const parsed = JSON.parse(result.stdout);
-      if (!Array.isArray(parsed)) return null;
-
-      let totalWarnings = 0;
-      for (const file of parsed) {
-        totalWarnings += file.warningCount ?? 0;
-      }
-
-      return `- ESLint Warnings: ${totalWarnings}`;
-    } catch (error) {
-      this.log(`⚠️  ${formatErrorWithPrefix('Could not gather lint warnings', error)}`);
-      return null;
-    }
+    const totalWarnings = await this.readLintWarningCount();
+    return totalWarnings === null ? null : `- ESLint Warnings: ${totalWarnings}`;
   }
 
   /**
@@ -363,16 +539,18 @@ export class SelfDriver {
     ]);
 
     const coverage = summary ? this.formatCoverageMetrics(summary) : null;
+    const branchHotspots = summary ? this.formatBranchCoverageHotspots(summary) : null;
     const lowestFiles = summary ? this.formatLowestCoverageFiles(summary) : null;
 
     const lines: string[] = [];
     if (coverage) lines.push(coverage);
+    if (branchHotspots) lines.push(branchHotspots);
     if (lowestFiles) lines.push(lowestFiles);
     if (lint) lines.push(lint);
 
     if (lines.length === 0) return '';
 
-    return `\n## Code Health Metrics\n${lines.join('\n')}\n\nPrioritize:\n- If coverage < 80% in any area → prefer TEST\n- If lint warnings > 0 → prefer FIX\n- If both healthy → prefer REFACTOR or SKIP`;
+    return `\n## Code Health Metrics\n${lines.join('\n')}\n\nPrioritize:\n- First target the listed branch hotspots in core production files\n- If you choose TEST, cover a concrete bug path, failure path, or missing branch from those hotspots\n- If lint warnings > 0, prefer FIX over adding low-value tests\n- Prefer SKIP over broad churn when hotspots and lint are already healthy`;
   }
 
   /**
@@ -426,6 +604,61 @@ export class SelfDriver {
     }
 
     return { passed: true, details: 'all coverage thresholds met' };
+  }
+
+  /**
+   * Validates the committed diff between two revisions against path and size policies.
+   */
+  private async validateCommittedChanges(
+    beforeHash: string,
+    afterHash: string
+  ): Promise<CommittedChangeValidationResult> {
+    const changedFiles = (await this.getChangedFilesList(beforeHash, afterHash)) ?? [];
+    const violations = this.collectPathViolations(changedFiles);
+
+    let total = 0;
+    let withinLimit = true;
+
+    if (this.maxDiffLines > 0) {
+      const diffResult = await this.safeExeca('git', ['diff', '--shortstat', beforeHash, afterHash]);
+      if (!diffResult) {
+        this.log('⚠️  Could not determine committed diff size, skipping post-commit size validation');
+      } else {
+        total = this.parseDiffTotal(diffResult.stdout);
+        withinLimit = total <= this.maxDiffLines;
+      }
+    }
+
+    return {
+      valid: violations.length === 0 && withinLimit,
+      violations,
+      total,
+      withinLimit,
+    };
+  }
+
+  /**
+   * Reverts a committed iteration back to the known-safe commit hash.
+   */
+  private async revertCommittedIteration(beforeHash: string): Promise<boolean> {
+    const resetResult = await this.safeExeca('git', ['reset', '--hard', beforeHash]);
+    if (!resetResult || resetResult.exitCode !== 0) {
+      this.log('⚠️  Git hard reset failed');
+      return false;
+    }
+
+    if (!this.keepUntracked) {
+      const cleanResult = await this.safeExeca('git', ['clean', '-fd']);
+      if (!cleanResult || cleanResult.exitCode !== 0) {
+        this.log('⚠️  Git clean failed');
+        return false;
+      }
+    } else {
+      this.log('ℹ️  Preserving untracked files (--keep-untracked)');
+    }
+
+    this.log(`🔄 Reverted committed iteration to ${beforeHash}`);
+    return true;
   }
 
   /**
@@ -634,6 +867,7 @@ export class SelfDriver {
 
     // Capture git commit hash before evolution to detect if changes were committed
     const beforeCommitHash = await this.getHeadCommitHash();
+    const metricsBefore = await this.captureVerificationMetrics();
 
     // 1. Read constitution file
     const constitution = await this.readConstitution();
@@ -655,6 +889,7 @@ export class SelfDriver {
         success: false,
         failureStage: 'execution',
         failureDetail: 'OpenCode execution failed or timed out',
+        metricsBefore: metricsBefore ?? undefined,
         durationMs: Date.now() - this.iterationStartTime,
       });
       const shouldStop = this.handleEvolutionFailure('Evolution execution issue');
@@ -678,6 +913,7 @@ export class SelfDriver {
         success: false,
         failureStage: 'verification',
         failureDetail: 'Build, test, or lint checks failed after AI changes',
+        metricsBefore: metricsBefore ?? undefined,
         durationMs: Date.now() - this.iterationStartTime,
       });
       this.log('❌ Verification failed, reverting...');
@@ -693,11 +929,18 @@ export class SelfDriver {
     const beforeHashError = beforeCommitHash === null;
     const afterHashError = afterCommitHash === null;
     const hashChanged = !beforeHashError && !afterHashError && beforeCommitHash !== afterCommitHash;
+    const committedValidation =
+      isClean && hashChanged && beforeCommitHash && afterCommitHash
+        ? await this.validateCommittedChanges(beforeCommitHash, afterCommitHash)
+        : null;
+    const metricsAfter = await this.captureVerificationMetrics();
 
     const shouldContinue = await this.handlePostVerificationState(
       isClean,
       hashChanged,
-      beforeHashError || afterHashError
+      beforeHashError || afterHashError,
+      beforeCommitHash,
+      committedValidation
     );
 
     await this.recordIterationOutcome(
@@ -705,7 +948,10 @@ export class SelfDriver {
       isClean,
       hashChanged,
       beforeCommitHash,
-      afterCommitHash
+      afterCommitHash,
+      committedValidation,
+      metricsBefore,
+      metricsAfter
     );
 
     return shouldContinue ? 'completed' : 'stop';
@@ -725,11 +971,45 @@ export class SelfDriver {
     isClean: boolean,
     hashChanged: boolean,
     beforeCommitHash: string | null,
-    afterCommitHash: string | null
+    afterCommitHash: string | null,
+    committedValidation: CommittedChangeValidationResult | null,
+    metricsBefore: VerificationMetrics | null,
+    metricsAfter: VerificationMetrics | null
   ): Promise<void> {
     const filesChanged = await this.getChangedFilesList(beforeCommitHash, afterCommitHash);
     const decision = hashChanged ? await this.detectDecisionFromCommit() : undefined;
     const durationMs = Date.now() - this.iterationStartTime;
+    const metricDelta = this.calculateMetricDelta(metricsBefore, metricsAfter);
+
+    if (isClean && hashChanged && committedValidation && !committedValidation.valid) {
+      const failureDetail = committedValidation.violations.length > 0
+        ? `Committed changes violated file restrictions: ${committedValidation.violations.join(', ')}`
+        : `Committed changes exceeded diff size limit: ${committedValidation.total} lines changed (limit: ${this.maxDiffLines})`;
+
+      this.lastIterationResult = {
+        iteration: this.iterationCount,
+        success: false,
+        decision,
+        failureStage: 'commit',
+        failureDetail,
+        filesChanged,
+      };
+      await this.writeEvolutionRecord({
+        iteration: this.iterationCount,
+        timestamp: iterationTimestamp,
+        success: false,
+        failureStage: 'commit',
+        failureDetail,
+        commitHash: afterCommitHash ?? undefined,
+        decision,
+        filesChanged,
+        metricsBefore: metricsBefore ?? undefined,
+        metricsAfter: metricsAfter ?? undefined,
+        metricDelta,
+        durationMs,
+      });
+      return;
+    }
 
     if (isClean && hashChanged) {
       this.lastIterationResult = {
@@ -743,6 +1023,11 @@ export class SelfDriver {
         timestamp: iterationTimestamp,
         success: true,
         commitHash: afterCommitHash ?? undefined,
+        decision,
+        filesChanged,
+        metricsBefore: metricsBefore ?? undefined,
+        metricsAfter: metricsAfter ?? undefined,
+        metricDelta,
         durationMs,
       });
     } else if (isClean && !hashChanged) {
@@ -756,14 +1041,20 @@ export class SelfDriver {
         iteration: this.iterationCount,
         timestamp: iterationTimestamp,
         success: true,
+        decision: 'SKIP',
+        metricsBefore: metricsBefore ?? undefined,
+        metricsAfter: metricsAfter ?? undefined,
+        metricDelta,
         durationMs,
       });
     } else {
+      const failureDetail = hashChanged ? PARTIAL_COMMIT_DETAIL : COMMIT_MISSED_DETAIL;
       this.lastIterationResult = {
         iteration: this.iterationCount,
         success: false,
         failureStage: 'commit',
-        failureDetail: COMMIT_MISSED_DETAIL,
+        failureDetail,
+        decision,
         filesChanged,
       };
       await this.writeEvolutionRecord({
@@ -771,7 +1062,13 @@ export class SelfDriver {
         timestamp: iterationTimestamp,
         success: false,
         failureStage: 'commit',
-        failureDetail: COMMIT_MISSED_DETAIL,
+        failureDetail,
+        commitHash: afterCommitHash ?? undefined,
+        decision,
+        filesChanged,
+        metricsBefore: metricsBefore ?? undefined,
+        metricsAfter: metricsAfter ?? undefined,
+        metricDelta,
         durationMs,
       });
     }
@@ -1021,6 +1318,8 @@ Read and analyze the codebase, then decide:
 5. SKIP - Codebase is healthy, no changes needed this round
 
 Execute your decision. Make minimal, focused changes.
+If you choose TEST, target a concrete missing branch or failure path from the branch hotspots first.
+Prefer SKIP over low-value churn when the remaining work is mostly metric polishing.
 ${fileRestrictionSection}${changeSizeLimitSection}## After Changes
 
 1. **Verify** all pass:
@@ -1286,7 +1585,9 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
   private async handlePostVerificationState(
     isClean: boolean,
     hashChanged: boolean,
-    hashError: boolean
+    hashError: boolean,
+    beforeCommitHash: string | null,
+    committedValidation: CommittedChangeValidationResult | null
   ): Promise<boolean> {
     // If we couldn't determine commit hashes, log a warning but continue
     if (hashError) {
@@ -1302,6 +1603,30 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     }
 
     if (isClean && hashChanged) {
+      if (committedValidation && !committedValidation.valid) {
+        if (committedValidation.violations.length > 0) {
+          this.log('⚠️  Committed changes violated file restrictions:');
+          for (const violation of committedValidation.violations) {
+            this.log(`     - ${violation}`);
+          }
+        } else {
+          this.log(
+            `⚠️  Committed changes exceeded diff size limit: ${committedValidation.total} lines changed (limit: ${this.maxDiffLines})`
+          );
+        }
+
+        if (!beforeCommitHash) {
+          this.cleanup();
+          return false;
+        }
+
+        const reverted = await this.revertCommittedIteration(beforeCommitHash);
+        const failureReason = committedValidation.violations.length > 0
+          ? 'Committed changes violated file restrictions'
+          : 'Committed changes exceeded diff size limit';
+        return this.handleRevertFailure(reverted, failureReason);
+      }
+
       this.log('✅ Changes committed by AI');
       this.consecutiveFailures = 0; // Reset on success
       return true;
@@ -1316,15 +1641,18 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     // Not clean = some changes left uncommitted
     if (hashChanged) {
       this.log('⚠️  Verification passed but AI left uncommitted changes after partial commit');
+      if (!beforeCommitHash) {
+        this.cleanup();
+        return false;
+      }
+      this.log('🔄 Reverting committed and uncommitted changes...');
+      const result = await this.revertCommittedIteration(beforeCommitHash);
+      return this.handleRevertFailure(result, PARTIAL_COMMIT_DETAIL);
     } else {
       this.log('⚠️  Verification passed but AI did not commit changes');
+      this.log('🔄 Reverting uncommitted changes...');
+      return this.handleRevertFailure(await this.revert(), COMMIT_MISSED_DETAIL);
     }
-    this.log('🔄 Reverting uncommitted changes...');
-    const result = await this.revertOrFailOrResetFailures();
-    if (result) {
-      this.log('ℹ️  Reset failure counter (verification passed, commit missed)');
-    }
-    return result;
   }
 
   /**

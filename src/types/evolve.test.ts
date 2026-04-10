@@ -4,7 +4,13 @@
  * @module types/evolve.test
  */
 
-import type { SelfEvolverOptions, IterationResult, EvolutionRecord } from './evolve';
+import type {
+  SelfEvolverOptions,
+  IterationResult,
+  EvolutionRecord,
+  VerificationMetrics,
+  MetricDelta,
+} from './evolve';
 import { EVOLUTION_VERIFY_COMMANDS } from './evolve';
 
 describe('SelfEvolverOptions interface', () => {
@@ -334,10 +340,14 @@ describe('EvolutionRecord interface', () => {
       timestamp: '2026-04-07T12:00:00.000Z',
       success: true,
       commitHash: 'abc123',
+      decision: 'FIX',
+      filesChanged: ['src/core/foo.ts'],
       durationMs: 5000,
     };
     expect(record.success).toBe(true);
     expect(record.commitHash).toBe('abc123');
+    expect(record.decision).toBe('FIX');
+    expect(record.filesChanged).toEqual(['src/core/foo.ts']);
     expect(record.durationMs).toBe(5000);
   });
 
@@ -362,5 +372,37 @@ describe('EvolutionRecord interface', () => {
     };
     expect(record.commitHash).toBeUndefined();
     expect(record.failureStage).toBeUndefined();
+  });
+
+  it('accepts metrics snapshots and deltas', () => {
+    const before: VerificationMetrics = {
+      coverage: { branches: 70, functions: 80, lines: 81, statements: 82 },
+      lintWarnings: 4,
+      branchHotspots: [{ file: 'src/core/foo.ts', branches: 55 }],
+    };
+    const delta: MetricDelta = {
+      branches: 5,
+      functions: 0,
+      lines: 1,
+      statements: 1,
+      lintWarnings: -2,
+    };
+    const record: EvolutionRecord = {
+      iteration: 4,
+      timestamp: '2026-04-07T12:03:00.000Z',
+      success: true,
+      metricsBefore: before,
+      metricsAfter: {
+        coverage: { branches: 75, functions: 80, lines: 82, statements: 83 },
+        lintWarnings: 2,
+      },
+      metricDelta: delta,
+      durationMs: 1500,
+    };
+
+    expect(record.metricsBefore?.coverage?.branches).toBe(70);
+    expect(record.metricsBefore?.branchHotspots?.[0].file).toBe('src/core/foo.ts');
+    expect(record.metricDelta?.branches).toBe(5);
+    expect(record.metricDelta?.lintWarnings).toBe(-2);
   });
 });

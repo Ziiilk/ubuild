@@ -2882,12 +2882,14 @@ describe('handlePostVerificationState', () => {
         handlePostVerificationState: (
           isClean: boolean,
           hashChanged: boolean,
-          hashError: boolean
+          hashError: boolean,
+          beforeCommitHash: string | null,
+          committedValidation: unknown
         ) => Promise<boolean>;
       }
     ).handlePostVerificationState;
 
-    const result = await handlePostVerificationState.call(driver, false, false, false);
+    const result = await handlePostVerificationState.call(driver, false, false, false, null, null);
 
     expect(result).toBe(false);
     expect(mockLogger).toHaveBeenCalledWith(
@@ -2920,14 +2922,16 @@ describe('handlePostVerificationState', () => {
         handlePostVerificationState: (
           isClean: boolean,
           hashChanged: boolean,
-          hashError: boolean
+          hashError: boolean,
+          beforeCommitHash: string | null,
+          committedValidation: unknown
         ) => Promise<boolean>;
       }
     ).handlePostVerificationState;
 
     // Test the case where verification passed but AI did not commit changes
     // isClean=false, hashError=false means working tree is dirty and we can verify commits
-    const result = await handlePostVerificationState.call(driver, false, false, false);
+    const result = await handlePostVerificationState.call(driver, false, false, false, null, null);
 
     expect(result).toBe(true);
     expect(mockLogger).toHaveBeenCalledWith(
@@ -2937,9 +2941,9 @@ describe('handlePostVerificationState', () => {
       expect.stringContaining('Reverting uncommitted changes')
     );
 
-    // Verify that consecutiveFailures is NOT incremented (verification passed)
+    // Commit miss now counts as a failed iteration even when verify passed
     const status = driver.getStatus();
-    expect(status.consecutiveFailures).toBe(0);
+    expect(status.consecutiveFailures).toBe(1);
   });
 
   it('handles partial commit when hashChanged && !isClean', async () => {
@@ -2964,28 +2968,30 @@ describe('handlePostVerificationState', () => {
         handlePostVerificationState: (
           isClean: boolean,
           hashChanged: boolean,
-          hashError: boolean
+          hashError: boolean,
+          beforeCommitHash: string | null,
+          committedValidation: unknown
         ) => Promise<boolean>;
       }
     ).handlePostVerificationState;
 
     // AI committed some changes (hash changed) but left others uncommitted
-    const result = await handlePostVerificationState.call(driver, false, true, false);
+    const result = await handlePostVerificationState.call(driver, false, true, false, 'abc123', null);
 
     expect(result).toBe(true);
     expect(mockLogger).toHaveBeenCalledWith(
       expect.stringContaining('AI left uncommitted changes after partial commit')
     );
     expect(mockLogger).toHaveBeenCalledWith(
-      expect.stringContaining('Reverting uncommitted changes')
+      expect.stringContaining('Reverting committed and uncommitted changes')
     );
 
-    // Failure counter should be reset since verification passed
+    // Partial commit is now treated as a failed iteration
     const status = driver.getStatus();
-    expect(status.consecutiveFailures).toBe(0);
+    expect(status.consecutiveFailures).toBe(1);
   });
 
-  it('logs info message about reset failure counter when reverting uncommitted changes', async () => {
+  it('logs revert message when reverting uncommitted changes', async () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ once: true, logger: mockLogger });
 
@@ -3007,14 +3013,16 @@ describe('handlePostVerificationState', () => {
         handlePostVerificationState: (
           isClean: boolean,
           hashChanged: boolean,
-          hashError: boolean
+          hashError: boolean,
+          beforeCommitHash: string | null,
+          committedValidation: unknown
         ) => Promise<boolean>;
       }
     ).handlePostVerificationState;
 
-    await handlePostVerificationState.call(driver, false, false, false);
+    await handlePostVerificationState.call(driver, false, false, false, null, null);
 
-    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Reset failure counter'));
+    expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Reverted changes'));
   });
 
   it('returns false when revert fails for hash error dirty tree', async () => {
@@ -4497,6 +4505,7 @@ describe('evolution log (writeEvolutionRecord)', () => {
     driver = new SelfDriver({ once: true, logger: mockLogger });
 
     let headCallCount = 0;
+    let eslintCallCount = 0;
     mockExeca.mockImplementation(async (command: string, args?: string[]) => {
       if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
         return mockExecaResult(0, '.git', '');
@@ -4504,11 +4513,22 @@ describe('evolution log (writeEvolutionRecord)', () => {
       if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
         return mockExecaResult(0, '', '');
       }
+      if (command === 'npx' && args?.includes('eslint')) {
+        eslintCallCount++;
+        const warningCount = eslintCallCount >= 3 ? 1 : 3;
+        return mockExecaResult(0, JSON.stringify([{ warningCount }]), '');
+      }
       if (command === 'opencode' && args?.includes('--version')) {
         return mockExecaResult(0, '1.0.0', '');
       }
       if (command === 'git' && args?.includes('ls-files')) {
         return mockExecaResult(0, 'src/index.ts', '');
+      }
+      if (command === 'git' && args?.includes('diff') && args?.includes('--name-only')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts\nsrc/core/self-driver.test.ts\n', '');
+      }
+      if (command === 'git' && args?.includes('log') && args?.includes('--format=%s')) {
+        return mockExecaResult(0, 'test: add regression coverage for self-driver', '');
       }
       if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
         headCallCount++;
@@ -4528,6 +4548,13 @@ describe('evolution log (writeEvolutionRecord)', () => {
     expect(record.success).toBe(true);
     expect(record.iteration).toBe(1);
     expect(record.commitHash).toBe('def456');
+    expect(record.decision).toBe('TEST');
+    expect(record.filesChanged).toEqual([
+      'src/core/self-driver.ts',
+      'src/core/self-driver.test.ts',
+    ]);
+    expect(record.metricsAfter.lintWarnings).toBe(1);
+    expect(record.metricDelta.lintWarnings).toBe(-2);
     expect(record.durationMs).toBeGreaterThanOrEqual(0);
     expect(record.timestamp).toBeDefined();
   });
@@ -4660,6 +4687,68 @@ describe('evolution log (writeEvolutionRecord)', () => {
     expect(mockAppendFile).toHaveBeenCalledTimes(1);
     const logPath = mockAppendFile.mock.calls[0][0] as string;
     expect(logPath).toContain('custom-log.jsonl');
+  });
+
+  it('writes commit-stage failure record when committed files violate policy', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger, allowedPaths: ['src/**'] });
+
+    let headCallCount = 0;
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'npx' && args?.includes('eslint')) {
+        return mockExecaResult(0, JSON.stringify([{ warningCount: 0 }]), '');
+      }
+      if (command === 'opencode' && args?.includes('--version')) {
+        return mockExecaResult(0, '1.0.0', '');
+      }
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/index.ts', '');
+      }
+      if (command === 'git' && args?.includes('log') && args?.includes('--format=%s')) {
+        return mockExecaResult(0, 'fix: touch config by mistake', '');
+      }
+      if (command === 'git' && args?.includes('diff') && args?.includes('--name-only')) {
+        if (args.includes('HEAD')) {
+          return mockExecaResult(0, 'src/core/self-driver.ts\n', '');
+        }
+        return mockExecaResult(0, 'jest.config.js\n', '');
+      }
+      if (command === 'git' && args?.includes('--shortstat')) {
+        if (args.includes('HEAD')) {
+          return mockExecaResult(0, ' 1 file changed, 2 insertions(+), 1 deletion(-)', '');
+        }
+        return mockExecaResult(0, ' 1 file changed, 3 insertions(+), 1 deletion(-)', '');
+      }
+      if (command === 'git' && args?.includes('reset') && args?.includes('--hard')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+        headCallCount++;
+        return mockExecaResult(0, headCallCount <= 1 ? 'abc123' : 'def456', '');
+      }
+      if (command === 'opencode' && args?.includes('run')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    await driver.run();
+
+    expect(mockExeca).toHaveBeenCalledWith('git', ['reset', '--hard', 'abc123'], expect.any(Object));
+    const record = JSON.parse((mockAppendFile.mock.calls[0][1] as string).trim());
+    expect(record.success).toBe(false);
+    expect(record.failureStage).toBe('commit');
+    expect(record.failureDetail).toContain('Committed changes violated file restrictions');
+    expect(record.filesChanged).toEqual(['jest.config.js']);
   });
 });
 
@@ -4943,6 +5032,60 @@ describe('file change validation (forbiddenPaths)', () => {
     expect(prompt).toContain('package.json');
     expect(prompt).toContain('tsconfig.json');
     expect(prompt).toContain('.github/**');
+  });
+
+  it('reverts committed changes when AI partially commits and leaves working tree dirty', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    let headCallCount = 0;
+    let statusCallCount = 0;
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('--git-dir')) {
+        return mockExecaResult(0, '.git', '');
+      }
+      if (command === 'git' && args?.includes('status') && args?.includes('--porcelain')) {
+        statusCallCount++;
+        return mockExecaResult(0, statusCallCount === 1 ? '' : ' M src/core/self-driver.ts', '');
+      }
+      if (command === 'npx' && args?.includes('eslint')) {
+        return mockExecaResult(0, JSON.stringify([{ warningCount: 0 }]), '');
+      }
+      if (command === 'opencode' && args?.includes('--version')) {
+        return mockExecaResult(0, '1.0.0', '');
+      }
+      if (command === 'git' && args?.includes('ls-files')) {
+        return mockExecaResult(0, 'src/index.ts', '');
+      }
+      if (command === 'git' && args?.includes('rev-parse') && args?.includes('HEAD')) {
+        headCallCount++;
+        return mockExecaResult(0, headCallCount <= 1 ? 'abc123' : 'def456', '');
+      }
+      if (command === 'git' && args?.includes('diff') && args?.includes('--name-only')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts\n', '');
+      }
+      if (command === 'git' && args?.includes('reset') && args?.includes('--hard')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'opencode' && args?.includes('run')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    await driver.run();
+
+    expect(mockExeca).toHaveBeenCalledWith('git', ['reset', '--hard', 'abc123'], expect.any(Object));
+    expect(driver.getStatus().lastIterationResult).toEqual({
+      iteration: 1,
+      success: false,
+      failureStage: 'commit',
+      failureDetail: 'Verification passed but AI left uncommitted changes after partial commit',
+      filesChanged: ['src/core/self-driver.ts'],
+    });
   });
 
   it('omits file restriction section when forbiddenPaths and allowedPaths are empty', () => {
@@ -5361,6 +5504,10 @@ describe('code health metrics', () => {
           lines: { pct: 80 },
           statements: { pct: 80 },
         },
+        'src/core/engine-resolver.ts': {
+          branches: { pct: 55 },
+          lines: { pct: 72 },
+        },
       })
     );
 
@@ -5380,8 +5527,41 @@ describe('code health metrics', () => {
 
     expect(result).toContain('Code Health Metrics');
     expect(result).toContain('branches 70%');
+    expect(result).toContain('Branch Coverage Hotspots');
+    expect(result).toContain('src/core/engine-resolver.ts (55% branches)');
     expect(result).toContain('ESLint Warnings: 3');
-    expect(result).toContain('Prioritize');
+    expect(result).toContain('concrete bug path');
+  });
+
+  it('formats branch coverage hotspots from parsed summary', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    const summary = {
+      total: { branches: { pct: 80 } },
+      'src/core/build-executor.ts': { branches: { pct: 45 } },
+      'src/commands/run.ts': { branches: { pct: 52 } },
+      'src/test-utils/fixture.ts': { branches: { pct: 10 } },
+      'src/core/engine-resolver.ts': { branches: { pct: 95 } },
+      'src/types/foo.ts': { branches: { pct: 5 } },
+    };
+
+    const formatBranchCoverageHotspots = (
+      driver as unknown as {
+        formatBranchCoverageHotspots: (
+          summary: Record<string, unknown>,
+          maxFiles?: number
+        ) => string | null;
+      }
+    ).formatBranchCoverageHotspots;
+    const result = formatBranchCoverageHotspots.call(driver, summary);
+
+    expect(result).toContain('Branch Coverage Hotspots');
+    expect(result).toContain('src/core/build-executor.ts (45% branches)');
+    expect(result).toContain('src/commands/run.ts (52% branches)');
+    expect(result).toContain('src/core/engine-resolver.ts (95% branches)');
+    expect(result).not.toContain('src/test-utils/fixture.ts');
+    expect(result).not.toContain('src/types/foo.ts');
   });
 
   it('formats lowest coverage files from parsed summary', () => {
@@ -5530,11 +5710,13 @@ describe('code health metrics', () => {
       }
     ).buildEvolutionPrompt;
 
-    const metrics = '\n## Code Health Metrics\n- Test Coverage: branches 70%\n- ESLint Warnings: 5';
+    const metrics =
+      '\n## Code Health Metrics\n- Test Coverage: branches 70%\n- Branch Coverage Hotspots:\n  - src/core/foo.ts (45% branches)\n- ESLint Warnings: 5';
     const prompt = buildEvolutionPrompt.call(driver, '', 'src/index.ts', null, metrics);
 
     expect(prompt).toContain('Code Health Metrics');
     expect(prompt).toContain('branches 70%');
+    expect(prompt).toContain('concrete missing branch or failure path');
     expect(prompt).toContain('ESLint Warnings: 5');
   });
 

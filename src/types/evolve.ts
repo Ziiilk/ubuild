@@ -101,6 +101,50 @@ export interface IterationResult {
   filesChanged?: string[];
 }
 
+/** Snapshot of verification metrics captured around an evolution iteration. */
+export interface CoverageSnapshot {
+  /** Branch coverage percentage */
+  branches: number;
+  /** Function coverage percentage */
+  functions: number;
+  /** Line coverage percentage */
+  lines: number;
+  /** Statement coverage percentage */
+  statements: number;
+}
+
+/** Lowest branch-coverage production files to prioritize in future iterations. */
+export interface BranchCoverageHotspot {
+  /** File path in the repository */
+  file: string;
+  /** Branch coverage percentage for the file */
+  branches: number;
+}
+
+/** Verification metrics captured before or after an evolution iteration. */
+export interface VerificationMetrics {
+  /** Coverage snapshot from coverage-summary.json, if available */
+  coverage?: CoverageSnapshot;
+  /** ESLint warning count, if available */
+  lintWarnings?: number;
+  /** Lowest branch-coverage core files, if available */
+  branchHotspots?: BranchCoverageHotspot[];
+}
+
+/** Delta between pre- and post-iteration verification metrics. */
+export interface MetricDelta {
+  /** Branch coverage delta in percentage points */
+  branches?: number;
+  /** Function coverage delta in percentage points */
+  functions?: number;
+  /** Line coverage delta in percentage points */
+  lines?: number;
+  /** Statement coverage delta in percentage points */
+  statements?: number;
+  /** ESLint warning count delta */
+  lintWarnings?: number;
+}
+
 /**
  * Structured log record for a single evolution iteration.
  * Written as JSONL (one JSON object per line) to the evolution log file.
@@ -118,6 +162,16 @@ export interface EvolutionRecord {
   failureDetail?: string;
   /** Git commit hash if changes were committed */
   commitHash?: string;
+  /** The AI decision inferred from the committed change */
+  decision?: string;
+  /** List of files changed during the iteration */
+  filesChanged?: string[];
+  /** Metrics captured before the iteration started */
+  metricsBefore?: VerificationMetrics;
+  /** Metrics captured after verification completed */
+  metricsAfter?: VerificationMetrics;
+  /** Delta between pre- and post-iteration metrics */
+  metricDelta?: MetricDelta;
   /** Duration of the iteration in milliseconds */
   durationMs: number;
 }
