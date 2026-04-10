@@ -62,6 +62,12 @@ interface CommittedChangeValidationResult {
   withinLimit: boolean;
 }
 
+/** Validation result for whether a TEST decision cleared the minimum value bar. */
+interface TestDecisionValidationResult {
+  valid: boolean;
+  reason?: string;
+}
+
 /** Default sleep duration between iterations in milliseconds */
 const DEFAULT_SLEEP_MS = 5000;
 /** Default timeout for verification checks in milliseconds */
@@ -501,6 +507,87 @@ export class SelfDriver {
       '',
       'If you choose a different decision, make sure the codebase evidence clearly justifies it.',
     ].join('\n');
+  }
+
+  /**
+   * Checks whether a file is a Jest test file.
+   */
+  private isTestFile(filePath: string): boolean {
+    const normalized = filePath.replace(/\\/g, '/');
+    return normalized.endsWith('.test.ts') || normalized.endsWith('.spec.ts');
+  }
+
+  /**
+   * Normalizes a file path to a module identity so source and colocated test files can be matched.
+   */
+  private toModuleIdentity(filePath: string): string {
+    return filePath
+      .replace(/\\/g, '/')
+      .replace(/\.(test|spec)(?=\.ts$)/, '')
+      .replace(/\.ts$/, '');
+  }
+
+  /**
+   * Determines whether two files belong to the same source/test module area.
+   */
+  private areRelatedModuleFiles(left: string, right: string): boolean {
+    return this.toModuleIdentity(left) === this.toModuleIdentity(right);
+  }
+
+  /**
+   * Enforces a minimum-value bar for committed TEST decisions.
+   * TEST commits must either target an existing hotspot, cover a prior failure path,
+   * or measurably improve coverage.
+   */
+  private validateTestDecision(
+    decision: string | undefined,
+    filesChanged: string[] | undefined,
+    metricsBefore: VerificationMetrics | null,
+    metricsAfter: VerificationMetrics | null,
+    lastResult?: IterationResult | null
+  ): TestDecisionValidationResult {
+    if (decision !== 'TEST') {
+      return { valid: true };
+    }
+
+    const changedFiles = filesChanged ?? [];
+    const changedTestFiles = changedFiles.filter((file) => this.isTestFile(file));
+    if (changedTestFiles.length === 0) {
+      return {
+        valid: false,
+        reason: 'TEST decision did not modify any test files',
+      };
+    }
+
+    const targetsHotspot =
+      metricsBefore?.branchHotspots?.some((hotspot) =>
+        changedFiles.some((file) => this.areRelatedModuleFiles(file, hotspot.file))
+      ) ?? false;
+
+    const targetsFailurePath =
+      (!!lastResult &&
+        !lastResult.success &&
+        !!lastResult.filesChanged?.some((previousFile) =>
+          changedFiles.some((file) => this.areRelatedModuleFiles(file, previousFile))
+        )) ?? false;
+
+    const coverageImproved =
+      !!metricsBefore?.coverage &&
+      !!metricsAfter?.coverage &&
+      (metricsAfter.coverage.branches > metricsBefore.coverage.branches ||
+        metricsAfter.coverage.functions > metricsBefore.coverage.functions ||
+        metricsAfter.coverage.lines > metricsBefore.coverage.lines ||
+        metricsAfter.coverage.statements > metricsBefore.coverage.statements);
+
+    if (targetsHotspot || targetsFailurePath || coverageImproved) {
+      return { valid: true };
+    }
+
+    return {
+      valid: false,
+      reason:
+        'TEST decision did not target a hotspot, did not cover a prior failure path, and did not improve coverage',
+    };
   }
 
   /**
@@ -1022,7 +1109,7 @@ export class SelfDriver {
 
     // 3. Verify (the only gate)
     this.log('\n🔍 Verifying changes...');
-    const verified = await this.verify();
+    const verified = await this.verify(decisionGuidance);
 
     if (!verified) {
       this.lastIterationResult = {
@@ -1059,22 +1146,35 @@ export class SelfDriver {
         ? await this.validateCommittedChanges(beforeCommitHash, afterCommitHash)
         : null;
     const metricsAfter = await this.captureVerificationMetrics();
+    const filesChanged = await this.getChangedFilesList(beforeCommitHash, afterCommitHash);
+    const decision = hashChanged ? await this.detectDecisionFromCommit() : undefined;
+    const testDecisionValidation = this.validateTestDecision(
+      decision,
+      filesChanged,
+      metricsBefore,
+      metricsAfter,
+      this.lastIterationResult
+    );
 
     const shouldContinue = await this.handlePostVerificationState(
       isClean,
       hashChanged,
       beforeHashError || afterHashError,
       beforeCommitHash,
-      committedValidation
+      committedValidation,
+      decision,
+      testDecisionValidation
     );
 
     await this.recordIterationOutcome(
       iterationTimestamp,
       isClean,
       hashChanged,
-      beforeCommitHash,
       afterCommitHash,
+      decision,
+      filesChanged,
       committedValidation,
+      testDecisionValidation,
       metricsBefore,
       metricsAfter,
       decisionGuidance
@@ -1096,17 +1196,47 @@ export class SelfDriver {
     iterationTimestamp: string,
     isClean: boolean,
     hashChanged: boolean,
-    beforeCommitHash: string | null,
     afterCommitHash: string | null,
+    decision: string | undefined,
+    filesChanged: string[] | undefined,
     committedValidation: CommittedChangeValidationResult | null,
+    testDecisionValidation: TestDecisionValidationResult,
     metricsBefore: VerificationMetrics | null,
     metricsAfter: VerificationMetrics | null,
     decisionGuidance: DecisionGuidance
   ): Promise<void> {
-    const filesChanged = await this.getChangedFilesList(beforeCommitHash, afterCommitHash);
-    const decision = hashChanged ? await this.detectDecisionFromCommit() : undefined;
     const durationMs = Date.now() - this.iterationStartTime;
     const metricDelta = this.calculateMetricDelta(metricsBefore, metricsAfter);
+
+    if (isClean && hashChanged && !testDecisionValidation.valid) {
+      const failureDetail =
+        testDecisionValidation.reason ?? 'TEST decision did not clear the minimum value bar';
+
+      this.lastIterationResult = {
+        iteration: this.iterationCount,
+        success: false,
+        decision,
+        failureStage: 'commit',
+        failureDetail,
+        filesChanged,
+      };
+      await this.writeEvolutionRecord({
+        iteration: this.iterationCount,
+        timestamp: iterationTimestamp,
+        success: false,
+        failureStage: 'commit',
+        failureDetail,
+        commitHash: afterCommitHash ?? undefined,
+        decision,
+        filesChanged,
+        metricsBefore: metricsBefore ?? undefined,
+        metricsAfter: metricsAfter ?? undefined,
+        metricDelta,
+        decisionGuidance,
+        durationMs,
+      });
+      return;
+    }
 
     if (isClean && hashChanged && committedValidation && !committedValidation.valid) {
       const failureDetail = committedValidation.violations.length > 0
@@ -1549,7 +1679,7 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
    * Uses EVOLUTION_VERIFY_COMMANDS to dynamically check all CLI commands.
    * When adding new commands, add them to EVOLUTION_VERIFY_COMMANDS in types/evolve.ts.
    */
-  private async verify(): Promise<boolean> {
+  private async verify(decisionGuidance?: DecisionGuidance): Promise<boolean> {
     // Check forbidden file changes before running expensive build/test/lint
     const { valid, violations } = await this.validateChangedFiles();
     if (!valid) {
@@ -1587,7 +1717,9 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     this.log(`  ✅ ${buildCheck.name} passed`);
 
     // Stage 2: Tests + Lint (independent, can run in parallel)
-    const testArgs = this.coverageBaseline ? ['test', '--', '--coverage'] : ['test'];
+    const shouldCollectCoverage =
+      !!this.coverageBaseline || decisionGuidance?.recommendedDecision === 'TEST';
+    const testArgs = shouldCollectCoverage ? ['test', '--', '--coverage'] : ['test'];
     const parallelChecks = [
       { name: 'Tests', file: 'npm', args: testArgs },
       { name: 'Lint', file: 'npm', args: ['run', 'lint'] },
@@ -1726,7 +1858,9 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     hashChanged: boolean,
     hashError: boolean,
     beforeCommitHash: string | null,
-    committedValidation: CommittedChangeValidationResult | null
+    committedValidation: CommittedChangeValidationResult | null,
+    decision: string | undefined,
+    testDecisionValidation: TestDecisionValidationResult = { valid: true }
   ): Promise<boolean> {
     // If we couldn't determine commit hashes, log a warning but continue
     if (hashError) {
@@ -1742,6 +1876,21 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     }
 
     if (isClean && hashChanged) {
+      if (!testDecisionValidation.valid) {
+        this.log(`⚠️  ${testDecisionValidation.reason}`);
+
+        if (!beforeCommitHash) {
+          this.cleanup();
+          return false;
+        }
+
+        const reverted = await this.revertCommittedIteration(beforeCommitHash);
+        return this.handleRevertFailure(
+          reverted,
+          testDecisionValidation.reason ?? 'Invalid TEST decision'
+        );
+      }
+
       if (committedValidation && !committedValidation.valid) {
         if (committedValidation.violations.length > 0) {
           this.log('⚠️  Committed changes violated file restrictions:');
@@ -1766,6 +1915,9 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
         return this.handleRevertFailure(reverted, failureReason);
       }
 
+      if (decision === 'TEST') {
+        this.log('✅ TEST decision cleared the value bar');
+      }
       this.log('✅ Changes committed by AI');
       this.consecutiveFailures = 0; // Reset on success
       return true;

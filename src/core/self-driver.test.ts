@@ -4503,6 +4503,21 @@ describe('evolution log (writeEvolutionRecord)', () => {
   it('writes a JSONL record on successful commit', async () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ once: true, logger: mockLogger });
+    mockPathExists.mockResolvedValue(true);
+    mockReadFile.mockResolvedValue(
+      JSON.stringify({
+        total: {
+          branches: { pct: 80 },
+          functions: { pct: 90 },
+          lines: { pct: 90 },
+          statements: { pct: 90 },
+        },
+        'src/core/self-driver.ts': {
+          branches: { pct: 55 },
+          lines: { pct: 88 },
+        },
+      })
+    );
 
     let headCallCount = 0;
     let eslintCallCount = 0;
@@ -4553,7 +4568,7 @@ describe('evolution log (writeEvolutionRecord)', () => {
       'src/core/self-driver.ts',
       'src/core/self-driver.test.ts',
     ]);
-    expect(record.decisionGuidance.recommendedDecision).toBe('FIX');
+    expect(record.decisionGuidance.recommendedDecision).toBe('TEST');
     expect(record.decisionGuidance.reasons.length).toBeGreaterThan(0);
     expect(record.metricsAfter.lintWarnings).toBe(1);
     expect(record.metricDelta.lintWarnings).toBe(-2);
@@ -5857,6 +5872,172 @@ describe('decision guidance scoring', () => {
 
     expect(guidance.recommendedDecision).toBe('SKIP');
     expect(guidance.scores.SKIP).toBeGreaterThan(guidance.scores.REFACTOR);
+  });
+});
+
+describe('TEST decision hard gate', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+    mockAppendFile.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('rejects TEST decisions that do not modify any test files', () => {
+    driver = new SelfDriver();
+
+    const validateTestDecision = (
+      driver as unknown as {
+        validateTestDecision: (
+          decision: string | undefined,
+          filesChanged: string[] | undefined,
+          metricsBefore: {
+            branchHotspots?: Array<{ file: string; branches: number }>;
+            coverage?: { branches: number; functions: number; lines: number; statements: number };
+          } | null,
+          metricsAfter: {
+            coverage?: { branches: number; functions: number; lines: number; statements: number };
+          } | null,
+          lastResult?: IterationResult | null
+        ) => { valid: boolean; reason?: string };
+      }
+    ).validateTestDecision;
+
+    const result = validateTestDecision.call(
+      driver,
+      'TEST',
+      ['src/core/self-driver.ts'],
+      { branchHotspots: [{ file: 'src/core/self-driver.ts', branches: 50 }] },
+      null,
+      null
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('did not modify any test files');
+  });
+
+  it('rejects TEST decisions that touch unrelated tests without improving value signals', () => {
+    driver = new SelfDriver();
+
+    const validateTestDecision = (
+      driver as unknown as {
+        validateTestDecision: (
+          decision: string | undefined,
+          filesChanged: string[] | undefined,
+          metricsBefore: {
+            branchHotspots?: Array<{ file: string; branches: number }>;
+            coverage?: { branches: number; functions: number; lines: number; statements: number };
+          } | null,
+          metricsAfter: {
+            coverage?: { branches: number; functions: number; lines: number; statements: number };
+          } | null,
+          lastResult?: IterationResult | null
+        ) => { valid: boolean; reason?: string };
+      }
+    ).validateTestDecision;
+
+    const result = validateTestDecision.call(
+      driver,
+      'TEST',
+      ['src/core/project-builder.test.ts'],
+      {
+        branchHotspots: [{ file: 'src/core/engine-resolver.ts', branches: 45 }],
+        coverage: { branches: 80, functions: 80, lines: 80, statements: 80 },
+      },
+      {
+        coverage: { branches: 80, functions: 80, lines: 80, statements: 80 },
+      },
+      null
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain('did not target a hotspot');
+  });
+
+  it('accepts TEST decisions that target a hotspot through colocated tests', () => {
+    driver = new SelfDriver();
+
+    const validateTestDecision = (
+      driver as unknown as {
+        validateTestDecision: (
+          decision: string | undefined,
+          filesChanged: string[] | undefined,
+          metricsBefore: {
+            branchHotspots?: Array<{ file: string; branches: number }>;
+            coverage?: { branches: number; functions: number; lines: number; statements: number };
+          } | null,
+          metricsAfter: {
+            coverage?: { branches: number; functions: number; lines: number; statements: number };
+          } | null,
+          lastResult?: IterationResult | null
+        ) => { valid: boolean; reason?: string };
+      }
+    ).validateTestDecision;
+
+    const result = validateTestDecision.call(
+      driver,
+      'TEST',
+      ['src/core/engine-resolver.test.ts'],
+      {
+        branchHotspots: [{ file: 'src/core/engine-resolver.ts', branches: 45 }],
+        coverage: { branches: 80, functions: 80, lines: 80, statements: 80 },
+      },
+      {
+        coverage: { branches: 82, functions: 80, lines: 80, statements: 80 },
+      },
+      null
+    );
+
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts TEST decisions that target previous failed files', () => {
+    driver = new SelfDriver();
+
+    const validateTestDecision = (
+      driver as unknown as {
+        validateTestDecision: (
+          decision: string | undefined,
+          filesChanged: string[] | undefined,
+          metricsBefore: {
+            branchHotspots?: Array<{ file: string; branches: number }>;
+            coverage?: { branches: number; functions: number; lines: number; statements: number };
+          } | null,
+          metricsAfter: {
+            coverage?: { branches: number; functions: number; lines: number; statements: number };
+          } | null,
+          lastResult?: IterationResult | null
+        ) => { valid: boolean; reason?: string };
+      }
+    ).validateTestDecision;
+
+    const result = validateTestDecision.call(
+      driver,
+      'TEST',
+      ['src/core/self-driver.test.ts'],
+      {
+        branchHotspots: [{ file: 'src/core/engine-resolver.ts', branches: 45 }],
+        coverage: { branches: 80, functions: 80, lines: 80, statements: 80 },
+      },
+      {
+        coverage: { branches: 80, functions: 80, lines: 80, statements: 80 },
+      },
+      {
+        iteration: 4,
+        success: false,
+        failureStage: 'verification',
+        filesChanged: ['src/core/self-driver.ts'],
+      }
+    );
+
+    expect(result.valid).toBe(true);
   });
 });
 
