@@ -2976,7 +2976,14 @@ describe('handlePostVerificationState', () => {
     ).handlePostVerificationState;
 
     // AI committed some changes (hash changed) but left others uncommitted
-    const result = await handlePostVerificationState.call(driver, false, true, false, 'abc123', null);
+    const result = await handlePostVerificationState.call(
+      driver,
+      false,
+      true,
+      false,
+      'abc123',
+      null
+    );
 
     expect(result).toBe(true);
     expect(mockLogger).toHaveBeenCalledWith(
@@ -4779,7 +4786,11 @@ describe('evolution log (writeEvolutionRecord)', () => {
 
     await driver.run();
 
-    expect(mockExeca).toHaveBeenCalledWith('git', ['reset', '--hard', 'abc123'], expect.any(Object));
+    expect(mockExeca).toHaveBeenCalledWith(
+      'git',
+      ['reset', '--hard', 'abc123'],
+      expect.any(Object)
+    );
     const record = JSON.parse((mockAppendFile.mock.calls[0][1] as string).trim());
     expect(record.success).toBe(false);
     expect(record.failureStage).toBe('commit');
@@ -5114,7 +5125,11 @@ describe('file change validation (forbiddenPaths)', () => {
 
     await driver.run();
 
-    expect(mockExeca).toHaveBeenCalledWith('git', ['reset', '--hard', 'abc123'], expect.any(Object));
+    expect(mockExeca).toHaveBeenCalledWith(
+      'git',
+      ['reset', '--hard', 'abc123'],
+      expect.any(Object)
+    );
     expect(driver.getStatus().lastIterationResult).toEqual({
       iteration: 1,
       success: false,
@@ -5795,14 +5810,7 @@ describe('code health metrics', () => {
     const historySummary =
       '## Evolution History (factual summary)\n\nTotal: 10 iterations, 7 success, 3 failed (70% success rate)\n\nDecision breakdown (all time):\n  TEST: 6 total, 3 accepted, 3 reverted (50% success)\n  FIX: 4 total, 4 accepted, 0 reverted (100% success)';
 
-    const prompt = buildEvolutionPrompt.call(
-      driver,
-      '',
-      'src/index.ts',
-      null,
-      '',
-      historySummary
-    );
+    const prompt = buildEvolutionPrompt.call(driver, '', 'src/index.ts', null, '', historySummary);
 
     expect(prompt).toContain('Evolution History (factual summary)');
     expect(prompt).toContain('10 iterations');
@@ -6200,11 +6208,7 @@ describe('coverage baseline gate', () => {
     await verify.call(driver);
 
     // Coverage is always collected for metrics and history
-    expect(mockExeca).toHaveBeenCalledWith(
-      'npm',
-      ['test', '--', '--coverage'],
-      expect.any(Object)
-    );
+    expect(mockExeca).toHaveBeenCalledWith('npm', ['test', '--', '--coverage'], expect.any(Object));
   });
 
   it('coverage gate failure stops verify', async () => {
@@ -6430,5 +6434,283 @@ describe('buildPreviousIterationSection direct', () => {
     expect(result).not.toContain('Failed Stage');
     expect(result).not.toContain('Error:');
     expect(result).not.toContain('Files Changed:');
+  });
+});
+
+describe('revertCommittedIteration', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('returns false when git reset --hard fails', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset') && args?.includes('--hard')) {
+        return mockExecaResult(1, '', 'fatal: Could not parse object');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const revertCommittedIteration = (
+      driver as unknown as {
+        revertCommittedIteration: (hash: string) => Promise<boolean>;
+      }
+    ).revertCommittedIteration;
+    const result = await revertCommittedIteration.call(driver, 'abc123');
+
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith('⚠️  Git hard reset failed');
+  });
+
+  it('returns false when git clean fails after successful reset', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset') && args?.includes('--hard')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(1, '', 'fatal: clean failed');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const revertCommittedIteration = (
+      driver as unknown as {
+        revertCommittedIteration: (hash: string) => Promise<boolean>;
+      }
+    ).revertCommittedIteration;
+    const result = await revertCommittedIteration.call(driver, 'abc123');
+
+    expect(result).toBe(false);
+    expect(mockLogger).toHaveBeenCalledWith('⚠️  Git clean failed');
+  });
+
+  it('preserves untracked files when keepUntracked is true', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger, keepUntracked: true });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset') && args?.includes('--hard')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const revertCommittedIteration = (
+      driver as unknown as {
+        revertCommittedIteration: (hash: string) => Promise<boolean>;
+      }
+    ).revertCommittedIteration;
+    const result = await revertCommittedIteration.call(driver, 'abc123');
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith('ℹ️  Preserving untracked files (--keep-untracked)');
+  });
+});
+
+describe('handlePostVerificationState with validation parameters', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('reverts committed iteration when testDecisionValidation is invalid', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset') && args?.includes('--hard')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean,
+          beforeCommitHash: string | null,
+          committedValidation: unknown,
+          decision?: string,
+          testDecisionValidation?: { valid: boolean; reason?: string }
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(
+      driver,
+      true,
+      true,
+      false,
+      'abc123',
+      null,
+      'TEST',
+      { valid: false, reason: 'TEST decision did not target a hotspot' }
+    );
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('TEST decision did not target a hotspot')
+    );
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Reverted committed iteration')
+    );
+  });
+
+  it('cleans up when testDecisionValidation is invalid and beforeCommitHash is null', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean,
+          beforeCommitHash: string | null,
+          committedValidation: unknown,
+          decision?: string,
+          testDecisionValidation?: { valid: boolean; reason?: string }
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(
+      driver,
+      true,
+      true,
+      false,
+      null,
+      null,
+      'TEST',
+      { valid: false, reason: 'TEST decision did not clear value bar' }
+    );
+
+    expect(result).toBe(false);
+    expect(driver.getStatus().cleanedUp).toBe(true);
+  });
+
+  it('logs diff size exceeded when committed changes exceed limit without violations', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger, maxDiffLines: 100 });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('reset') && args?.includes('--hard')) {
+        return mockExecaResult(0, '', '');
+      }
+      if (command === 'git' && args?.includes('clean')) {
+        return mockExecaResult(0, '', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean,
+          beforeCommitHash: string | null,
+          committedValidation: {
+            valid: boolean;
+            violations: string[];
+            total: number;
+            withinLimit: boolean;
+          } | null
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, true, true, false, 'abc123', {
+      valid: false,
+      violations: [],
+      total: 300,
+      withinLimit: false,
+    });
+
+    expect(result).toBe(true);
+    expect(mockLogger).toHaveBeenCalledWith(
+      expect.stringContaining('Committed changes exceeded diff size limit: 300 lines changed')
+    );
+  });
+
+  it('cleans up when committed validation fails and beforeCommitHash is null', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean,
+          beforeCommitHash: string | null,
+          committedValidation: {
+            valid: boolean;
+            violations: string[];
+            total: number;
+            withinLimit: boolean;
+          } | null
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, true, true, false, null, {
+      valid: false,
+      violations: ['package.json'],
+      total: 5,
+      withinLimit: true,
+    });
+
+    expect(result).toBe(false);
+    expect(driver.getStatus().cleanedUp).toBe(true);
+  });
+
+  it('cleans up when partial commit detected and beforeCommitHash is null', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ once: true, logger: mockLogger });
+
+    const handlePostVerificationState = (
+      driver as unknown as {
+        handlePostVerificationState: (
+          isClean: boolean,
+          hashChanged: boolean,
+          hashError: boolean,
+          beforeCommitHash: string | null,
+          committedValidation: unknown
+        ) => Promise<boolean>;
+      }
+    ).handlePostVerificationState;
+
+    const result = await handlePostVerificationState.call(driver, false, true, false, null, null);
+
+    expect(result).toBe(false);
+    expect(driver.getStatus().cleanedUp).toBe(true);
   });
 });
