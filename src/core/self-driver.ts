@@ -190,7 +190,8 @@ export class SelfDriver {
       return { valid: true, violations: [] };
     }
 
-    const result = await this.safeExeca('git', ['diff', '--name-only']);
+    // Use HEAD to include both staged and unstaged changes
+    const result = await this.safeExeca('git', ['diff', '--name-only', 'HEAD']);
     if (!result) {
       this.log('⚠️  Could not determine changed files, skipping file validation');
       return { valid: true, violations: [] };
@@ -241,7 +242,8 @@ export class SelfDriver {
       return { total: 0, withinLimit: true };
     }
 
-    const result = await this.safeExeca('git', ['diff', '--shortstat']);
+    // Use HEAD to include both staged and unstaged changes
+    const result = await this.safeExeca('git', ['diff', '--shortstat', 'HEAD']);
     if (!result) {
       this.log('⚠️  Could not determine diff size, skipping size check');
       return { total: 0, withinLimit: true };
