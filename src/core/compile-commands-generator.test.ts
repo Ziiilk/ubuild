@@ -479,6 +479,46 @@ describe('CompileCommandsGenerator', () => {
     });
   });
 
+  it('generates compile commands for multiple resolved targets', async () => {
+    await withTempDir(async (rootDir) => {
+      const project = await createFakeProject(rootDir, {
+        projectName: 'TestGame',
+        targets: [
+          { name: 'TestGameEditor', type: 'Editor' },
+          { name: 'TestGame', type: 'Game' },
+        ],
+      });
+      const engine = await createFakeEngine(rootDir);
+
+      mockExeca.mockReturnValueOnce(createMockChildProcess({ result: { exitCode: 0 } }));
+
+      await fs.writeJson(path.join(engine.enginePath, 'compile_commands.json'), [], { spaces: 2 });
+
+      // Simulate TargetResolver returning a space-separated multi-target string
+      jest
+        .spyOn(TargetResolver, 'resolveTargetName')
+        .mockResolvedValueOnce('TestGameEditor TestGame');
+
+      await CompileCommandsGenerator.generate({
+        project: project.uprojectPath,
+        enginePath: engine.enginePath,
+        platform: 'Win64',
+        config: 'Development',
+      });
+
+      const ubtCall = mockExeca.mock.calls.find((call) => call[0].includes('UnrealBuildTool'));
+      expect(ubtCall).toBeDefined();
+      const targetArgs = ubtCall![1].filter((arg: string) => arg.startsWith('-Target='));
+      expect(targetArgs).toHaveLength(2);
+      expect(targetArgs[0]).toContain('TestGameEditor');
+      expect(targetArgs[0]).toContain('Win64');
+      expect(targetArgs[0]).toContain('Development');
+      expect(targetArgs[1]).toContain('TestGame');
+      expect(targetArgs[1]).toContain('Win64');
+      expect(targetArgs[1]).toContain('Development');
+    });
+  });
+
   it('does not include -IncludePluginSources flag by default', async () => {
     await withTempDir(async (rootDir) => {
       const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
