@@ -38,6 +38,29 @@ jest.mock('../core/build-executor', () => {
 jest.mock('../core/engine-resolver', () => ({
   EngineResolver: {
     resolveEngine: (...args: [string | undefined]) => mockResolveEngine(...args),
+    writeEngineStatus: async (
+      projectPath: string | undefined,
+      stdout: { write: (data: string) => void },
+      logger: { debug: (msg: string) => void }
+    ) => {
+      const chalk = { yellow: (s: string) => s };
+      try {
+        const engineResult = await mockResolveEngine(projectPath);
+        if (engineResult.engine) {
+          stdout.write(
+            `  Engine: ${engineResult.engine.displayName || engineResult.engine.path}\n`
+          );
+        } else {
+          stdout.write(`  Engine: ${chalk.yellow('Not detected - specify with --engine-path')}\n`);
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        logger.debug(`Engine resolution failed: ${msg}`);
+        stdout.write(
+          `  Engine: ${chalk.yellow('Detection failed - specify with --engine-path')}\n`
+        );
+      }
+    },
   },
 }));
 

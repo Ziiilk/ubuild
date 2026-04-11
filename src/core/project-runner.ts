@@ -133,23 +133,7 @@ export class ProjectRunner {
     this.stdout.write(`  Detached: ${options.detached ? 'Yes' : 'No'}\n`);
     this.stdout.write(`  Additional Args: ${options.args ? options.args.join(' ') : 'None'}\n`);
 
-    try {
-      const engineResult = await EngineResolver.resolveEngine(options.project);
-      if (engineResult.engine) {
-        this.stdout.write(
-          `  Engine: ${engineResult.engine.displayName || engineResult.engine.path}\n`
-        );
-      } else {
-        this.stdout.write(
-          `  Engine: ${chalk.yellow('Not detected - specify with --engine-path')}\n`
-        );
-      }
-    } catch (error) {
-      this.logger.debug(`Engine detection failed: ${formatError(error)}`);
-      this.stdout.write(
-        `  Engine: ${chalk.yellow('Detection failed - specify with --engine-path')}\n`
-      );
-    }
+    await EngineResolver.writeEngineStatus(options.project, this.stdout, this.logger);
 
     try {
       const executablePath = await this.findExecutable(options);

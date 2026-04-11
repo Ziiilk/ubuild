@@ -8,9 +8,11 @@
  * @module core/engine-resolver
  */
 
+import chalk from 'chalk';
 import fs from 'fs-extra';
 import path from 'path';
 import { execa } from 'execa';
+import { Writable } from 'stream';
 import {
   EngineInstallation,
   EngineVersionInfo,
@@ -718,5 +720,30 @@ export class EngineResolver {
       return a.PatchVersion - b.PatchVersion;
     }
     return a.Changelist - b.Changelist;
+  }
+
+  /**
+   * Writes the resolved engine status to stdout for dry-run display.
+   * Handles three cases: engine found, engine not detected, and detection failure.
+   * @param projectPath - Optional project path for engine resolution
+   * @param stdout - Writable stream for output
+   * @param logger - Logger instance for debug output on failure
+   */
+  static async writeEngineStatus(
+    projectPath: string | undefined,
+    stdout: Writable,
+    logger: Logger
+  ): Promise<void> {
+    try {
+      const engineResult = await EngineResolver.resolveEngine(projectPath);
+      if (engineResult.engine) {
+        stdout.write(`  Engine: ${engineResult.engine.displayName || engineResult.engine.path}\n`);
+      } else {
+        stdout.write(`  Engine: ${chalk.yellow('Not detected - specify with --engine-path')}\n`);
+      }
+    } catch (error) {
+      logger.debug(`Engine resolution failed: ${formatError(error)}`);
+      stdout.write(`  Engine: ${chalk.yellow('Detection failed - specify with --engine-path')}\n`);
+    }
   }
 }

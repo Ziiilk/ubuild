@@ -14,7 +14,6 @@ import { Validator } from '../utils/validator';
 import { formatError } from '../utils/error';
 import { BuildExecutor } from './build-executor';
 import { EngineResolver } from './engine-resolver';
-
 /** Options for the build command. */
 export interface BuildCommandOptions {
   /** Build target (Editor, Game, Client, Server) */
@@ -202,23 +201,7 @@ export class ProjectBuilder {
     this.stdout.write(`  Clean Build: ${options.clean ? 'Yes' : 'No'}\n`);
     this.stdout.write(`  Verbose: ${options.verbose ? 'Yes' : 'No'}\n`);
 
-    try {
-      const engineResult = await EngineResolver.resolveEngine(options.project);
-      if (engineResult.engine) {
-        this.stdout.write(
-          `  Engine: ${engineResult.engine.displayName || engineResult.engine.path}\n`
-        );
-      } else {
-        this.stdout.write(
-          `  Engine: ${chalk.yellow('Not detected - specify with --engine-path')}\n`
-        );
-      }
-    } catch (error) {
-      this.logger.debug(`Engine resolution failed: ${formatError(error)}`);
-      this.stdout.write(
-        `  Engine: ${chalk.yellow('Detection failed - specify with --engine-path')}\n`
-      );
-    }
+    await EngineResolver.writeEngineStatus(options.project, this.stdout, this.logger);
 
     this.stdout.write('\n');
     this.logger.info('This is a dry run - no actual build will be performed');
