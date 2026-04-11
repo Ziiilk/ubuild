@@ -54,6 +54,19 @@ export interface RunOptions {
 }
 
 /**
+ * Run options with validated target, config, and platform fields guaranteed present.
+ * Created by `Validator.validateBuildOptions()` which applies defaults for any missing fields.
+ */
+interface ValidatedRunOptions extends RunOptions {
+  /** Validated build target — guaranteed non-empty after validation */
+  target: string;
+  /** Validated build configuration — guaranteed non-empty after validation */
+  config: string;
+  /** Validated build platform — guaranteed non-empty after validation */
+  platform: string;
+}
+
+/**
  * Runs Unreal Engine projects by finding and executing the appropriate executable.
  * Supports Editor and Game targets with various configurations.
  */
@@ -94,7 +107,7 @@ export class ProjectRunner {
     const { target, config, platform } = Validator.validateBuildOptions(options, this.logger);
 
     // Create validated options with proper types
-    const validatedOptions: RunOptions = {
+    const validatedOptions: ValidatedRunOptions = {
       ...options,
       target,
       config,
@@ -109,7 +122,7 @@ export class ProjectRunner {
     await this.runProject(validatedOptions);
   }
 
-  private async dryRun(options: RunOptions): Promise<void> {
+  private async dryRun(options: ValidatedRunOptions): Promise<void> {
     this.logger.subTitle('Dry Run - Run Configuration');
 
     this.stdout.write(`  Project: ${options.project || 'Current directory'}\n`);
@@ -159,7 +172,7 @@ export class ProjectRunner {
     this.stdout.write('To execute the run, remove the --dry-run flag\n');
   }
 
-  private async runProject(options: RunOptions): Promise<void> {
+  private async runProject(options: ValidatedRunOptions): Promise<void> {
     const startTime = Date.now();
 
     const projectPath = await ProjectPathResolver.resolveOrThrow(options.project || process.cwd());
@@ -184,9 +197,9 @@ export class ProjectRunner {
         stderr: this.stderr,
       });
       const buildResult = await buildExecutor.execute({
-        target: options.target!,
-        config: options.config!,
-        platform: options.platform!,
+        target: options.target,
+        config: options.config,
+        platform: options.platform,
         projectPath,
         enginePath,
         verbose: false,
@@ -198,7 +211,7 @@ export class ProjectRunner {
       }
     }
 
-    const resolvedOptions: RunOptions = {
+    const resolvedOptions: ValidatedRunOptions = {
       ...options,
       enginePath,
     };
@@ -219,7 +232,7 @@ export class ProjectRunner {
 
     const args = options.args ? [...options.args] : [];
 
-    if (options.target!.toLowerCase().includes('editor')) {
+    if (options.target.toLowerCase().includes('editor')) {
       args.unshift(projectPath);
     }
 
@@ -262,7 +275,7 @@ export class ProjectRunner {
     }
   }
 
-  private async findExecutable(options: RunOptions): Promise<string | null> {
+  private async findExecutable(options: ValidatedRunOptions): Promise<string | null> {
     try {
       const projectPathResolution = await ProjectPathResolver.resolve(
         options.project || process.cwd()
@@ -280,7 +293,7 @@ export class ProjectRunner {
         return null;
       }
 
-      let targetName = options.target!;
+      let targetName = options.target;
       const resolvedTarget = await TargetResolver.resolveTarget(projectPath, targetName);
       targetName = resolvedTarget;
 
@@ -299,7 +312,7 @@ export class ProjectRunner {
           return null;
         }
 
-        const platform = options.platform!;
+        const platform = options.platform;
         const editorExePath = path.join(
           enginePath,
           'Engine',
@@ -328,8 +341,8 @@ export class ProjectRunner {
       }
 
       const executableName = `${projectName}${exeExt}`;
-      const platform = options.platform!;
-      const config = options.config!;
+      const platform = options.platform;
+      const config = options.config;
 
       const possiblePaths = [
         path.join(projectDir, 'Binaries', platform, executableName),
