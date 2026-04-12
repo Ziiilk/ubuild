@@ -34,10 +34,7 @@ export interface ListCommandOptions {
  * @returns Promise that resolves when execution completes
  */
 export async function executeList(options: ListCommandOptions): Promise<void> {
-  const stdout = options.stdout || process.stdout;
-  const stderr = options.stderr || process.stderr;
-
-  const logger = new Logger({ stdout, stderr });
+  const logger = Logger.fromStreams(options.stdout, options.stderr);
 
   const result = await ProjectDetector.detectProject({
     cwd: options.project || process.cwd(),

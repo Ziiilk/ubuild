@@ -41,10 +41,7 @@ export interface InitCommandOptions extends InitOptions {
  * @returns Promise that resolves to the init result
  */
 export async function executeInit(options: InitCommandOptions): Promise<InitResult> {
-  const stdout = options.stdout || process.stdout;
-  const stderr = options.stderr || process.stderr;
-
-  const logger = new Logger({ stdout, stderr });
+  const logger = Logger.fromStreams(options.stdout, options.stderr);
   const projectType = options.type || DEFAULTS.PROJECT_TYPE;
 
   logger.title('Initialize Unreal Engine Project');

@@ -120,6 +120,32 @@ export class Logger {
     this.silent = options.silent || false;
   }
 
+  /**
+   * Creates a Logger from optional stream overrides.
+   *
+   * Convenience factory for command handlers that accept `{ stdout?, stderr? }`
+   * options and need a Logger using those streams (falling back to
+   * `process.stdout` / `process.stderr` when not provided).
+   *
+   * @param stdout - Optional writable stream for standard output
+   * @param stderr - Optional writable stream for error output
+   * @returns A new Logger instance configured with the given streams
+   *
+   * @example
+   * ```typescript
+   * // Before (repeated in every command):
+   * const stdout = options.stdout || process.stdout;
+   * const stderr = options.stderr || process.stderr;
+   * const logger = new Logger({ stdout, stderr });
+   *
+   * // After:
+   * const logger = Logger.fromStreams(options.stdout, options.stderr);
+   * ```
+   */
+  static fromStreams(stdout?: Writable, stderr?: Writable): Logger {
+    return new Logger({ stdout: stdout || process.stdout, stderr: stderr || process.stderr });
+  }
+
   private formatMessage(message: string): string {
     return this.prefix ? `[${this.prefix}] ${message}` : message;
   }

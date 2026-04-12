@@ -394,4 +394,33 @@ describe('Logger', () => {
       expect(typeof result).toBe('string');
     });
   });
+
+  describe('Logger.fromStreams', () => {
+    it('creates a Logger with provided streams', () => {
+      const capture = createOutputCapture();
+      const logger = Logger.fromStreams(capture.stdout, capture.stderr);
+
+      logger.info('fromStreams test');
+      expect(capture.getStdout()).toContain('fromStreams test');
+    });
+
+    it('defaults to process streams when no arguments given', () => {
+      const logger = Logger.fromStreams();
+      expect(logger).toBeDefined();
+      expect(logger).toBeInstanceOf(Logger);
+    });
+
+    it('defaults to process streams when undefined is passed', () => {
+      const logger = Logger.fromStreams(undefined, undefined);
+      expect(logger).toBeInstanceOf(Logger);
+    });
+
+    it('uses only stdout override when stderr is omitted', () => {
+      const capture = createOutputCapture();
+      const logger = Logger.fromStreams(capture.stdout);
+
+      logger.info('stdout only');
+      expect(capture.getStdout()).toContain('stdout only');
+    });
+  });
 });

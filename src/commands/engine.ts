@@ -44,10 +44,7 @@ export interface EngineCommandOptions {
  * ```
  */
 export async function executeEngine(options: EngineCommandOptions): Promise<void> {
-  const stdout = options.stdout || process.stdout;
-  const stderr = options.stderr || process.stderr;
-
-  const logger = new Logger({ stdout, stderr });
+  const logger = Logger.fromStreams(options.stdout, options.stderr);
 
   if (!options.json) {
     logger.title('Engine Information');

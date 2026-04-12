@@ -66,10 +66,7 @@ async function getVersionInfo(): Promise<VersionInfo> {
  * @returns Promise that resolves when execution completes
  */
 export async function executeVersion(options: VersionCommandOptions = {}): Promise<void> {
-  const stdout = options.stdout || process.stdout;
-  const stderr = options.stderr || process.stderr;
-
-  const logger = new Logger({ stdout, stderr });
+  const logger = Logger.fromStreams(options.stdout, options.stderr);
 
   const info = await getVersionInfo();
 

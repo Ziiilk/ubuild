@@ -41,10 +41,7 @@ export interface GenerateCommandOptions {
  * @throws Error if generation fails
  */
 export async function executeGenerate(options: GenerateCommandOptions): Promise<void> {
-  const stdout = options.stdout || process.stdout;
-  const stderr = options.stderr || process.stderr;
-
-  const logger = new Logger({ stdout, stderr });
+  const logger = Logger.fromStreams(options.stdout, options.stderr);
 
   logger.title('Generate Project Files');
 
