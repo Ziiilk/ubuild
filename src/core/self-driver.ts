@@ -46,6 +46,10 @@ interface ExecaResult {
   stdout: string;
   stderr: string;
 }
+/** Shape of a single file entry in ESLint JSON output format. */
+interface ESLintFileResult {
+  warningCount?: number;
+}
 /** Validation result for committed changes between two revisions. */
 interface CommittedChangeValidationResult {
   valid: boolean;
@@ -286,13 +290,15 @@ export class SelfDriver {
    * Parses ESLint JSON output and returns the total warning count.
    */
   private countLintWarnings(payload: string): number | null {
-    const parsed = JSON.parse(payload);
+    const parsed: unknown = JSON.parse(payload);
     if (!Array.isArray(parsed)) {
       return null;
     }
     let totalWarnings = 0;
-    for (const file of parsed) {
-      totalWarnings += file.warningCount ?? 0;
+    for (const item of parsed) {
+      if (typeof item === 'object' && item !== null) {
+        totalWarnings += (item as ESLintFileResult).warningCount ?? 0;
+      }
     }
     return totalWarnings;
   }
