@@ -2,8 +2,14 @@
  * Tests for evolution-reporter.
  */
 
-import { parseEvolutionLog, buildReport, formatHistorySummary } from './evolution-reporter';
+import {
+  parseEvolutionLog,
+  buildReport,
+  formatHistorySummary,
+  readEvolutionReport,
+} from './evolution-reporter';
 import type { EvolutionRecord } from '../types/evolve';
+import { withTempDir } from '../test-utils';
 
 // ---------------------------------------------------------------------------
 // parseEvolutionLog
@@ -12,8 +18,18 @@ import type { EvolutionRecord } from '../types/evolve';
 describe('parseEvolutionLog', () => {
   it('parses valid JSONL lines', () => {
     const content = [
-      JSON.stringify({ iteration: 1, timestamp: '2025-01-01T00:00:00Z', success: true, durationMs: 1000 }),
-      JSON.stringify({ iteration: 2, timestamp: '2025-01-01T00:01:00Z', success: false, durationMs: 2000 }),
+      JSON.stringify({
+        iteration: 1,
+        timestamp: '2025-01-01T00:00:00Z',
+        success: true,
+        durationMs: 1000,
+      }),
+      JSON.stringify({
+        iteration: 2,
+        timestamp: '2025-01-01T00:01:00Z',
+        success: false,
+        durationMs: 2000,
+      }),
     ].join('\n');
 
     const records = parseEvolutionLog(content);
@@ -57,9 +73,22 @@ describe('buildReport', () => {
   it('computes correct totals for mixed results', () => {
     const records: EvolutionRecord[] = [
       makeRecord({ iteration: 1, success: true, decision: 'FIX', durationMs: 3000 }),
-      makeRecord({ iteration: 2, success: false, decision: 'TEST', failureStage: 'verification', durationMs: 2000 }),
+      makeRecord({
+        iteration: 2,
+        success: false,
+        decision: 'TEST',
+        failureStage: 'verification',
+        durationMs: 2000,
+      }),
       makeRecord({ iteration: 3, success: true, decision: 'TEST', durationMs: 4000 }),
-      makeRecord({ iteration: 4, success: false, decision: 'FIX', failureStage: 'commit', failureDetail: 'size exceeded', durationMs: 1000 }),
+      makeRecord({
+        iteration: 4,
+        success: false,
+        decision: 'FIX',
+        failureStage: 'commit',
+        failureDetail: 'size exceeded',
+        durationMs: 1000,
+      }),
     ];
 
     const report = buildReport(records);
@@ -97,7 +126,13 @@ describe('buildReport', () => {
       makeRecord({
         iteration: 2,
         success: false,
-        metricDelta: { branches: -10, functions: -10, lines: -10, statements: -10, lintWarnings: 5 },
+        metricDelta: {
+          branches: -10,
+          functions: -10,
+          lines: -10,
+          statements: -10,
+          lintWarnings: 5,
+        },
       }),
       makeRecord({
         iteration: 3,
@@ -149,7 +184,12 @@ describe('buildReport', () => {
   it('truncates long failure reasons', () => {
     const longReason = 'A'.repeat(120);
     const records: EvolutionRecord[] = [
-      makeRecord({ iteration: 1, success: false, failureStage: 'execution', failureDetail: longReason }),
+      makeRecord({
+        iteration: 1,
+        success: false,
+        failureStage: 'execution',
+        failureDetail: longReason,
+      }),
     ];
 
     const report = buildReport(records);
@@ -222,5 +262,96 @@ describe('formatHistorySummary', () => {
 
     expect(output).toContain('branches');
     expect(output).toContain('lint');
+  });
+
+  it('omits decision breakdown when report has no records', () => {
+    const report = buildReport([]);
+    const output = formatHistorySummary(report);
+
+    expect(output).not.toContain('Decision breakdown');
+  });
+
+  it('formats negative metric deltas with sign prefix in recent window', () => {
+    const records: EvolutionRecord[] = [];
+    for (let i = 1; i <= 12; i++) {
+      records.push(
+        makeRecord({
+          iteration: i,
+          success: true,
+          decision: 'FIX',
+          durationMs: 1000,
+          metricDelta:
+            i > 2 ? { branches: -1.5, lintWarnings: 2.0 } : { branches: 0.5, lintWarnings: -0.5 },
+        })
+      );
+    }
+    const report = buildReport(records);
+    const output = formatHistorySummary(report);
+
+    expect(output).toContain('-1.50%');
+    expect(output).toContain('+2.0 warnings');
+  });
+
+  it('omits avg impact line when recent window has no metric deltas', () => {
+    const records: EvolutionRecord[] = [];
+    for (let i = 1; i <= 12; i++) {
+      records.push(makeRecord({ iteration: i, success: true, decision: 'FIX', durationMs: 1000 }));
+    }
+    const report = buildReport(records);
+    const output = formatHistorySummary(report);
+
+    expect(output).not.toContain('Avg impact per success');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readEvolutionReport
+// ---------------------------------------------------------------------------
+
+describe('readEvolutionReport', () => {
+  it('returns null when file does not exist', async () => {
+    await withTempDir(async (dir) => {
+      const result = await readEvolutionReport(`${dir}/nonexistent.jsonl`);
+      expect(result).toBeNull();
+    });
+  });
+
+  it('returns null when file exists but contains no valid records', async () => {
+    await withTempDir(async (dir) => {
+      const { ensureFile, writeFile } = await import('fs-extra');
+      const logPath = `${dir}/empty.jsonl`;
+      await ensureFile(logPath);
+      await writeFile(logPath, '\n\n  \n', 'utf-8');
+
+      const result = await readEvolutionReport(logPath);
+      expect(result).toBeNull();
+    });
+  });
+
+  it('returns report when file has valid records', async () => {
+    await withTempDir(async (dir) => {
+      const { writeFile } = await import('fs-extra');
+      const logPath = `${dir}/history.jsonl`;
+      const content = [
+        JSON.stringify(
+          makeRecord({ iteration: 1, success: true, decision: 'FIX', durationMs: 1000 })
+        ),
+        JSON.stringify(
+          makeRecord({
+            iteration: 2,
+            success: false,
+            decision: 'TEST',
+            failureStage: 'verification',
+            durationMs: 2000,
+          })
+        ),
+      ].join('\n');
+      await writeFile(logPath, content, 'utf-8');
+
+      const result = await readEvolutionReport(logPath);
+      expect(result).not.toBeNull();
+      expect(result!.totalIterations).toBe(2);
+      expect(result!.successCount).toBe(1);
+    });
   });
 });
