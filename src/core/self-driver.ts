@@ -103,6 +103,11 @@ interface TestDecisionValidationResult {
   valid: boolean;
   reason?: string;
 }
+/** A single file's coverage metric entry used by coverage collection helpers. */
+interface FileCoverageEntry {
+  file: string;
+  pct: number;
+}
 /** Default sleep duration between iterations in milliseconds */
 const DEFAULT_SLEEP_MS = 5000;
 /** Default timeout for verification checks in milliseconds */
@@ -239,6 +244,29 @@ export class SelfDriver {
     );
   }
   /**
+   * Collects file-level coverage metrics from a parsed coverage summary.
+   * Returns entries for core source files with the given metric below 100%,
+   * sorted ascending by percentage (lowest coverage first).
+   */
+  private collectFileCoverageEntries(
+    summary: Record<string, unknown>,
+    metricKey: 'branches' | 'lines'
+  ): FileCoverageEntry[] {
+    const entries: FileCoverageEntry[] = [];
+    for (const [key, value] of Object.entries(summary)) {
+      if (key === 'total' || !this.isCoreSourceFile(key)) {
+        continue;
+      }
+      const metric = (value as Record<string, { pct?: number }>)[metricKey];
+      const pct = metric?.pct;
+      if (typeof pct === 'number' && pct < 100) {
+        entries.push({ file: key, pct });
+      }
+    }
+    entries.sort((a, b) => a.pct - b.pct);
+    return entries;
+  }
+  /**
    * Parses git shortstat output and returns the total changed lines.
    * Delegates to the standalone {@link parseDiffTotal} utility.
    */
@@ -295,19 +323,9 @@ export class SelfDriver {
     summary: Record<string, unknown>,
     maxFiles = 3
   ): BranchCoverageHotspot[] {
-    const hotspots: BranchCoverageHotspot[] = [];
-    for (const [key, value] of Object.entries(summary)) {
-      if (key === 'total' || !this.isCoreSourceFile(key)) {
-        continue;
-      }
-      const entry = value as { branches?: { pct?: number } };
-      const pct = entry.branches?.pct;
-      if (typeof pct === 'number' && pct < 100) {
-        hotspots.push({ file: key, branches: pct });
-      }
-    }
-    hotspots.sort((left, right) => left.branches - right.branches);
-    return hotspots.slice(0, maxFiles);
+    return this.collectFileCoverageEntries(summary, 'branches')
+      .slice(0, maxFiles)
+      .map((entry) => ({ file: entry.file, branches: entry.pct }));
   }
   /**
    * Formats the branch-coverage hotspots section for the evolution prompt.
@@ -566,20 +584,9 @@ export class SelfDriver {
    * @returns A formatted string listing low-coverage files, or null if unavailable
    */
   private formatLowestCoverageFiles(summary: Record<string, unknown>, maxFiles = 5): string | null {
-    const fileEntries: Array<{ file: string; pct: number }> = [];
-    for (const [key, value] of Object.entries(summary)) {
-      if (key === 'total') continue;
-      if (!this.isCoreSourceFile(key)) continue;
-      const entry = value as { lines?: { pct?: number } };
-      const pct = entry?.lines?.pct;
-      if (typeof pct === 'number' && pct < 100) {
-        fileEntries.push({ file: key, pct });
-      }
-    }
+    const fileEntries = this.collectFileCoverageEntries(summary, 'lines').slice(0, maxFiles);
     if (fileEntries.length === 0) return null;
-    fileEntries.sort((a, b) => a.pct - b.pct);
-    const lowest = fileEntries.slice(0, maxFiles);
-    return `- Lowest Coverage Files:\n${lowest.map((f) => `  - ${f.file} (${f.pct}%)`).join('\n')}`;
+    return `- Lowest Coverage Files:\n${fileEntries.map((f) => `  - ${f.file} (${f.pct}%)`).join('\n')}`;
   }
   /**
    * Gathers ESLint warning count from the project.
