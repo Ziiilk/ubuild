@@ -1,4 +1,10 @@
-import { SelfDriver, runSelfEvolution, parseCoverageTotal, parseDiffTotal } from './self-driver';
+import {
+  SelfDriver,
+  runSelfEvolution,
+  parseCoverageTotal,
+  parseDiffTotal,
+  normalizePath,
+} from './self-driver';
 import type { SelfEvolverOptions, IterationResult } from './self-driver';
 
 const mockExeca = jest.fn<
@@ -6932,5 +6938,35 @@ describe('parseDiffTotal', () => {
 
   it('handles typical git shortstat output format', () => {
     expect(parseDiffTotal(' 5 files changed, 200 insertions(+), 100 deletions(-)')).toBe(300);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizePath
+// ---------------------------------------------------------------------------
+
+describe('normalizePath', () => {
+  it('returns forward-slash paths unchanged', () => {
+    expect(normalizePath('src/core/self-driver.ts')).toBe('src/core/self-driver.ts');
+  });
+
+  it('converts backslashes to forward slashes', () => {
+    expect(normalizePath('src\\core\\self-driver.ts')).toBe('src/core/self-driver.ts');
+  });
+
+  it('converts mixed separators to forward slashes', () => {
+    expect(normalizePath('src\\core/utils\\logger.ts')).toBe('src/core/utils/logger.ts');
+  });
+
+  it('returns empty string unchanged', () => {
+    expect(normalizePath('')).toBe('');
+  });
+
+  it('returns paths without separators unchanged', () => {
+    expect(normalizePath('file.ts')).toBe('file.ts');
+  });
+
+  it('handles Windows-style absolute paths', () => {
+    expect(normalizePath('C:\\Users\\dev\\project')).toBe('C:/Users/dev/project');
   });
 });

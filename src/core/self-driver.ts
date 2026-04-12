@@ -66,6 +66,18 @@ export function parseCoverageTotal(value: unknown): CoverageTotal | null {
   return hasField ? result : null;
 }
 /**
+ * Normalizes a file path to use POSIX-style forward slashes.
+ *
+ * Consistently converts Windows backslash separators to forward slashes
+ * so that path comparisons and pattern matching work cross-platform.
+ *
+ * @param filePath - The file path to normalize
+ * @returns The normalized path with forward slashes
+ */
+export function normalizePath(filePath: string): string {
+  return filePath.replace(/\\/g, '/');
+}
+/**
  * Parses git shortstat output and returns the total changed lines.
  *
  * Extracts insertion and deletion counts from git diff --shortstat output
@@ -234,7 +246,7 @@ export class SelfDriver {
    * Excludes tests, test utilities, and pure type barrels from hotspot prioritization.
    */
   private isCoreSourceFile(filePath: string): boolean {
-    const normalized = filePath.replace(/\\/g, '/');
+    const normalized = normalizePath(filePath);
     return (
       normalized.startsWith('src/') &&
       !normalized.endsWith('.test.ts') &&
@@ -415,15 +427,14 @@ export class SelfDriver {
    * Checks whether a file is a Jest test file.
    */
   private isTestFile(filePath: string): boolean {
-    const normalized = filePath.replace(/\\/g, '/');
+    const normalized = normalizePath(filePath);
     return normalized.endsWith('.test.ts') || normalized.endsWith('.spec.ts');
   }
   /**
    * Normalizes a file path to a module identity so source and colocated test files can be matched.
    */
   private toModuleIdentity(filePath: string): string {
-    return filePath
-      .replace(/\\/g, '/')
+    return normalizePath(filePath)
       .replace(/\.(test|spec)(?=\.ts$)/, '')
       .replace(/\.ts$/, '');
   }
@@ -488,8 +499,8 @@ export class SelfDriver {
    * Supports exact match and directory prefix (ending with /**).
    */
   private matchesGlobPattern(filePath: string, pattern: string): boolean {
-    const normalized = filePath.replace(/\\/g, '/');
-    const normalizedPattern = pattern.replace(/\\/g, '/');
+    const normalized = normalizePath(filePath);
+    const normalizedPattern = normalizePath(pattern);
     // Exact match
     if (normalized === normalizedPattern) return true;
     // Directory glob: "dir/**" matches any file under that directory
