@@ -160,7 +160,7 @@ export class Logger {
    */
   info(message: string): void {
     if (this.silent) return;
-    this.stdout.write(chalk.blue('ℹ') + ' ' + this.formatMessage(message) + '\n');
+    this.stdout.write(`${chalk.blue('ℹ')} ${this.formatMessage(message)}\n`);
   }
 
   /**
@@ -169,7 +169,7 @@ export class Logger {
    */
   success(message: string): void {
     if (this.silent) return;
-    this.stdout.write(chalk.green('✓') + ' ' + this.formatMessage(message) + '\n');
+    this.stdout.write(`${chalk.green('✓')} ${this.formatMessage(message)}\n`);
   }
 
   /**
@@ -178,7 +178,7 @@ export class Logger {
    */
   warning(message: string): void {
     if (this.silent) return;
-    this.stdout.write(chalk.yellow('⚠') + ' ' + this.formatMessage(message) + '\n');
+    this.stdout.write(`${chalk.yellow('⚠')} ${this.formatMessage(message)}\n`);
   }
 
   /**
@@ -187,7 +187,7 @@ export class Logger {
    */
   error(message: string): void {
     if (this.silent) return;
-    this.stderr.write(chalk.red('✗') + ' ' + this.formatMessage(message) + '\n');
+    this.stderr.write(`${chalk.red('✗')} ${this.formatMessage(message)}\n`);
   }
 
   /**
@@ -196,7 +196,7 @@ export class Logger {
    */
   debug(message: string): void {
     if (this.silent || !process.env.DEBUG) return;
-    this.stdout.write(chalk.gray('🔍') + ' ' + this.formatMessage(message) + '\n');
+    this.stdout.write(`${chalk.gray('🔍')} ${this.formatMessage(message)}\n`);
   }
 
   /**
@@ -205,21 +205,21 @@ export class Logger {
    */
   progress(message: string): void {
     if (this.silent) return;
-    this.stdout.write(chalk.cyan('»') + ' ' + this.formatMessage(message) + '\r');
+    this.stdout.write(`${chalk.cyan('»')} ${this.formatMessage(message)}\r`);
   }
 
   /** Clears the current progress message. */
   clearProgress(): void {
     if (this.silent) return;
     const width = this.getOutputWidth(this.stdout);
-    this.stdout.write(' '.repeat(width) + '\r');
+    this.stdout.write(`${' '.repeat(width)}\r`);
   }
 
   /** Outputs a horizontal divider line. */
   divider(): void {
     if (this.silent) return;
     const width = this.getOutputWidth(this.stdout);
-    this.stdout.write(chalk.gray('─'.repeat(Math.min(width, 80))) + '\n');
+    this.stdout.write(`${chalk.gray('─'.repeat(Math.min(width, 80)))}\n`);
   }
 
   /**
@@ -229,8 +229,8 @@ export class Logger {
   title(title: string): void {
     if (this.silent) return;
     const formatted = this.formatMessage(title);
-    this.stdout.write('\n' + chalk.bold.cyan(formatted) + '\n');
-    this.stdout.write(chalk.cyan('═'.repeat(formatted.length)) + '\n');
+    this.stdout.write(`\n${chalk.bold.cyan(formatted)}\n`);
+    this.stdout.write(`${chalk.cyan('═'.repeat(formatted.length))}\n`);
   }
 
   /**
@@ -240,8 +240,8 @@ export class Logger {
   subTitle(subTitle: string): void {
     if (this.silent) return;
     const formatted = this.formatMessage(subTitle);
-    this.stdout.write('\n' + chalk.bold(formatted) + '\n');
-    this.stdout.write(chalk.gray('─'.repeat(formatted.length)) + '\n');
+    this.stdout.write(`\n${chalk.bold(formatted)}\n`);
+    this.stdout.write(`${chalk.gray('─'.repeat(formatted.length))}\n`);
   }
 
   /**
@@ -250,7 +250,7 @@ export class Logger {
    */
   json(data: unknown): void {
     if (this.silent) return;
-    this.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    this.stdout.write(`${JSON.stringify(data, null, 2)}\n`);
   }
 
   /**
