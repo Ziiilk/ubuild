@@ -75,7 +75,7 @@ const MIN_MAX_LISTENERS = 50;
 /** Default forbidden file patterns that must not be modified during evolution */
 const DEFAULT_FORBIDDEN_PATHS = ['package.json', 'tsconfig.json', '.github/**'];
 /** Default allowed file patterns - files outside these paths are rejected during evolution */
-const DEFAULT_ALLOWED_PATHS = ['src/**'];
+const DEFAULT_ALLOWED_PATHS = ['src/**', 'EVOLVE.md'];
 /** Default maximum number of changed lines per iteration (insertions + deletions) */
 const DEFAULT_MAX_DIFF_LINES = 200;
 /** Error detail when verification passes but AI fails to commit changes. */
