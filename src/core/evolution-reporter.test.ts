@@ -6,10 +6,64 @@ import {
   parseEvolutionLog,
   buildReport,
   formatHistorySummary,
+  formatDurationMs,
   readEvolutionReport,
 } from './evolution-reporter';
 import type { EvolutionRecord } from '../types/evolve';
 import { withTempDir } from '../test-utils';
+
+// ---------------------------------------------------------------------------
+// formatDurationMs
+// ---------------------------------------------------------------------------
+
+describe('formatDurationMs', () => {
+  it('formats sub-second durations with ms suffix', () => {
+    expect(formatDurationMs(0)).toBe('0ms');
+    expect(formatDurationMs(1)).toBe('1ms');
+    expect(formatDurationMs(500)).toBe('500ms');
+    expect(formatDurationMs(999)).toBe('999ms');
+  });
+
+  it('formats exact seconds', () => {
+    expect(formatDurationMs(1000)).toBe('1s');
+    expect(formatDurationMs(5000)).toBe('5s');
+    expect(formatDurationMs(30000)).toBe('30s');
+    expect(formatDurationMs(59000)).toBe('59s');
+  });
+
+  it('rounds seconds to nearest whole second', () => {
+    expect(formatDurationMs(1500)).toBe('2s');
+    expect(formatDurationMs(24500)).toBe('25s');
+  });
+
+  it('formats minutes and seconds', () => {
+    expect(formatDurationMs(90000)).toBe('1m 30s');
+    expect(formatDurationMs(150000)).toBe('2m 30s');
+    expect(formatDurationMs(599000)).toBe('9m 59s');
+  });
+
+  it('formats exact minutes without seconds', () => {
+    expect(formatDurationMs(60000)).toBe('1m');
+    expect(formatDurationMs(120000)).toBe('2m');
+  });
+
+  it('formats hours, minutes, and seconds', () => {
+    expect(formatDurationMs(5400000)).toBe('1h 30m');
+    expect(formatDurationMs(3600000)).toBe('1h');
+    expect(formatDurationMs(3661000)).toBe('1h 1m 1s');
+    expect(formatDurationMs(7325000)).toBe('2h 2m 5s');
+  });
+
+  it('formats exact hours without minutes or seconds', () => {
+    expect(formatDurationMs(3600000)).toBe('1h');
+    expect(formatDurationMs(7200000)).toBe('2h');
+  });
+
+  it('formats hours with minutes but no seconds', () => {
+    expect(formatDurationMs(5400000)).toBe('1h 30m');
+    expect(formatDurationMs(9000000)).toBe('2h 30m');
+  });
+});
 
 // ---------------------------------------------------------------------------
 // parseEvolutionLog

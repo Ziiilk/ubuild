@@ -138,7 +138,7 @@ function computeAverageMetricDelta(records: EvolutionRecord[]): MetricDelta {
  * Formats milliseconds into a concise human-readable duration string.
  * Examples: "45s", "2m 30s", "1h 15m"
  */
-function formatDurationMs(ms: number): string {
+export function formatDurationMs(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   const totalSeconds = Math.round(ms / 1000);
   if (totalSeconds < 60) return `${totalSeconds}s`;
