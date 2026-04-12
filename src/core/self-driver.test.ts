@@ -1,4 +1,4 @@
-import { SelfDriver, runSelfEvolution, parseCoverageTotal } from './self-driver';
+import { SelfDriver, runSelfEvolution, parseCoverageTotal, parseDiffTotal } from './self-driver';
 import type { SelfEvolverOptions, IterationResult } from './self-driver';
 
 const mockExeca = jest.fn<
@@ -6902,5 +6902,35 @@ describe('parseCoverageTotal', () => {
       branches: { pct: 'not a number' },
     });
     expect(result).toBeNull();
+  });
+});
+
+describe('parseDiffTotal', () => {
+  it('returns 0 for empty string', () => {
+    expect(parseDiffTotal('')).toBe(0);
+  });
+
+  it('returns 0 for whitespace-only string', () => {
+    expect(parseDiffTotal('   ')).toBe(0);
+  });
+
+  it('parses insertions only', () => {
+    expect(parseDiffTotal(' 1 file changed, 50 insertions(+)')).toBe(50);
+  });
+
+  it('parses deletions only', () => {
+    expect(parseDiffTotal(' 1 file changed, 30 deletions(-)')).toBe(30);
+  });
+
+  it('parses both insertions and deletions', () => {
+    expect(parseDiffTotal(' 3 files changed, 10 insertions(+), 5 deletions(-)')).toBe(15);
+  });
+
+  it('returns 0 when output has no insertion or deletion counts', () => {
+    expect(parseDiffTotal(' 2 files changed')).toBe(0);
+  });
+
+  it('handles typical git shortstat output format', () => {
+    expect(parseDiffTotal(' 5 files changed, 200 insertions(+), 100 deletions(-)')).toBe(300);
   });
 });

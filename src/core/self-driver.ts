@@ -65,6 +65,22 @@ export function parseCoverageTotal(value: unknown): CoverageTotal | null {
   }
   return hasField ? result : null;
 }
+/**
+ * Parses git shortstat output and returns the total changed lines.
+ *
+ * Extracts insertion and deletion counts from git diff --shortstat output
+ * like " 3 files changed, 10 insertions(+), 5 deletions(-)".
+ *
+ * @param output - The shortstat output string from git diff
+ * @returns Total number of changed lines (insertions + deletions)
+ */
+export function parseDiffTotal(output: string): number {
+  const trimmed = output.trim();
+  if (!trimmed) return 0;
+  const insertions = trimmed.match(/(\d+)\s+insertion/);
+  const deletions = trimmed.match(/(\d+)\s+deletion/);
+  return parseInt(insertions?.[1] ?? '0', 10) + parseInt(deletions?.[1] ?? '0', 10);
+}
 /** Shape of execa command results used internally for safe command execution. */
 interface ExecaResult {
   exitCode: number;
@@ -224,13 +240,10 @@ export class SelfDriver {
   }
   /**
    * Parses git shortstat output and returns the total changed lines.
+   * Delegates to the standalone {@link parseDiffTotal} utility.
    */
   private parseDiffTotal(output: string): number {
-    const trimmed = output.trim();
-    if (!trimmed) return 0;
-    const insertions = trimmed.match(/(\d+)\s+insertion/);
-    const deletions = trimmed.match(/(\d+)\s+deletion/);
-    return parseInt(insertions?.[1] ?? '0', 10) + parseInt(deletions?.[1] ?? '0', 10);
+    return parseDiffTotal(output);
   }
   /**
    * Collects path policy violations for a set of changed files.
