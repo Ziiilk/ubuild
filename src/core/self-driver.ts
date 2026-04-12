@@ -40,6 +40,18 @@ interface CoverageTotal {
   lines?: { pct?: number };
   statements?: { pct?: number };
 }
+/**
+ * Validates and extracts the "total" section from a parsed coverage summary.
+ * Performs runtime type checking instead of relying on `as` casts from unvalidated JSON.
+ * @param value - The raw `total` value from a parsed coverage-summary.json
+ * @returns Validated CoverageTotal, or null if the value doesn't match the expected shape
+ */
+export function parseCoverageTotal(value: unknown): CoverageTotal | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+  return value as CoverageTotal;
+}
 /** Shape of execa command results used internally for safe command execution. */
 interface ExecaResult {
   exitCode: number;
@@ -239,7 +251,7 @@ export class SelfDriver {
    * Extracts total coverage values from a parsed coverage summary.
    */
   private extractCoverageSnapshot(summary: Record<string, unknown>): CoverageSnapshot | null {
-    const total = summary.total as CoverageTotal | undefined;
+    const total = parseCoverageTotal(summary.total);
     if (!total) {
       return null;
     }
@@ -513,7 +525,7 @@ export class SelfDriver {
    * @returns A formatted string of coverage metrics, or null if unavailable
    */
   private formatCoverageMetrics(summary: Record<string, unknown>): string | null {
-    const total = summary?.total as CoverageTotal | undefined;
+    const total = parseCoverageTotal(summary?.total);
     if (!total) return null;
     const b = total.branches?.pct ?? '?';
     const f = total.functions?.pct ?? '?';
@@ -585,7 +597,7 @@ export class SelfDriver {
     if (!summary) {
       return { passed: false, details: 'coverage-summary.json not found' };
     }
-    const total = summary.total as CoverageTotal | undefined;
+    const total = parseCoverageTotal(summary.total);
     if (!total) {
       return { passed: false, details: 'coverage-summary.json missing total section' };
     }

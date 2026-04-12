@@ -1,4 +1,4 @@
-import { SelfDriver, runSelfEvolution } from './self-driver';
+import { SelfDriver, runSelfEvolution, parseCoverageTotal } from './self-driver';
 import type { SelfEvolverOptions, IterationResult } from './self-driver';
 
 const mockExeca = jest.fn<
@@ -6834,5 +6834,73 @@ describe('handlePostVerificationState with validation parameters', () => {
 
     expect(result).toBe(false);
     expect(driver.getStatus().cleanedUp).toBe(true);
+  });
+});
+
+describe('parseCoverageTotal', () => {
+  it('returns null for null input', () => {
+    expect(parseCoverageTotal(null)).toBeNull();
+  });
+
+  it('returns null for undefined input', () => {
+    expect(parseCoverageTotal(undefined)).toBeNull();
+  });
+
+  it('returns null for string input', () => {
+    expect(parseCoverageTotal('not an object')).toBeNull();
+  });
+
+  it('returns null for number input', () => {
+    expect(parseCoverageTotal(42)).toBeNull();
+  });
+
+  it('returns null for boolean input', () => {
+    expect(parseCoverageTotal(true)).toBeNull();
+  });
+
+  it('returns null for array input', () => {
+    expect(parseCoverageTotal([{ pct: 50 }])).toBeNull();
+  });
+
+  it('returns empty CoverageTotal for empty object', () => {
+    const result = parseCoverageTotal({});
+    expect(result).toEqual({});
+  });
+
+  it('extracts branches metric when present', () => {
+    const result = parseCoverageTotal({
+      branches: { pct: 85.5 },
+    });
+    expect(result).toEqual({ branches: { pct: 85.5 } });
+  });
+
+  it('extracts all four metrics from a valid total object', () => {
+    const result = parseCoverageTotal({
+      branches: { pct: 94.95 },
+      functions: { pct: 98.2 },
+      lines: { pct: 99.73 },
+      statements: { pct: 99.86 },
+    });
+    expect(result).toEqual({
+      branches: { pct: 94.95 },
+      functions: { pct: 98.2 },
+      lines: { pct: 99.73 },
+      statements: { pct: 99.86 },
+    });
+  });
+
+  it('returns object with extra properties ignored but valid metrics preserved', () => {
+    const result = parseCoverageTotal({
+      branches: { pct: 90 },
+      extraField: 'ignored',
+    });
+    expect(result?.branches).toEqual({ pct: 90 });
+  });
+
+  it('handles object with pct as non-number (still returns object)', () => {
+    const result = parseCoverageTotal({
+      branches: { pct: 'not a number' },
+    });
+    expect(result).toEqual({ branches: { pct: 'not a number' } });
   });
 });
