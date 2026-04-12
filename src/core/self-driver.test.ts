@@ -6862,9 +6862,9 @@ describe('parseCoverageTotal', () => {
     expect(parseCoverageTotal([{ pct: 50 }])).toBeNull();
   });
 
-  it('returns empty CoverageTotal for empty object', () => {
+  it('returns null for empty object (no valid metrics)', () => {
     const result = parseCoverageTotal({});
-    expect(result).toEqual({});
+    expect(result).toBeNull();
   });
 
   it('extracts branches metric when present', () => {
@@ -6897,10 +6897,10 @@ describe('parseCoverageTotal', () => {
     expect(result?.branches).toEqual({ pct: 90 });
   });
 
-  it('handles object with pct as non-number (still returns object)', () => {
+  it('rejects object with pct as non-number', () => {
     const result = parseCoverageTotal({
       branches: { pct: 'not a number' },
     });
-    expect(result).toEqual({ branches: { pct: 'not a number' } });
+    expect(result).toBeNull();
   });
 });

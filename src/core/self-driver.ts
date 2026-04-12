@@ -42,7 +42,7 @@ interface CoverageTotal {
 }
 /**
  * Validates and extracts the "total" section from a parsed coverage summary.
- * Performs runtime type checking instead of relying on `as` casts from unvalidated JSON.
+ * Performs runtime type checking on the nested structure to avoid unsafe `as` casts.
  * @param value - The raw `total` value from a parsed coverage-summary.json
  * @returns Validated CoverageTotal, or null if the value doesn't match the expected shape
  */
@@ -50,7 +50,20 @@ export function parseCoverageTotal(value: unknown): CoverageTotal | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return null;
   }
-  return value as CoverageTotal;
+  const obj = value as Record<string, unknown>;
+  const result: CoverageTotal = {};
+  let hasField = false;
+  for (const key of ['branches', 'functions', 'lines', 'statements'] as const) {
+    const entry = obj[key];
+    if (typeof entry === 'object' && entry !== null && !Array.isArray(entry)) {
+      const pct = (entry as Record<string, unknown>).pct;
+      if (typeof pct === 'number') {
+        result[key] = { pct };
+        hasField = true;
+      }
+    }
+  }
+  return hasField ? result : null;
 }
 /** Shape of execa command results used internally for safe command execution. */
 interface ExecaResult {
