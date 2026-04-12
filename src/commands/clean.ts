@@ -72,7 +72,7 @@ export function cleanCommand(program: Command): void {
     .option('--binaries-only', 'Clean only Binaries and Intermediate folders')
     .option('--silent', 'Suppress all output')
     .action(async (options) => {
-      const logger = new Logger();
+      const logger = new Logger({ silent: options.silent });
 
       try {
         logger.title('Clean Project');
@@ -86,14 +86,11 @@ export function cleanCommand(program: Command): void {
         });
 
         if (!result.success) {
-          logger.error(`Clean failed: ${result.error || 'Unknown error'}`);
-          if (result.failedPaths.length > 0) {
-            logger.subTitle('Failed to clean:');
-            result.failedPaths.forEach((item) => {
-              logger.write(`  • ${item.path}: ${item.error}\n`);
-            });
-          }
-          process.exit(1);
+          const detail =
+            result.failedPaths.length > 0
+              ? `${result.error || 'Unknown error'} (${result.failedPaths.map((p) => p.path).join(', ')})`
+              : result.error || 'Unknown error';
+          throw new Error(detail);
         }
 
         if (result.deletedPaths.length > 0) {
