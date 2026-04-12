@@ -205,10 +205,13 @@ export class SelfDriver {
   }
   /**
    * Collects path policy violations for a set of changed files.
+   * The evolution log file is always excluded from validation since it is
+   * managed by the SelfDriver itself and not by the AI agent.
    */
   private collectPathViolations(changedFiles: string[]): string[] {
     const violations: string[] = [];
     for (const file of changedFiles) {
+      if (file === this.logFile) continue;
       let isForbidden = false;
       for (const pattern of this.forbiddenPaths) {
         if (this.matchesGlobPattern(file, pattern)) {

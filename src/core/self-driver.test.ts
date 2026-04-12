@@ -671,6 +671,32 @@ describe('SelfDriver', () => {
       expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('package.json'));
     });
 
+    it('excludes the evolution log file from path violation checks', async () => {
+      const mockLogger = jest.fn();
+      driver = new SelfDriver({ logger: mockLogger });
+
+      mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+        if (command === 'git' && args?.includes('diff') && args?.includes('--name-only')) {
+          return mockExecaResult(0, '.evolve-history.jsonl\nsrc/core/self-driver.ts', '');
+        }
+        if (command === 'git' && args?.includes('--shortstat')) {
+          return mockExecaResult(0, ' 2 files changed, 10 insertions(+)', '');
+        }
+        if (command === 'npm') {
+          return mockExecaResult(0, '', '');
+        }
+        return mockExecaResult(0, '', '');
+      });
+
+      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const result = await verify.call(driver);
+
+      expect(result).toBe(true);
+      expect(mockLogger).not.toHaveBeenCalledWith(
+        expect.stringContaining('Forbidden file changes detected')
+      );
+    });
+
     it('returns false when change size exceeds maxDiffLines limit', async () => {
       const mockLogger = jest.fn();
       driver = new SelfDriver({ logger: mockLogger, maxDiffLines: 50 });
