@@ -5780,6 +5780,33 @@ describe('code health metrics', () => {
     expect(result).not.toContain('src/d.ts');
   });
 
+  it('excludes test files, test-utils, and types from lowest coverage files', () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger });
+
+    const summary = {
+      total: { lines: { pct: 50 } },
+      'src/core/engine.ts': { lines: { pct: 60 } },
+      'src/core/engine.test.ts': { lines: { pct: 40 } },
+      'src/test-utils/helpers.ts': { lines: { pct: 20 } },
+      'src/types/index.ts': { lines: { pct: 30 } },
+      'src/commands/build.spec.ts': { lines: { pct: 10 } },
+    };
+
+    const formatLowestCoverageFiles = (
+      driver as unknown as {
+        formatLowestCoverageFiles: (s: Record<string, unknown>, maxFiles?: number) => string | null;
+      }
+    ).formatLowestCoverageFiles;
+    const result = formatLowestCoverageFiles.call(driver, summary);
+
+    expect(result).toContain('src/core/engine.ts (60%)');
+    expect(result).not.toContain('engine.test.ts');
+    expect(result).not.toContain('helpers.ts');
+    expect(result).not.toContain('types/index.ts');
+    expect(result).not.toContain('build.spec.ts');
+  });
+
   it('includes lowest coverage files in combined metrics section', async () => {
     const mockLogger = jest.fn();
     driver = new SelfDriver({ logger: mockLogger });

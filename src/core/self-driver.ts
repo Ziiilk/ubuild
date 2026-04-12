@@ -525,6 +525,7 @@ export class SelfDriver {
     const fileEntries: Array<{ file: string; pct: number }> = [];
     for (const [key, value] of Object.entries(summary)) {
       if (key === 'total') continue;
+      if (!this.isCoreSourceFile(key)) continue;
       const entry = value as { lines?: { pct?: number } };
       const pct = entry?.lines?.pct;
       if (typeof pct === 'number' && pct < 100) {
