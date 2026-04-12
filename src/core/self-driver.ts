@@ -970,123 +970,101 @@ export class SelfDriver {
   ): Promise<void> {
     const durationMs = Date.now() - this.iterationStartTime;
     const metricDelta = this.calculateMetricDelta(metricsBefore, metricsAfter);
+    const outcome = this.determineIterationOutcome(
+      isClean,
+      hashChanged,
+      decision,
+      filesChanged,
+      committedValidation,
+      testDecisionValidation
+    );
+    this.lastIterationResult = {
+      iteration: this.iterationCount,
+      success: outcome.success,
+      decision: outcome.decision,
+      failureStage: outcome.failureStage,
+      failureDetail: outcome.failureDetail,
+      filesChanged: outcome.filesChanged,
+    };
+    await this.writeEvolutionRecord({
+      iteration: this.iterationCount,
+      timestamp: iterationTimestamp,
+      success: outcome.success,
+      failureStage: outcome.failureStage,
+      failureDetail: outcome.failureDetail,
+      commitHash: afterCommitHash ?? undefined,
+      decision: outcome.decision,
+      filesChanged: outcome.filesChanged,
+      metricsBefore: metricsBefore ?? undefined,
+      metricsAfter: metricsAfter ?? undefined,
+      metricDelta,
+      durationMs,
+    });
+  }
+
+  /**
+   * Determines the outcome of an iteration based on working tree and commit state.
+   * Returns a structured result that can be used directly for logging and recording.
+   */
+  private determineIterationOutcome(
+    isClean: boolean,
+    hashChanged: boolean,
+    decision: string | undefined,
+    filesChanged: string[] | undefined,
+    committedValidation: CommittedChangeValidationResult | null,
+    testDecisionValidation: TestDecisionValidationResult
+  ): {
+    success: boolean;
+    decision: string | undefined;
+    failureStage?: 'commit';
+    failureDetail?: string;
+    filesChanged?: string[];
+  } {
+    // Committed but TEST decision failed value bar
     if (isClean && hashChanged && !testDecisionValidation.valid) {
-      const failureDetail =
-        testDecisionValidation.reason ?? 'TEST decision did not clear the minimum value bar';
-      this.lastIterationResult = {
-        iteration: this.iterationCount,
+      return {
         success: false,
         decision,
         failureStage: 'commit',
-        failureDetail,
+        failureDetail:
+          testDecisionValidation.reason ?? 'TEST decision did not clear the minimum value bar',
         filesChanged,
       };
-      await this.writeEvolutionRecord({
-        iteration: this.iterationCount,
-        timestamp: iterationTimestamp,
-        success: false,
-        failureStage: 'commit',
-        failureDetail,
-        commitHash: afterCommitHash ?? undefined,
-        decision,
-        filesChanged,
-        metricsBefore: metricsBefore ?? undefined,
-        metricsAfter: metricsAfter ?? undefined,
-        metricDelta,
-        durationMs,
-      });
-      return;
     }
+    // Committed but violated file restrictions or size limits
     if (isClean && hashChanged && committedValidation && !committedValidation.valid) {
       const failureDetail =
         committedValidation.violations.length > 0
           ? `Committed changes violated file restrictions: ${committedValidation.violations.join(', ')}`
           : `Committed changes exceeded diff size limit: ${committedValidation.total} lines changed (limit: ${this.maxDiffLines})`;
-      this.lastIterationResult = {
-        iteration: this.iterationCount,
+      return {
         success: false,
         decision,
         failureStage: 'commit',
         failureDetail,
         filesChanged,
       };
-      await this.writeEvolutionRecord({
-        iteration: this.iterationCount,
-        timestamp: iterationTimestamp,
-        success: false,
-        failureStage: 'commit',
-        failureDetail,
-        commitHash: afterCommitHash ?? undefined,
-        decision,
-        filesChanged,
-        metricsBefore: metricsBefore ?? undefined,
-        metricsAfter: metricsAfter ?? undefined,
-        metricDelta,
-        durationMs,
-      });
-      return;
     }
+    // Successfully committed
     if (isClean && hashChanged) {
-      this.lastIterationResult = {
-        iteration: this.iterationCount,
-        success: true,
-        decision,
-        filesChanged,
-      };
-      await this.writeEvolutionRecord({
-        iteration: this.iterationCount,
-        timestamp: iterationTimestamp,
-        success: true,
-        commitHash: afterCommitHash ?? undefined,
-        decision,
-        filesChanged,
-        metricsBefore: metricsBefore ?? undefined,
-        metricsAfter: metricsAfter ?? undefined,
-        metricDelta,
-        durationMs,
-      });
-    } else if (isClean && !hashChanged) {
-      this.lastIterationResult = {
-        iteration: this.iterationCount,
+      return { success: true, decision, filesChanged };
+    }
+    // Clean but no commit = SKIP
+    if (isClean) {
+      return {
         success: true,
         decision: 'SKIP',
         failureDetail: 'AI made no changes (SKIP)',
       };
-      await this.writeEvolutionRecord({
-        iteration: this.iterationCount,
-        timestamp: iterationTimestamp,
-        success: true,
-        decision: 'SKIP',
-        metricsBefore: metricsBefore ?? undefined,
-        metricsAfter: metricsAfter ?? undefined,
-        metricDelta,
-        durationMs,
-      });
-    } else {
-      const failureDetail = hashChanged ? PARTIAL_COMMIT_DETAIL : COMMIT_MISSED_DETAIL;
-      this.lastIterationResult = {
-        iteration: this.iterationCount,
-        success: false,
-        failureStage: 'commit',
-        failureDetail,
-        decision,
-        filesChanged,
-      };
-      await this.writeEvolutionRecord({
-        iteration: this.iterationCount,
-        timestamp: iterationTimestamp,
-        success: false,
-        failureStage: 'commit',
-        failureDetail,
-        commitHash: afterCommitHash ?? undefined,
-        decision,
-        filesChanged,
-        metricsBefore: metricsBefore ?? undefined,
-        metricsAfter: metricsAfter ?? undefined,
-        metricDelta,
-        durationMs,
-      });
     }
+    // Not clean = uncommitted changes remaining
+    return {
+      success: false,
+      decision,
+      failureStage: 'commit',
+      failureDetail: hashChanged ? PARTIAL_COMMIT_DETAIL : COMMIT_MISSED_DETAIL,
+      filesChanged,
+    };
   }
   /**
    * Runs the self-evolution loop - continues indefinitely until interrupted by user.
