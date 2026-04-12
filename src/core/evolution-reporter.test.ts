@@ -347,6 +347,58 @@ describe('formatHistorySummary', () => {
 
     expect(output).not.toContain('Avg impact per success');
   });
+
+  it('includes average iteration duration when records have non-zero duration', () => {
+    const records: EvolutionRecord[] = [
+      makeRecord({ iteration: 1, success: true, decision: 'FIX', durationMs: 90000 }),
+      makeRecord({ iteration: 2, success: true, decision: 'FIX', durationMs: 150000 }),
+    ];
+    const report = buildReport(records);
+    const output = formatHistorySummary(report);
+
+    expect(output).toContain('Avg iteration duration:');
+    expect(output).toContain('total:');
+  });
+
+  it('omits average iteration duration when all durations are zero', () => {
+    const records: EvolutionRecord[] = [
+      makeRecord({ iteration: 1, success: true, decision: 'FIX', durationMs: 0 }),
+    ];
+    const report = buildReport(records);
+    const output = formatHistorySummary(report);
+
+    expect(output).not.toContain('Avg iteration duration');
+  });
+
+  it('formats durations in seconds for short iterations', () => {
+    const records: EvolutionRecord[] = [
+      makeRecord({ iteration: 1, success: true, decision: 'FIX', durationMs: 45000 }),
+    ];
+    const report = buildReport(records);
+    const output = formatHistorySummary(report);
+
+    expect(output).toContain('45s');
+  });
+
+  it('formats durations in minutes and seconds for medium iterations', () => {
+    const records: EvolutionRecord[] = [
+      makeRecord({ iteration: 1, success: true, decision: 'FIX', durationMs: 150000 }),
+    ];
+    const report = buildReport(records);
+    const output = formatHistorySummary(report);
+
+    expect(output).toContain('2m 30s');
+  });
+
+  it('formats durations in hours for long iterations', () => {
+    const records: EvolutionRecord[] = [
+      makeRecord({ iteration: 1, success: true, decision: 'FIX', durationMs: 5400000 }),
+    ];
+    const report = buildReport(records);
+    const output = formatHistorySummary(report);
+
+    expect(output).toContain('1h 30m');
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -135,6 +135,27 @@ function computeAverageMetricDelta(records: EvolutionRecord[]): MetricDelta {
 }
 
 /**
+ * Formats milliseconds into a concise human-readable duration string.
+ * Examples: "45s", "2m 30s", "1h 15m"
+ */
+function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return seconds > 0
+      ? `${hours}h ${minutes}m ${seconds}s`
+      : minutes > 0
+        ? `${hours}h ${minutes}m`
+        : `${hours}h`;
+  }
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+}
+
+/**
  * Format an {@link EvolutionReport} as a factual prompt section.
  * Contains only data — no conclusions or directives.
  */
@@ -146,6 +167,11 @@ export function formatHistorySummary(report: EvolutionReport): string {
   lines.push(
     `Total: ${report.totalIterations} iterations, ${report.successCount} success, ${report.failureCount} failed (${(report.successRate * 100).toFixed(0)}% success rate)`
   );
+  if (report.averageDurationMs > 0) {
+    lines.push(
+      `Avg iteration duration: ${formatDurationMs(report.averageDurationMs)} (total: ${formatDurationMs(report.totalDurationMs)})`
+    );
+  }
 
   // Decision distribution
   const decisions = Object.entries(report.decisionDistribution).sort(
