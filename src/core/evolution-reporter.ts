@@ -156,7 +156,18 @@ export function formatHistorySummary(report: EvolutionReport): string {
     lines.push('Decision breakdown (all time):');
     for (const [decision, stats] of decisions) {
       const rate = stats.count > 0 ? ((stats.successes / stats.count) * 100).toFixed(0) : '-';
-      lines.push(`  ${decision}: ${stats.count} total, ${stats.successes} accepted, ${stats.failures} reverted (${rate}% success)`);
+      lines.push(
+        `  ${decision}: ${stats.count} total, ${stats.successes} accepted, ${stats.failures} reverted (${rate}% success)`
+      );
+    }
+  }
+
+  // Top failure reasons (helps AI avoid repeating past mistakes)
+  if (report.topFailureReasons.length > 0) {
+    lines.push('');
+    lines.push('Top failure reasons:');
+    for (const entry of report.topFailureReasons.slice(0, 5)) {
+      lines.push(`  - ${entry.reason} (${entry.count}×)`);
     }
   }
 
@@ -171,8 +182,12 @@ export function formatHistorySummary(report: EvolutionReport): string {
     }
     const rd = w.averageMetricDelta;
     const deltaParts: string[] = [];
-    if (rd.branches !== undefined) deltaParts.push(`branches ${rd.branches >= 0 ? '+' : ''}${rd.branches.toFixed(2)}%`);
-    if (rd.lintWarnings !== undefined) deltaParts.push(`lint ${rd.lintWarnings >= 0 ? '+' : ''}${rd.lintWarnings.toFixed(1)} warnings`);
+    if (rd.branches !== undefined)
+      deltaParts.push(`branches ${rd.branches >= 0 ? '+' : ''}${rd.branches.toFixed(2)}%`);
+    if (rd.lintWarnings !== undefined)
+      deltaParts.push(
+        `lint ${rd.lintWarnings >= 0 ? '+' : ''}${rd.lintWarnings.toFixed(1)} warnings`
+      );
     if (deltaParts.length > 0) {
       lines.push(`  Avg impact per success: ${deltaParts.join(', ')}`);
     }

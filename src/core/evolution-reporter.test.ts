@@ -271,6 +271,51 @@ describe('formatHistorySummary', () => {
     expect(output).not.toContain('Decision breakdown');
   });
 
+  it('includes top failure reasons when failures exist', () => {
+    const records: EvolutionRecord[] = [
+      makeRecord({
+        iteration: 1,
+        success: false,
+        decision: 'FIX',
+        failureStage: 'verification',
+        failureDetail: 'Build failed: type error in module',
+        durationMs: 3000,
+      }),
+      makeRecord({
+        iteration: 2,
+        success: false,
+        decision: 'TEST',
+        failureStage: 'commit',
+        failureDetail: 'Build failed: type error in module',
+        durationMs: 2000,
+      }),
+      makeRecord({
+        iteration: 3,
+        success: false,
+        decision: 'FIX',
+        failureStage: 'execution',
+        failureDetail: 'OpenCode timed out',
+        durationMs: 1000,
+      }),
+    ];
+    const report = buildReport(records);
+    const output = formatHistorySummary(report);
+
+    expect(output).toContain('Top failure reasons:');
+    expect(output).toContain('Build failed: type error in module (2×)');
+    expect(output).toContain('OpenCode timed out (1×)');
+  });
+
+  it('omits top failure reasons when no failures exist', () => {
+    const records: EvolutionRecord[] = [
+      makeRecord({ iteration: 1, success: true, decision: 'FIX', durationMs: 1000 }),
+    ];
+    const report = buildReport(records);
+    const output = formatHistorySummary(report);
+
+    expect(output).not.toContain('Top failure reasons');
+  });
+
   it('formats negative metric deltas with sign prefix in recent window', () => {
     const records: EvolutionRecord[] = [];
     for (let i = 1; i <= 12; i++) {
