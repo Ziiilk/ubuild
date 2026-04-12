@@ -1559,6 +1559,22 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     return true;
   }
   /**
+   * Reverts to a known-safe commit hash, handling the case where the hash is unavailable.
+   * Used by handlePostVerificationState when committed changes need to be undone.
+   * @returns true if evolution should continue, false if it should stop
+   */
+  private async revertToHashOrFail(
+    beforeCommitHash: string | null,
+    reason: string
+  ): Promise<boolean> {
+    if (!beforeCommitHash) {
+      this.cleanup();
+      return false;
+    }
+    const reverted = await this.revertCommittedIteration(beforeCommitHash);
+    return this.handleRevertFailure(reverted, reason);
+  }
+  /**
    * Handles post-verification state by checking working tree cleanliness and commit status.
    * @param isClean - Whether the working tree is clean
    * @param hashChanged - Whether the commit hash changed (indicating AI committed)
@@ -1589,13 +1605,8 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     if (isClean && hashChanged) {
       if (!testDecisionValidation.valid) {
         this.log(`⚠️  ${testDecisionValidation.reason}`);
-        if (!beforeCommitHash) {
-          this.cleanup();
-          return false;
-        }
-        const reverted = await this.revertCommittedIteration(beforeCommitHash);
-        return this.handleRevertFailure(
-          reverted,
+        return this.revertToHashOrFail(
+          beforeCommitHash,
           testDecisionValidation.reason ?? 'Invalid TEST decision'
         );
       }
@@ -1610,16 +1621,11 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
             `⚠️  Committed changes exceeded diff size limit: ${committedValidation.total} lines changed (limit: ${this.maxDiffLines})`
           );
         }
-        if (!beforeCommitHash) {
-          this.cleanup();
-          return false;
-        }
-        const reverted = await this.revertCommittedIteration(beforeCommitHash);
         const failureReason =
           committedValidation.violations.length > 0
             ? 'Committed changes violated file restrictions'
             : 'Committed changes exceeded diff size limit';
-        return this.handleRevertFailure(reverted, failureReason);
+        return this.revertToHashOrFail(beforeCommitHash, failureReason);
       }
       if (decision === 'TEST') {
         this.log('✅ TEST decision cleared the value bar');
@@ -1636,13 +1642,8 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     // Not clean = some changes left uncommitted
     if (hashChanged) {
       this.log('⚠️  Verification passed but AI left uncommitted changes after partial commit');
-      if (!beforeCommitHash) {
-        this.cleanup();
-        return false;
-      }
       this.log('🔄 Reverting committed and uncommitted changes...');
-      const result = await this.revertCommittedIteration(beforeCommitHash);
-      return this.handleRevertFailure(result, PARTIAL_COMMIT_DETAIL);
+      return this.revertToHashOrFail(beforeCommitHash, PARTIAL_COMMIT_DETAIL);
     } else {
       this.log('⚠️  Verification passed but AI did not commit changes');
       this.log('🔄 Reverting uncommitted changes...');
