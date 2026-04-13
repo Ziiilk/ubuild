@@ -93,6 +93,22 @@ export function parseDiffTotal(output: string): number {
   const deletions = trimmed.match(/(\d+)\s+deletion/);
   return parseInt(insertions?.[1] ?? '0', 10) + parseInt(deletions?.[1] ?? '0', 10);
 }
+/**
+ * Safely extracts a coverage metric percentage from a single file entry
+ * in a parsed coverage summary. Returns null if the value doesn't contain
+ * a valid numeric percentage for the requested metric key.
+ */
+function extractFileMetricPct(value: unknown, metricKey: 'branches' | 'lines'): number | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const metric = (value as Record<string, unknown>)[metricKey];
+  if (typeof metric !== 'object' || metric === null || Array.isArray(metric)) {
+    return null;
+  }
+  const pct = (metric as Record<string, unknown>).pct;
+  return typeof pct === 'number' ? pct : null;
+}
 /** Shape of execa command results used internally for safe command execution. */
 interface ExecaResult {
   exitCode: number;
@@ -269,21 +285,13 @@ export class SelfDriver {
       if (key === 'total' || !this.isCoreSourceFile(key)) {
         continue;
       }
-      const metric = (value as Record<string, { pct?: number }>)[metricKey];
-      const pct = metric?.pct;
-      if (typeof pct === 'number' && pct < 100) {
+      const pct = extractFileMetricPct(value, metricKey);
+      if (pct !== null && pct < 100) {
         entries.push({ file: key, pct });
       }
     }
     entries.sort((a, b) => a.pct - b.pct);
     return entries;
-  }
-  /**
-   * Parses git shortstat output and returns the total changed lines.
-   * Delegates to the standalone {@link parseDiffTotal} utility.
-   */
-  private parseDiffTotal(output: string): number {
-    return parseDiffTotal(output);
   }
   /**
    * Collects path policy violations for a set of changed files.
@@ -554,7 +562,7 @@ export class SelfDriver {
     if (output.length === 0) {
       return { total: 0, withinLimit: true };
     }
-    const total = this.parseDiffTotal(output);
+    const total = parseDiffTotal(output);
     return { total, withinLimit: total <= this.maxDiffLines };
   }
   /**
@@ -697,7 +705,7 @@ export class SelfDriver {
           '⚠️  Could not determine committed diff size, skipping post-commit size validation'
         );
       } else {
-        total = this.parseDiffTotal(diffResult.stdout);
+        total = parseDiffTotal(diffResult.stdout);
         withinLimit = total <= this.maxDiffLines;
       }
     }
