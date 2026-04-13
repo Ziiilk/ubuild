@@ -6970,3 +6970,204 @@ describe('normalizePath', () => {
     expect(normalizePath('C:\\Users\\dev\\project')).toBe('C:/Users/dev/project');
   });
 });
+
+describe('countLintWarnings edge cases', () => {
+  beforeEach(() => {
+    driver = new SelfDriver();
+  });
+  afterEach(() => {
+    if (driver) driver.cleanup();
+  });
+
+  it('returns null when eslint output is not a JSON array', () => {
+    const countLintWarnings = (
+      driver as unknown as { countLintWarnings: (p: string) => number | null }
+    ).countLintWarnings;
+    expect(countLintWarnings.call(driver, JSON.stringify({ error: 'not array' }))).toBeNull();
+  });
+
+  it('skips non-object items in the array and sums object warningCounts', () => {
+    const countLintWarnings = (
+      driver as unknown as { countLintWarnings: (p: string) => number | null }
+    ).countLintWarnings;
+    expect(
+      countLintWarnings.call(
+        driver,
+        JSON.stringify([null, 42, 'str', { warningCount: 5 }, { warningCount: 3 }])
+      )
+    ).toBe(8);
+  });
+
+  it('treats missing warningCount as zero for valid objects', () => {
+    const countLintWarnings = (
+      driver as unknown as { countLintWarnings: (p: string) => number | null }
+    ).countLintWarnings;
+    expect(countLintWarnings.call(driver, JSON.stringify([{ filePath: 'a.ts' }]))).toBe(0);
+  });
+});
+
+describe('calculateMetricDelta edge cases', () => {
+  beforeEach(() => {
+    driver = new SelfDriver();
+  });
+  afterEach(() => {
+    if (driver) driver.cleanup();
+  });
+
+  it('computes lint-only delta when coverage objects are absent', () => {
+    const calculateMetricDelta = (
+      driver as unknown as {
+        calculateMetricDelta: (
+          before: Record<string, unknown> | null,
+          after: Record<string, unknown> | null
+        ) => Record<string, number> | undefined;
+      }
+    ).calculateMetricDelta;
+    const result = calculateMetricDelta.call(driver, { lintWarnings: 5 }, { lintWarnings: 2 });
+    expect(result).toEqual({ lintWarnings: -3 });
+  });
+
+  it('returns undefined when both before and after are null', () => {
+    const calculateMetricDelta = (
+      driver as unknown as {
+        calculateMetricDelta: (before: null, after: null) => undefined;
+      }
+    ).calculateMetricDelta;
+    expect(calculateMetricDelta.call(driver, null, null)).toBeUndefined();
+  });
+
+  it('returns undefined when before and after have no matching metric fields', () => {
+    const calculateMetricDelta = (
+      driver as unknown as {
+        calculateMetricDelta: (
+          before: Record<string, unknown> | null,
+          after: Record<string, unknown> | null
+        ) => Record<string, number> | undefined;
+      }
+    ).calculateMetricDelta;
+    expect(calculateMetricDelta.call(driver, {}, {})).toBeUndefined();
+  });
+});
+
+describe('validateTestDecision coverage improvement via individual metrics', () => {
+  beforeEach(() => {
+    driver = new SelfDriver();
+  });
+  afterEach(() => {
+    if (driver) driver.cleanup();
+  });
+
+  it('accepts TEST when only functions coverage improved', () => {
+    const validateTestDecision = (
+      driver as unknown as {
+        validateTestDecision: (
+          decision: string | undefined,
+          filesChanged: string[] | undefined,
+          metricsBefore: Record<string, unknown> | null,
+          metricsAfter: Record<string, unknown> | null,
+          lastResult?: unknown
+        ) => { valid: boolean; reason?: string };
+      }
+    ).validateTestDecision;
+    const result = validateTestDecision.call(
+      driver,
+      'TEST',
+      ['src/core/unrelated.test.ts'],
+      {
+        branchHotspots: [{ file: 'src/core/different.ts', branches: 45 }],
+        coverage: { branches: 80, functions: 80, lines: 80, statements: 80 },
+      },
+      { coverage: { branches: 80, functions: 82, lines: 80, statements: 80 } },
+      null
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts TEST when only lines coverage improved', () => {
+    const validateTestDecision = (
+      driver as unknown as {
+        validateTestDecision: (
+          decision: string | undefined,
+          filesChanged: string[] | undefined,
+          metricsBefore: Record<string, unknown> | null,
+          metricsAfter: Record<string, unknown> | null,
+          lastResult?: unknown
+        ) => { valid: boolean; reason?: string };
+      }
+    ).validateTestDecision;
+    const result = validateTestDecision.call(
+      driver,
+      'TEST',
+      ['src/core/unrelated.test.ts'],
+      {
+        branchHotspots: [{ file: 'src/core/different.ts', branches: 45 }],
+        coverage: { branches: 80, functions: 80, lines: 80, statements: 80 },
+      },
+      { coverage: { branches: 80, functions: 80, lines: 85, statements: 80 } },
+      null
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it('accepts TEST when only statements coverage improved', () => {
+    const validateTestDecision = (
+      driver as unknown as {
+        validateTestDecision: (
+          decision: string | undefined,
+          filesChanged: string[] | undefined,
+          metricsBefore: Record<string, unknown> | null,
+          metricsAfter: Record<string, unknown> | null,
+          lastResult?: unknown
+        ) => { valid: boolean; reason?: string };
+      }
+    ).validateTestDecision;
+    const result = validateTestDecision.call(
+      driver,
+      'TEST',
+      ['src/core/unrelated.test.ts'],
+      {
+        branchHotspots: [{ file: 'src/core/different.ts', branches: 45 }],
+        coverage: { branches: 80, functions: 80, lines: 80, statements: 80 },
+      },
+      { coverage: { branches: 80, functions: 80, lines: 80, statements: 83 } },
+      null
+    );
+    expect(result.valid).toBe(true);
+  });
+});
+
+describe('captureVerificationMetrics all-null path', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+  });
+
+  afterEach(() => {
+    if (driver) {
+      driver.cleanup();
+    }
+    jest.restoreAllMocks();
+    process.cwd = originalCwd;
+  });
+
+  it('returns null when coverage and lint sources are both unavailable', async () => {
+    driver = new SelfDriver();
+
+    // Coverage file does not exist
+    mockPathExists.mockResolvedValue(false);
+    // Eslint invocation throws
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'npx' && args?.includes('eslint')) {
+        throw new Error('eslint not found');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const captureVerificationMetrics = (
+      driver as unknown as { captureVerificationMetrics: () => Promise<unknown> }
+    ).captureVerificationMetrics;
+    const result = await captureVerificationMetrics.call(driver);
+
+    expect(result).toBeNull();
+  });
+});
