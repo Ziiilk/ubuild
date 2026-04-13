@@ -6,6 +6,7 @@ import {
   normalizePath,
 } from './self-driver';
 import type { SelfEvolverOptions, IterationResult } from './self-driver';
+import type { EvolutionReport } from '../types/evolve';
 
 const mockExeca = jest.fn<
   Promise<{ exitCode: number; stdout: string; stderr: string }>,
@@ -382,9 +383,9 @@ describe('SelfDriver', () => {
 
     it('returns true when all checks pass', async () => {
       // Access private method via type assertion
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-      expect(result).toBe(true);
+      expect(result).toBeNull();
     });
 
     it('returns false when build fails', async () => {
@@ -395,9 +396,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
     });
 
     it('returns false when tests fail', async () => {
@@ -408,9 +409,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
     });
 
     it('returns false when lint fails', async () => {
@@ -421,9 +422,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
     });
 
     it('returns false when evolve command fails', async () => {
@@ -434,9 +435,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
     });
 
     it('returns false when list command fails', async () => {
@@ -447,9 +448,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
     });
 
     it('handles execution errors gracefully', async () => {
@@ -460,9 +461,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
     });
 
     it('returns false when engine command --help fails while other commands pass', async () => {
@@ -473,9 +474,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
     });
 
     it('truncates long stderr in verification failure output', async () => {
@@ -490,10 +491,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
       // stderr should be truncated at 2000 chars
       expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('...(truncated)'));
     });
@@ -510,10 +510,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
       // stdout should be truncated at 2000 chars
       expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('...(truncated)'));
     });
@@ -529,10 +528,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
       expect(mockLogger).toHaveBeenCalledWith('     Error: Build error: something went wrong');
       expect(mockLogger).toHaveBeenCalledWith('     Output: Build output here');
     });
@@ -548,10 +546,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
       expect(mockLogger).toHaveBeenCalledWith('     Output: Build failed with this output');
     });
 
@@ -567,10 +564,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
       expect(mockLogger).toHaveBeenCalledWith('     Error: Build error: something went wrong');
       // Should NOT log stdout since it's empty
       expect(mockLogger).not.toHaveBeenCalledWith(expect.stringContaining('Output:'));
@@ -589,9 +585,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-      expect(result).toBe(true);
+      expect(result).toBeNull();
       expect(mockExeca).toHaveBeenCalledWith(
         'npx',
         ['ts-node', 'src/cli/index.ts', 'list', '--help'],
@@ -615,7 +611,7 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       await verify.call(driver);
 
       // Build must come before test and lint
@@ -642,10 +638,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
       expect(callOrder).toContain('build');
       expect(callOrder).not.toContain('test');
       expect(callOrder).not.toContain('lint');
@@ -667,10 +662,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
       expect(mockLogger).toHaveBeenCalledWith(
         expect.stringContaining('Forbidden file changes detected')
       );
@@ -694,10 +688,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-
-      expect(result).toBe(true);
+      expect(result).toBeNull();
       expect(mockLogger).not.toHaveBeenCalledWith(
         expect.stringContaining('Forbidden file changes detected')
       );
@@ -719,10 +712,9 @@ describe('SelfDriver', () => {
         return mockExecaResult(0, '', '');
       });
 
-      const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+      const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
       const result = await verify.call(driver);
-
-      expect(result).toBe(false);
+      expect(result).toEqual(expect.any(String));
       expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Change too large'));
       expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('300 lines changed'));
     });
@@ -3323,10 +3315,9 @@ describe('verify with useTsNode=false', () => {
       return mockExecaResult(0, '', '');
     });
 
-    const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
-    const result = await verify.call(driver);
-
-    expect(result).toBe(true);
+    const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
+      const result = await verify.call(driver);
+      expect(result).toBeNull();
     expect(distCommandCalled).toBe(true); // Should use dist mode, not ts-node
   });
 });
@@ -3790,13 +3781,13 @@ describe('output truncation boundaries', () => {
 
     const verify = (
       driver as unknown as {
-        verify: () => Promise<boolean>;
+        verify: () => Promise<string | null>;
       }
     ).verify;
 
     const result = await verify.call(driver);
 
-    expect(result).toBe(false);
+    expect(result).toEqual(expect.any(String));
 
     // Check stderr truncation at 2000 chars
     const errorCalls = mockLogger.mock.calls.filter(
@@ -4143,7 +4134,7 @@ describe('iteration result and failure context propagation', () => {
       iteration: 1,
       success: false,
       failureStage: 'verification',
-      failureDetail: 'Build, test, or lint checks failed after AI changes',
+      failureDetail: expect.any(String),
     });
   });
 
@@ -6467,7 +6458,7 @@ describe('coverage baseline gate', () => {
       })
     );
 
-    const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+    const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
     await verify.call(driver);
 
     // Check that npm test was called with --coverage
@@ -6480,7 +6471,7 @@ describe('coverage baseline gate', () => {
 
     mockExeca.mockResolvedValue(mockExecaResult(0, '', ''));
 
-    const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+    const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
     await verify.call(driver);
 
     // Coverage is always collected for metrics and history
@@ -6509,10 +6500,9 @@ describe('coverage baseline gate', () => {
       })
     );
 
-    const verify = (driver as unknown as { verify: () => Promise<boolean> }).verify;
+    const verify = (driver as unknown as { verify: () => Promise<string | null> }).verify;
     const result = await verify.call(driver);
-
-    expect(result).toBe(false);
+    expect(result).toEqual(expect.any(String));
     expect(mockLogger).toHaveBeenCalledWith(expect.stringContaining('Coverage gate failed'));
   });
 });
@@ -6654,6 +6644,66 @@ describe('buildChangeSizeLimitSection direct', () => {
     const m = (driver as unknown as { buildChangeSizeLimitSection: () => string })
       .buildChangeSizeLimitSection;
     expect(m.call(driver)).toBe('');
+  });
+});
+
+describe('buildDecisionLoopWarning', () => {
+  afterEach(() => {
+    if (driver) driver.cleanup();
+  });
+
+  it('returns empty string when report is null', () => {
+    driver = new SelfDriver();
+    expect(driver.buildDecisionLoopWarning(null)).toBe('');
+  });
+
+  it('returns empty string when recent window is too small', () => {
+    driver = new SelfDriver();
+    const report = {
+      recentWindow: { size: 3, successRate: 1, decisionDistribution: { REFACTOR: 3 }, averageMetricDelta: {} },
+    } as unknown as EvolutionReport;
+    expect(driver.buildDecisionLoopWarning(report)).toBe('');
+  });
+
+  it('returns warning when one decision type dominates 60%+', () => {
+    driver = new SelfDriver();
+    const report = {
+      recentWindow: {
+        size: 10,
+        successRate: 0.8,
+        decisionDistribution: { REFACTOR: 7, TEST: 2, FIX: 1 },
+        averageMetricDelta: {},
+      },
+    } as unknown as EvolutionReport;
+    const result = driver.buildDecisionLoopWarning(report);
+    expect(result).toContain('Decision Pattern Warning');
+    expect(result).toContain('70% REFACTOR');
+  });
+
+  it('returns empty string when no type dominates', () => {
+    driver = new SelfDriver();
+    const report = {
+      recentWindow: {
+        size: 10,
+        successRate: 0.8,
+        decisionDistribution: { REFACTOR: 3, TEST: 3, FIX: 2, FEATURE: 2 },
+        averageMetricDelta: {},
+      },
+    } as unknown as EvolutionReport;
+    expect(driver.buildDecisionLoopWarning(report)).toBe('');
+  });
+
+  it('ignores SKIP and UNKNOWN when computing dominance', () => {
+    driver = new SelfDriver();
+    const report = {
+      recentWindow: {
+        size: 10,
+        successRate: 0.5,
+        decisionDistribution: { SKIP: 6, REFACTOR: 3, TEST: 1 },
+        averageMetricDelta: {},
+      },
+    } as unknown as EvolutionReport;
+    expect(driver.buildDecisionLoopWarning(report)).toBe('');
   });
 });
 

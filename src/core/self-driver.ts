@@ -1010,20 +1010,20 @@ export class SelfDriver {
     }
     // 3. Verify (the only gate)
     this.log('\n🔍 Verifying changes...');
-    const verified = await this.verify();
-    if (!verified) {
+    const verifyFailure = await this.verify();
+    if (verifyFailure) {
       this.lastIterationResult = {
         iteration: this.iterationCount,
         success: false,
         failureStage: 'verification',
-        failureDetail: 'Build, test, or lint checks failed after AI changes',
+        failureDetail: verifyFailure,
       };
       await this.writeEvolutionRecord({
         iteration: this.iterationCount,
         timestamp: iterationTimestamp,
         success: false,
         failureStage: 'verification',
-        failureDetail: 'Build, test, or lint checks failed after AI changes',
+        failureDetail: verifyFailure,
         metricsBefore: metricsBefore ?? undefined,
         durationMs: Date.now() - this.iterationStartTime,
       });
@@ -1348,6 +1348,37 @@ export class SelfDriver {
     return lines.join('\n');
   }
   /**
+   * Detects if recent iterations are stuck in a low-value decision loop.
+   * Analyzes the report's recent window for dominance of a single decision type.
+   * @returns A prompt warning string, or empty string if no loop detected
+   */
+  buildDecisionLoopWarning(report: EvolutionReport | null | undefined): string {
+    if (!report || report.recentWindow.size < 5) return '';
+    const dist = report.recentWindow.decisionDistribution;
+    const recentSize = report.recentWindow.size;
+    // Find the dominant decision type
+    let dominantType = '';
+    let dominantCount = 0;
+    for (const [type, count] of Object.entries(dist)) {
+      if (type === 'UNKNOWN' || type === 'SKIP') continue;
+      if (count > dominantCount) {
+        dominantType = type;
+        dominantCount = count;
+      }
+    }
+    // Warn if one type accounts for 60%+ of recent decisions
+    const dominanceRatio = dominantCount / recentSize;
+    if (dominanceRatio < 0.6) return '';
+    return [
+      '',
+      '## Decision Pattern Warning',
+      `Recent ${recentSize} iterations are ${Math.round(dominanceRatio * 100)}% ${dominantType}.`,
+      'Repeating the same decision type with diminishing returns wastes iterations.',
+      'Consider a different decision type or SKIP if the codebase is healthy.',
+      '',
+    ].join('\n');
+  }
+  /**
    * Builds the previous iteration context section for the evolution prompt.
    * @param lastResult - The result from the previous iteration
    * @returns Formatted section string, or empty string if no previous result
@@ -1384,7 +1415,8 @@ export class SelfDriver {
     fileTree: string,
     lastResult?: IterationResult | null,
     metricsSection?: string,
-    historySummary?: string
+    historySummary?: string,
+    historyReport?: EvolutionReport | null
   ): string {
     const runner = this.getCommandRunner();
     const cliVerifyCommands = EVOLUTION_VERIFY_COMMANDS.map(
@@ -1395,6 +1427,7 @@ export class SelfDriver {
       : '';
     const fileRestrictionSection = this.buildFileRestrictionSection();
     const changeSizeLimitSection = this.buildChangeSizeLimitSection();
+    const decisionLoopWarning = this.buildDecisionLoopWarning(historyReport);
     const metricsBlock = metricsSection ? `${metricsSection}\n` : '';
     const historyBlock = historySummary ? `\n${historySummary}\n` : '';
     return `${constitution}
@@ -1409,7 +1442,7 @@ Read and analyze the codebase, then decide:
 4. FEATURE - Add small, useful new functionality (only if base is solid)
 5. SKIP - Codebase is healthy, no changes needed this round
 Execute your decision. Make minimal, focused changes.
-${fileRestrictionSection}${changeSizeLimitSection}## After Changes
+${fileRestrictionSection}${changeSizeLimitSection}${decisionLoopWarning}## After Changes
 1. **Verify** all pass:
    - npm run build
    - npm test
@@ -1443,7 +1476,8 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       fileTree,
       this.lastIterationResult,
       metricsSection,
-      historySummary
+      historySummary,
+      historyReport
     );
     try {
       this.log('🚀 Executing OpenCode...');
@@ -1491,8 +1525,9 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
    * Comprehensive verification - includes self-verification.
    * Uses EVOLUTION_VERIFY_COMMANDS to dynamically check all CLI commands.
    * When adding new commands, add them to EVOLUTION_VERIFY_COMMANDS in types/evolve.ts.
+   * @returns null if verification passes, or a string describing why it failed
    */
-  private async verify(): Promise<boolean> {
+  private async verify(): Promise<string | null> {
     // Check forbidden file changes before running expensive build/test/lint
     const { valid, violations } = await this.validateChangedFiles();
     if (!valid) {
@@ -1500,13 +1535,13 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       for (const v of violations) {
         this.log(`     - ${v}`);
       }
-      return false;
+      return `Forbidden file changes: ${violations.join(', ')}`;
     }
     // Check diff size limit (uses max across all decision types as pre-commit safety cap)
     const { total, withinLimit } = await this.checkDiffSize();
     if (!withinLimit) {
       this.log(`  ❌ Change too large: ${total} lines changed (limit: ${this.getMaxDiffLimit()})`);
-      return false;
+      return `Change too large: ${total} lines (limit: ${this.getMaxDiffLimit()})`;
     }
     const runner = this.getCommandRunner();
     const commandChecks = EVOLUTION_VERIFY_COMMANDS.map((cmd) => ({
@@ -1514,7 +1549,7 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       file: runner.file,
       args: [...runner.prefixArgs, cmd, '--help'],
     }));
-    // Stage 1: Build (must succeed first to produce dist/ artifacts)
+    // Stage 1: Build (must succeed before running tests)
     const buildCheck = { name: 'Build', file: 'npm', args: ['run', 'build'] };
     this.log(`  Checking ${buildCheck.name}...`);
     const buildResult = await this.safeExeca(buildCheck.file, buildCheck.args, {
@@ -1522,7 +1557,7 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     });
     if (!buildResult || buildResult.exitCode !== 0) {
       this.logCheckFailure(buildCheck.name, buildResult);
-      return false;
+      return 'Build failed';
     }
     this.log(`  ✅ ${buildCheck.name} passed`);
     // Stage 2: Tests + Lint (independent, can run in parallel)
@@ -1544,7 +1579,7 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     for (const { check, result } of parallelResults) {
       if (!result || result.exitCode !== 0) {
         this.logCheckFailure(check.name, result);
-        return false;
+        return `${check.name} failed`;
       }
       this.log(`  ✅ ${check.name} passed`);
     }
@@ -1554,7 +1589,7 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       const { passed, details } = await this.checkCoverageBaseline();
       if (!passed) {
         this.log(`  ❌ Coverage gate failed: ${details}`);
-        return false;
+        return `Coverage gate failed: ${details}`;
       }
       this.log(`  ✅ Coverage gate passed`);
     }
@@ -1571,11 +1606,11 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
     for (const { check, result } of commandResults) {
       if (!result || result.exitCode !== 0) {
         this.logCheckFailure(check.name, result);
-        return false;
+        return `${check.name} failed`;
       }
       this.log(`  ✅ ${check.name} passed`);
     }
-    return true;
+    return null;
   }
   /**
    * Logs a check failure with error details.
