@@ -1,6 +1,8 @@
 ﻿import path from 'path';
+import { Writable } from 'stream';
 import { EngineResolver } from './engine-resolver';
 import { Platform } from '../utils/platform';
+import { Logger } from '../utils/logger';
 
 const mockPathExists = jest.fn<Promise<boolean>, [string]>();
 const mockStat = jest.fn<Promise<{ isDirectory: () => boolean }>, [string]>();
@@ -2291,6 +2293,111 @@ describe('EngineResolver', () => {
       expect(compareVersions(a, b)).toBeLessThan(0);
       expect(compareVersions(b, a)).toBeGreaterThan(0);
       expect(compareVersions(a, a)).toBe(0);
+    });
+  });
+
+  describe('writeEngineStatus', () => {
+    const createStdout = (): { stream: Writable; chunks: string[] } => {
+      const chunks: string[] = [];
+      const stream = new Writable({
+        write(chunk: Buffer, _encoding: string, callback: () => void) {
+          chunks.push(chunk.toString());
+          callback();
+        },
+      });
+      return { stream, chunks };
+    };
+
+    it('writes engine display name when engine is resolved', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+      const enginePath = 'C:\\Epic\\UE_5.3';
+      const versionFile = path.join(enginePath, 'Engine', 'Build', 'Build.version');
+
+      configureFs({
+        existingPaths: [manifestPath, enginePath, versionFile],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_5_3',
+                InstallLocation: enginePath,
+                DisplayName: 'Unreal Engine 5.3',
+              },
+            ],
+          }),
+          [versionFile]: JSON.stringify({
+            MajorVersion: 5,
+            MinorVersion: 3,
+            PatchVersion: 0,
+            Changelist: 1000,
+            CompatibleChangelist: 1000,
+            IsLicenseeVersion: 0,
+            IsPromotedBuild: 1,
+            BranchName: '++UE5+Release-5.3',
+            BuildId: 'test-1000',
+          }),
+        },
+      });
+
+      mockExeca.mockImplementation(async () => ({ stdout: '' }));
+
+      const { stream, chunks } = createStdout();
+      const logger = new Logger();
+
+      await EngineResolver.writeEngineStatus(undefined, stream, logger);
+
+      const output = chunks.join('');
+      expect(output).toContain('Engine:');
+      expect(output).toContain('UE 5.3.0');
+    });
+
+    it('writes not-detected message when no engine is found', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(false);
+
+      configureFs({ existingPaths: [] });
+
+      const { stream, chunks } = createStdout();
+      const logger = new Logger();
+
+      await EngineResolver.writeEngineStatus(undefined, stream, logger);
+
+      const output = chunks.join('');
+      expect(output).toContain('Not detected');
+      expect(output).toContain('--engine-path');
+    });
+
+    it('writes detection-failed message when resolution throws', async () => {
+      jest
+        .spyOn(EngineResolver, 'resolveEngine')
+        .mockRejectedValue(new Error('Unexpected failure'));
+
+      const { stream, chunks } = createStdout();
+      const logger = new Logger();
+
+      await EngineResolver.writeEngineStatus(undefined, stream, logger);
+
+      const output = chunks.join('');
+      expect(output).toContain('Detection failed');
+      expect(output).toContain('--engine-path');
+    });
+  });
+
+  describe('resolveEnginePath default arguments', () => {
+    it('throws when called without arguments and no engine available', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(false);
+
+      configureFs({ existingPaths: [] });
+
+      await expect(EngineResolver.resolveEnginePath()).rejects.toThrow(
+        'Could not determine engine path'
+      );
     });
   });
 });
