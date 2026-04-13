@@ -22,6 +22,7 @@ import type {
   VerificationMetrics,
   MetricDelta,
   EvolutionReport,
+  DecisionDiffLimits,
 } from '../types/evolve';
 import { readEvolutionReport, formatHistorySummary } from './evolution-reporter';
 export type {
@@ -156,6 +157,14 @@ const DEFAULT_FORBIDDEN_PATHS = ['package.json', 'tsconfig.json', '.github/**'];
 const DEFAULT_ALLOWED_PATHS = ['src/**'];
 /** Default maximum number of changed lines per iteration (insertions + deletions) */
 const DEFAULT_MAX_DIFF_LINES = 200;
+/** Default per-decision diff line limits */
+const DEFAULT_DIFF_LIMITS: DecisionDiffLimits = {
+  test: 400,
+  refactor: 200,
+  fix: 100,
+  feature: 150,
+  unknown: 200,
+};
 /** Error detail when verification passes but AI fails to commit changes. */
 const COMMIT_MISSED_DETAIL = 'Verification passed but AI did not commit changes properly';
 /** Error detail when verification passes but AI leaves extra uncommitted changes. */
@@ -189,6 +198,7 @@ export class SelfDriver {
   private forbiddenPaths: string[];
   private allowedPaths: string[];
   private maxDiffLines: number;
+  private diffLimits: DecisionDiffLimits;
   private coverageBaseline: {
     branches: number;
     functions: number;
@@ -225,6 +235,20 @@ export class SelfDriver {
     this.forbiddenPaths = options.forbiddenPaths ?? DEFAULT_FORBIDDEN_PATHS;
     this.allowedPaths = options.allowedPaths ?? DEFAULT_ALLOWED_PATHS;
     this.maxDiffLines = options.maxDiffLines ?? DEFAULT_MAX_DIFF_LINES;
+    // When maxDiffLines is explicitly set without diffLimits, use it as the base for all limits.
+    // When diffLimits is provided, it takes precedence with DEFAULT_DIFF_LIMITS as fallback.
+    if (options.diffLimits) {
+      this.diffLimits = { ...DEFAULT_DIFF_LIMITS, ...options.diffLimits };
+    } else {
+      const base = this.maxDiffLines;
+      this.diffLimits = {
+        test: Math.round(base * 2),
+        refactor: base,
+        fix: Math.round(base * 0.5),
+        feature: Math.round(base * 0.75),
+        unknown: base,
+      };
+    }
     this.coverageBaseline = options.coverageBaseline ?? null;
     // Validate options
     SelfDriver.validatePositive(this.sleepMs, 'sleepMs');
@@ -544,12 +568,14 @@ export class SelfDriver {
     return { valid: violations.length === 0, violations };
   }
   /**
-   * Checks if the total number of changed lines exceeds the configured limit.
-   * Parses `git diff --shortstat` output like " 3 files changed, 10 insertions(+), 5 deletions(-)"
+   * Checks if the total number of changed lines exceeds the maximum allowed limit.
+   * Uses the maximum across all decision types as a pre-commit safety cap,
+   * since the actual decision type is not yet known at this stage.
    * @returns Object with total changed lines and whether it's within the limit
    */
   private async checkDiffSize(): Promise<{ total: number; withinLimit: boolean }> {
-    if (this.maxDiffLines <= 0) {
+    const maxLimit = this.getMaxDiffLimit();
+    if (maxLimit <= 0) {
       return { total: 0, withinLimit: true };
     }
     // Use HEAD to include both staged and unstaged changes
@@ -563,7 +589,7 @@ export class SelfDriver {
       return { total: 0, withinLimit: true };
     }
     const total = parseDiffTotal(output);
-    return { total, withinLimit: total <= this.maxDiffLines };
+    return { total, withinLimit: total <= maxLimit };
   }
   /**
    * Reads and parses the coverage-summary.json file from the last test run.
@@ -683,17 +709,48 @@ export class SelfDriver {
     return { passed: true, details: 'all coverage thresholds met' };
   }
   /**
+   * Resolves the diff line limit for a given decision type.
+   * Returns the decision-specific limit, or the unknown limit if decision is not recognized.
+   */
+  getDiffLimitForDecision(decision?: string): number {
+    if (!decision) return this.diffLimits.unknown;
+    const key = decision.toLowerCase();
+    if (key === 'test') return this.diffLimits.test;
+    if (key === 'refactor') return this.diffLimits.refactor;
+    if (key === 'fix') return this.diffLimits.fix;
+    if (key === 'feature') return this.diffLimits.feature;
+    return this.diffLimits.unknown;
+  }
+  /**
+   * Returns the maximum diff limit across all decision types.
+   * Used for pre-commit safety checks when the decision is not yet known.
+   */
+  private getMaxDiffLimit(): number {
+    return Math.max(
+      this.diffLimits.test,
+      this.diffLimits.refactor,
+      this.diffLimits.fix,
+      this.diffLimits.feature,
+      this.diffLimits.unknown
+    );
+  }
+  /**
    * Validates the committed diff between two revisions against path and size policies.
+   * @param beforeHash - Commit hash before the iteration
+   * @param afterHash - Commit hash after the iteration
+   * @param decision - The detected decision type, used to resolve the appropriate diff limit
    */
   private async validateCommittedChanges(
     beforeHash: string,
-    afterHash: string
+    afterHash: string,
+    decision?: string
   ): Promise<CommittedChangeValidationResult> {
     const changedFiles = (await this.getChangedFilesList(beforeHash, afterHash)) ?? [];
     const violations = this.collectPathViolations(changedFiles);
     let total = 0;
     let withinLimit = true;
-    if (this.maxDiffLines > 0) {
+    const limit = this.getDiffLimitForDecision(decision);
+    if (limit > 0) {
       const diffResult = await this.safeExeca('git', [
         'diff',
         '--shortstat',
@@ -706,7 +763,7 @@ export class SelfDriver {
         );
       } else {
         total = parseDiffTotal(diffResult.stdout);
-        withinLimit = total <= this.maxDiffLines;
+        withinLimit = total <= limit;
       }
     }
     return {
@@ -981,13 +1038,14 @@ export class SelfDriver {
     const beforeHashError = beforeCommitHash === null;
     const afterHashError = afterCommitHash === null;
     const hashChanged = !beforeHashError && !afterHashError && beforeCommitHash !== afterCommitHash;
+    // Detect decision before validation so we can apply decision-specific diff limits
+    const decision = hashChanged ? await this.detectDecisionFromCommit() : undefined;
     const committedValidation =
       isClean && hashChanged && beforeCommitHash && afterCommitHash
-        ? await this.validateCommittedChanges(beforeCommitHash, afterCommitHash)
+        ? await this.validateCommittedChanges(beforeCommitHash, afterCommitHash, decision)
         : null;
     const metricsAfter = await this.captureVerificationMetrics();
     const filesChanged = await this.getChangedFilesList(beforeCommitHash, afterCommitHash);
-    const decision = hashChanged ? await this.detectDecisionFromCommit() : undefined;
     const testDecisionValidation = this.validateTestDecision(
       decision,
       filesChanged,
@@ -1272,16 +1330,22 @@ export class SelfDriver {
    * @returns Formatted section string, or empty string if no limit set
    */
   private buildChangeSizeLimitSection(): string {
-    if (this.maxDiffLines <= 0) {
+    const maxLimit = this.getMaxDiffLimit();
+    if (maxLimit <= 0) {
       return '';
     }
-    return [
+    const lines = [
       '',
       '## Change Size Limit',
-      `Keep changes under ${this.maxDiffLines} lines (insertions + deletions combined).`,
+      'Diff line limits vary by decision type (insertions + deletions combined):',
+      `- TEST: ${this.diffLimits.test} lines`,
+      `- REFACTOR: ${this.diffLimits.refactor} lines`,
+      `- FIX: ${this.diffLimits.fix} lines`,
+      `- FEATURE: ${this.diffLimits.feature} lines`,
       'One commit = one focused logical change.',
       '',
-    ].join('\n');
+    ];
+    return lines.join('\n');
   }
   /**
    * Builds the previous iteration context section for the evolution prompt.
@@ -1438,10 +1502,10 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
       }
       return false;
     }
-    // Check diff size limit
+    // Check diff size limit (uses max across all decision types as pre-commit safety cap)
     const { total, withinLimit } = await this.checkDiffSize();
     if (!withinLimit) {
-      this.log(`  ❌ Change too large: ${total} lines changed (limit: ${this.maxDiffLines})`);
+      this.log(`  ❌ Change too large: ${total} lines changed (limit: ${this.getMaxDiffLimit()})`);
       return false;
     }
     const runner = this.getCommandRunner();
@@ -1637,7 +1701,7 @@ If verification fails, do NOT commit - the system will revert automatically.${pr
           }
         } else {
           this.log(
-            `⚠️  Committed changes exceeded diff size limit: ${committedValidation.total} lines changed (limit: ${this.maxDiffLines})`
+            `⚠️  Committed changes exceeded diff size limit: ${committedValidation.total} lines changed (limit: ${this.getDiffLimitForDecision(decision)} for ${decision ?? 'unknown'})`
           );
         }
         const failureReason =

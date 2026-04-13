@@ -73,6 +73,8 @@ export interface SelfEvolverOptions {
   allowedPaths?: string[];
   /** Maximum number of changed lines (insertions + deletions) allowed per iteration (default: 200, 0 to disable) */
   maxDiffLines?: number;
+  /** Per-decision diff line limits. Overrides maxDiffLines for specific decision types. */
+  diffLimits?: Partial<DecisionDiffLimits>;
   /** Coverage baseline thresholds. When set, verification will fail if coverage drops below these values. */
   coverageBaseline?: {
     branches: number;
@@ -80,6 +82,24 @@ export interface SelfEvolverOptions {
     lines: number;
     statements: number;
   };
+}
+
+/**
+ * Per-decision diff line limits for evolution iterations.
+ * Each decision type can have its own maximum changed lines threshold.
+ * A value of 0 disables the limit for that decision type.
+ */
+export interface DecisionDiffLimits {
+  /** Max diff lines for TEST decisions (default: 400) — tests are low-risk */
+  test: number;
+  /** Max diff lines for REFACTOR decisions (default: 200) — refactors need to stay reviewable */
+  refactor: number;
+  /** Max diff lines for FIX decisions (default: 100) — fixes should be precise */
+  fix: number;
+  /** Max diff lines for FEATURE decisions (default: 150) — features should be small and focused */
+  feature: number;
+  /** Max diff lines when decision type is unknown (default: 200) — fallback safety cap */
+  unknown: number;
 }
 
 /**

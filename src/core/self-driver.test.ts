@@ -712,7 +712,7 @@ describe('SelfDriver', () => {
         if (command === 'git' && args?.includes('diff') && args?.includes('--name-only')) {
           return mockExecaResult(0, 'src/core/self-driver.ts', '');
         }
-        // git diff --shortstat returns too many changes
+        // git diff --shortstat returns too many changes (exceeds max limit: test=100)
         if (command === 'git' && args?.includes('--shortstat')) {
           return mockExecaResult(0, ' 3 files changed, 200 insertions(+), 100 deletions(-)', '');
         }
@@ -5299,7 +5299,7 @@ describe('diff size limit (maxDiffLines)', () => {
 
   it('fails when diff exceeds limit', async () => {
     const mockLogger = jest.fn();
-    driver = new SelfDriver({ logger: mockLogger, maxDiffLines: 100 });
+    driver = new SelfDriver({ logger: mockLogger, maxDiffLines: 50 });
 
     mockExeca.mockImplementation(async (command: string, args?: string[]) => {
       if (command === 'git' && args?.includes('--shortstat')) {
@@ -5442,6 +5442,152 @@ describe('diff size limit (maxDiffLines)', () => {
 
     expect(result.withinLimit).toBe(true);
   });
+});
+
+describe('decision-aware diff limits', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+    mockAppendFile.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    if (driver) driver.cleanup();
+  });
+
+  it('derives per-decision limits from maxDiffLines when diffLimits is not set', () => {
+    driver = new SelfDriver({ maxDiffLines: 100 });
+    const getDiffLimitForDecision = driver.getDiffLimitForDecision.bind(driver);
+
+    expect(getDiffLimitForDecision('TEST')).toBe(200);
+    expect(getDiffLimitForDecision('REFACTOR')).toBe(100);
+    expect(getDiffLimitForDecision('FIX')).toBe(50);
+    expect(getDiffLimitForDecision('FEATURE')).toBe(75);
+    expect(getDiffLimitForDecision(undefined)).toBe(100);
+  });
+
+  it('uses explicit diffLimits when provided', () => {
+    driver = new SelfDriver({
+      diffLimits: { test: 500, refactor: 250, fix: 80, feature: 120, unknown: 200 },
+    });
+    const getDiffLimitForDecision = driver.getDiffLimitForDecision.bind(driver);
+
+    expect(getDiffLimitForDecision('TEST')).toBe(500);
+    expect(getDiffLimitForDecision('REFACTOR')).toBe(250);
+    expect(getDiffLimitForDecision('FIX')).toBe(80);
+    expect(getDiffLimitForDecision('FEATURE')).toBe(120);
+    expect(getDiffLimitForDecision(undefined)).toBe(200);
+  });
+
+  it('falls back to DEFAULT_DIFF_LIMITS for unset keys when diffLimits is partial', () => {
+    driver = new SelfDriver({ diffLimits: { test: 600 } });
+    const getDiffLimitForDecision = driver.getDiffLimitForDecision.bind(driver);
+
+    expect(getDiffLimitForDecision('TEST')).toBe(600);
+    expect(getDiffLimitForDecision('REFACTOR')).toBe(200);
+    expect(getDiffLimitForDecision('FIX')).toBe(100);
+  });
+
+  it('returns unknown limit for unrecognized decision types', () => {
+    driver = new SelfDriver({ maxDiffLines: 100 });
+    const getDiffLimitForDecision = driver.getDiffLimitForDecision.bind(driver);
+
+    expect(getDiffLimitForDecision('SKIP')).toBe(100);
+    expect(getDiffLimitForDecision('WHATEVER')).toBe(100);
+  });
+
+  it('applies decision-specific limit in validateCommittedChanges', async () => {
+    const mockLogger = jest.fn();
+    driver = new SelfDriver({ logger: mockLogger, maxDiffLines: 100 });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('diff') && args?.includes('--name-only')) {
+        return mockExecaResult(0, 'src/core/self-driver.ts', '');
+      }
+      if (command === 'git' && args?.includes('--shortstat')) {
+        // 80 lines: exceeds FIX limit (50) but within REFACTOR limit (100)
+        return mockExecaResult(0, ' 1 file changed, 50 insertions(+), 30 deletions(-)', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const validate = (
+      driver as unknown as {
+        validateCommittedChanges: (
+          before: string,
+          after: string,
+          decision?: string
+        ) => Promise<{ valid: boolean; total: number; withinLimit: boolean }>;
+      }
+    ).validateCommittedChanges;
+
+    const fixResult = await validate.call(driver, 'abc123', 'def456', 'FIX');
+    expect(fixResult.total).toBe(80);
+    expect(fixResult.withinLimit).toBe(false);
+
+    const refactorResult = await validate.call(driver, 'abc123', 'def456', 'REFACTOR');
+    expect(refactorResult.total).toBe(80);
+    expect(refactorResult.withinLimit).toBe(true);
+  });
+
+  it('uses max limit for pre-commit checkDiffSize', async () => {
+    const mockLogger = jest.fn();
+    // maxDiffLines=100 → test limit=200 → max across all =200
+    driver = new SelfDriver({ logger: mockLogger, maxDiffLines: 100 });
+
+    mockExeca.mockImplementation(async (command: string, args?: string[]) => {
+      if (command === 'git' && args?.includes('--shortstat')) {
+        // 150 lines: exceeds refactor(100) but within max(test=200)
+        return mockExecaResult(0, ' 2 files changed, 100 insertions(+), 50 deletions(-)', '');
+      }
+      return mockExecaResult(0, '', '');
+    });
+
+    const checkDiffSize = (
+      driver as unknown as {
+        checkDiffSize: () => Promise<{ total: number; withinLimit: boolean }>;
+      }
+    ).checkDiffSize;
+    const result = await checkDiffSize.call(driver);
+
+    expect(result.total).toBe(150);
+    expect(result.withinLimit).toBe(true);
+  });
+
+  it('disables all limits when maxDiffLines is 0', () => {
+    driver = new SelfDriver({ maxDiffLines: 0 });
+    const getDiffLimitForDecision = driver.getDiffLimitForDecision.bind(driver);
+
+    expect(getDiffLimitForDecision('TEST')).toBe(0);
+    expect(getDiffLimitForDecision('FIX')).toBe(0);
+    expect(getDiffLimitForDecision(undefined)).toBe(0);
+  });
+
+  it('includes per-decision limits in prompt', () => {
+    driver = new SelfDriver({
+      diffLimits: { test: 400, refactor: 200, fix: 100, feature: 150, unknown: 200 },
+    });
+    const m = (driver as unknown as { buildChangeSizeLimitSection: () => string })
+      .buildChangeSizeLimitSection;
+    const result = m.call(driver);
+
+    expect(result).toContain('TEST: 400 lines');
+    expect(result).toContain('REFACTOR: 200 lines');
+    expect(result).toContain('FIX: 100 lines');
+    expect(result).toContain('FEATURE: 150 lines');
+  });
+});
+
+describe('change size limit in prompt', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.cwd = jest.fn().mockReturnValue(mockProjectRoot);
+    mockAppendFile.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    if (driver) driver.cleanup();
+  });
 
   it('includes change size limit in evolution prompt', () => {
     const mockLogger = jest.fn();
@@ -5460,7 +5606,9 @@ describe('diff size limit (maxDiffLines)', () => {
     const prompt = buildEvolutionPrompt.call(driver, '', 'src/index.ts', null);
 
     expect(prompt).toContain('Change Size Limit');
-    expect(prompt).toContain('150 lines');
+    expect(prompt).toContain('REFACTOR: 150 lines');
+    expect(prompt).toContain('TEST: 300 lines');
+    expect(prompt).toContain('FIX: 75 lines');
   });
 
   it('omits change size limit from prompt when maxDiffLines is 0', () => {
@@ -6487,7 +6635,10 @@ describe('buildChangeSizeLimitSection direct', () => {
       .buildChangeSizeLimitSection;
     const result = m.call(driver);
     expect(result).toContain('Change Size Limit');
-    expect(result).toContain('150 lines');
+    expect(result).toContain('REFACTOR: 150 lines');
+    expect(result).toContain('TEST: 300 lines');
+    expect(result).toContain('FIX: 75 lines');
+    expect(result).toContain('FEATURE: 113 lines');
     expect(result).toContain('One commit');
   });
 
