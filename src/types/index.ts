@@ -177,38 +177,3 @@ export type {
  * ```
  */
 export type { CleanOptions, CleanResult } from './clean';
-
-/**
- * Self-evolution types for automated codebase improvement.
- *
- * Supports running OpenCode in a continuous loop to analyze,
- * modify, verify, and commit changes to the ubuild codebase.
- *
- * @example
- * ```typescript
- * import type { SelfEvolverOptions } from '@zitool/ubuild/types';
- *
- * const options: SelfEvolverOptions = {
- *   once: true,
- *   dryRun: false,
- *   logger: (msg) => console.log(msg)
- * };
- *
- * await runSelfEvolution(options);
- * ```
- */
-export type { SelfEvolverOptions } from './evolve';
-
-/**
- * Commands verified during self-evolution process.
- *
- * These commands are checked with `--help` to ensure CLI functionality.
- *
- * @example
- * ```typescript
- * import { EVOLUTION_VERIFY_COMMANDS } from '@zitool/ubuild/types';
- *
- * console.log('Verified commands:', EVOLUTION_VERIFY_COMMANDS);
- * ```
- */
-export { EVOLUTION_VERIFY_COMMANDS } from './evolve';

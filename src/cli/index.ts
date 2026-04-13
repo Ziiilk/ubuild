@@ -35,7 +35,6 @@ import { gencodebaseCommand } from '../commands/gencodebase';
 import { cleanCommand } from '../commands/clean';
 import { versionCommand } from '../commands/version';
 import { version, description } from '../../package.json';
-import { evolveCommand } from '../commands/evolve';
 
 const program = new Command();
 
@@ -57,7 +56,6 @@ updateCommand(program);
 gencodebaseCommand(program);
 cleanCommand(program);
 versionCommand(program);
-evolveCommand(program);
 
 program.configureHelp({
   sortSubcommands: true,

@@ -10,10 +10,8 @@ const mockRunCommand = jest.fn();
 const mockUpdateCommand = jest.fn();
 const mockGencodebaseCommand = jest.fn();
 const mockExecuteGencodebase = jest.fn();
-const mockEvolveCommand = jest.fn();
 const mockCleanCommand = jest.fn();
 const mockVersionCommand = jest.fn();
-const mockRunSelfEvolution = jest.fn();
 
 jest.mock('./commands/list', () => ({
   listCommand: mockListCommand,
@@ -48,20 +46,12 @@ jest.mock('./commands/gencodebase', () => ({
   executeGencodebase: mockExecuteGencodebase,
 }));
 
-jest.mock('./commands/evolve', () => ({
-  evolveCommand: mockEvolveCommand,
-}));
-
 jest.mock('./commands/clean', () => ({
   cleanCommand: mockCleanCommand,
 }));
 
 jest.mock('./commands/version', () => ({
   versionCommand: mockVersionCommand,
-}));
-
-jest.mock('./core/self-driver', () => ({
-  runSelfEvolution: mockRunSelfEvolution,
 }));
 
 // Import after mocking
@@ -75,10 +65,8 @@ import {
   updateCommand,
   gencodebaseCommand,
   executeGencodebase,
-  evolveCommand,
   cleanCommand,
   versionCommand,
-  runSelfEvolution,
 } from './index';
 
 describe('Public API exports', () => {
@@ -132,11 +120,6 @@ describe('Public API exports', () => {
       expect(typeof executeGencodebase).toBe('function');
     });
 
-    it('exports evolveCommand', () => {
-      expect(evolveCommand).toBeDefined();
-      expect(typeof evolveCommand).toBe('function');
-    });
-
     it('exports cleanCommand', () => {
       expect(cleanCommand).toBeDefined();
       expect(typeof cleanCommand).toBe('function');
@@ -145,11 +128,6 @@ describe('Public API exports', () => {
     it('exports versionCommand', () => {
       expect(versionCommand).toBeDefined();
       expect(typeof versionCommand).toBe('function');
-    });
-
-    it('exports runSelfEvolution', () => {
-      expect(runSelfEvolution).toBeDefined();
-      expect(typeof runSelfEvolution).toBe('function');
     });
   });
 
@@ -219,12 +197,6 @@ describe('Public API exports', () => {
       expect(mockGencodebaseCommand).toHaveBeenCalledWith(program);
     });
 
-    it('evolveCommand can be called with a Commander program', () => {
-      const program = createMockProgram();
-      evolveCommand(program);
-      expect(mockEvolveCommand).toHaveBeenCalledWith(program);
-    });
-
     it('cleanCommand can be called with a Commander program', () => {
       const program = createMockProgram();
       cleanCommand(program);
@@ -235,42 +207,6 @@ describe('Public API exports', () => {
       const program = createMockProgram();
       versionCommand(program);
       expect(mockVersionCommand).toHaveBeenCalledWith(program);
-    });
-  });
-
-  describe('runSelfEvolution function', () => {
-    it('can be called with custom logger option', async () => {
-      mockRunSelfEvolution.mockResolvedValue(undefined);
-
-      const customLogger = jest.fn();
-      const options = {
-        logger: customLogger,
-      };
-
-      await runSelfEvolution(options);
-      expect(mockRunSelfEvolution).toHaveBeenCalledWith(options);
-    });
-
-    it('can be called without options', async () => {
-      mockRunSelfEvolution.mockResolvedValue(undefined);
-
-      await runSelfEvolution();
-      expect(mockRunSelfEvolution).toHaveBeenCalledTimes(1);
-      expect(mockRunSelfEvolution.mock.calls[0]).toHaveLength(0);
-    });
-
-    it('propagates errors from the underlying function', async () => {
-      const error = new Error('Evolution failed');
-      mockRunSelfEvolution.mockRejectedValue(error);
-
-      await expect(runSelfEvolution()).rejects.toThrow('Evolution failed');
-    });
-
-    it('handles empty options object', async () => {
-      mockRunSelfEvolution.mockResolvedValue(undefined);
-
-      await runSelfEvolution({});
-      expect(mockRunSelfEvolution).toHaveBeenCalledWith({});
     });
   });
 
@@ -286,10 +222,8 @@ describe('Public API exports', () => {
       expect(updateCommand).toBe(mockUpdateCommand);
       expect(gencodebaseCommand).toBe(mockGencodebaseCommand);
       expect(executeGencodebase).toBe(mockExecuteGencodebase);
-      expect(evolveCommand).toBe(mockEvolveCommand);
       expect(cleanCommand).toBe(mockCleanCommand);
       expect(versionCommand).toBe(mockVersionCommand);
-      expect(runSelfEvolution).toBe(mockRunSelfEvolution);
     });
   });
 });

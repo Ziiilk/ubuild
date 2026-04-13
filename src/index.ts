@@ -22,7 +22,6 @@ import { initCommand } from './commands/init';
 import { runCommand } from './commands/run';
 import { updateCommand } from './commands/update';
 import { gencodebaseCommand, executeGencodebase } from './commands/gencodebase';
-import { evolveCommand } from './commands/evolve';
 import { cleanCommand } from './commands/clean';
 import { versionCommand } from './commands/version';
 
@@ -46,27 +45,8 @@ export {
   gencodebaseCommand,
   /** Execute the gencodebase command programmatically */
   executeGencodebase,
-  /** Register the 'evolve' command for self-evolution (development only) */
-  evolveCommand,
   /** Register the 'clean' command for cleaning build artifacts */
   cleanCommand,
   /** Register the 'version' command for displaying version information */
   versionCommand,
 };
-
-// Development-only exports
-/**
- * Runs the self-evolution process for ubuild.
- * Continuously analyzes the codebase, identifies improvements, and applies changes.
- * This is a development-only feature.
- *
- * @example
- * ```typescript
- * import { runSelfEvolution } from '@zitool/ubuild';
- *
- * await runSelfEvolution({
- *   logger: (msg: string) => console.log(msg)
- * });
- * ```
- */
-export { runSelfEvolution } from './core/self-driver';

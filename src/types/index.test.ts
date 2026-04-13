@@ -31,10 +31,8 @@ import type {
   // Clean types
   CleanOptions,
   CleanResult,
-  // Evolve types
-  SelfEvolverOptions,
 } from './index';
-import { BUILD_TARGETS, BUILD_CONFIGS, BUILD_PLATFORMS, EVOLUTION_VERIFY_COMMANDS } from './index';
+import { BUILD_TARGETS, BUILD_CONFIGS, BUILD_PLATFORMS } from './index';
 
 describe('Type Exports', () => {
   describe('Build types', () => {
@@ -519,41 +517,6 @@ describe('Type Exports', () => {
       expect(result.success).toBe(false);
       expect(result.failedPaths).toHaveLength(1);
       expect(result.error).toBe('Failed to clean 1 path(s)');
-    });
-  });
-
-  describe('Evolve types', () => {
-    it('SelfEvolverOptions accepts minimal options', () => {
-      const options: SelfEvolverOptions = {};
-      expect(Object.keys(options)).toHaveLength(0);
-    });
-
-    it('SelfEvolverOptions accepts all options', () => {
-      const options: SelfEvolverOptions = {
-        once: true,
-        dryRun: false,
-        logger: (msg: string) => {
-          void msg;
-        },
-        verifyTimeoutMs: 120000,
-        opencodeTimeoutMs: 600000,
-        sleepMs: 5000,
-        useTsNode: false,
-        maxRetries: 5,
-        projectRoot: '/project',
-      };
-
-      expect(options.once).toBe(true);
-      expect(options.maxRetries).toBe(5);
-      expect(options.projectRoot).toBe('/project');
-    });
-
-    it('EVOLUTION_VERIFY_COMMANDS contains expected commands', () => {
-      expect(EVOLUTION_VERIFY_COMMANDS).toContain('build');
-      expect(EVOLUTION_VERIFY_COMMANDS).toContain('evolve');
-      expect(EVOLUTION_VERIFY_COMMANDS).toContain('list');
-      expect(EVOLUTION_VERIFY_COMMANDS).toContain('clean');
-      expect(EVOLUTION_VERIFY_COMMANDS).toHaveLength(11);
     });
   });
 });

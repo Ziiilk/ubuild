@@ -30,7 +30,6 @@ const mockUpdateCommand = jest.fn();
 const mockGencodebaseCommand = jest.fn();
 const mockCleanCommand = jest.fn();
 const mockVersionCommand = jest.fn();
-const mockEvolveCommand = jest.fn();
 
 jest.mock('../commands/list', () => ({
   listCommand: (program: Command) => mockListCommand(program),
@@ -72,10 +71,6 @@ jest.mock('../commands/version', () => ({
   versionCommand: (program: Command) => mockVersionCommand(program),
 }));
 
-jest.mock('../commands/evolve', () => ({
-  evolveCommand: (program: Command) => mockEvolveCommand(program),
-}));
-
 // Mock package.json
 jest.mock('../../package.json', () => ({
   version: '1.0.0-test',
@@ -85,7 +80,6 @@ jest.mock('../../package.json', () => ({
 describe('CLI Entry Point', () => {
   let originalArgv: string[];
   let originalNodeEnv: string | undefined;
-  let originalEvolveEnabled: string | undefined;
   let originalExit: typeof process.exit;
 
   beforeEach(() => {
@@ -93,7 +87,6 @@ describe('CLI Entry Point', () => {
     jest.resetModules();
     originalArgv = [...process.argv];
     originalNodeEnv = process.env.NODE_ENV;
-    originalEvolveEnabled = process.env.UBUILD_EVOLVE_ENABLED;
     originalExit = process.exit;
     // Prevent process.exit from actually exiting
     process.exit = jest.fn() as unknown as typeof process.exit;
@@ -102,7 +95,6 @@ describe('CLI Entry Point', () => {
   afterEach(() => {
     process.argv = originalArgv;
     process.env.NODE_ENV = originalNodeEnv;
-    process.env.UBUILD_EVOLVE_ENABLED = originalEvolveEnabled;
     process.exit = originalExit;
   });
 
@@ -127,49 +119,6 @@ describe('CLI Entry Point', () => {
       expect(mockGencodebaseCommand).toHaveBeenCalled();
       expect(mockCleanCommand).toHaveBeenCalled();
       expect(mockVersionCommand).toHaveBeenCalled();
-    });
-  });
-
-  describe('evolve command registration', () => {
-    it('registers evolve command when evolve is requested', async () => {
-      process.argv = ['node', 'ubuild', 'evolve'];
-
-      await import('./index');
-      await flushPromises();
-
-      expect(mockEvolveCommand).toHaveBeenCalled();
-    });
-
-    it('registers evolve command in development mode', async () => {
-      process.argv = ['node', 'ubuild', 'list'];
-      process.env.NODE_ENV = 'development';
-
-      await import('./index');
-      await flushPromises();
-
-      expect(mockEvolveCommand).toHaveBeenCalled();
-    });
-
-    it('registers evolve command when UBUILD_EVOLVE_ENABLED is true', async () => {
-      process.argv = ['node', 'ubuild', 'list'];
-      process.env.UBUILD_EVOLVE_ENABLED = 'true';
-
-      await import('./index');
-      await flushPromises();
-
-      expect(mockEvolveCommand).toHaveBeenCalled();
-    });
-
-    it('registers evolve command in production mode', async () => {
-      process.argv = ['node', 'ubuild', 'list'];
-      process.env.NODE_ENV = 'production';
-      process.env.UBUILD_EVOLVE_ENABLED = undefined;
-
-      await import('./index');
-      await flushPromises();
-
-      // Evolve command is always registered
-      expect(mockEvolveCommand).toHaveBeenCalled();
     });
   });
 

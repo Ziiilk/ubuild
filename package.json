@@ -16,8 +16,7 @@
     "lint": "eslint src --ext .ts",
     "format": "prettier --write src/**/*.ts",
     "prepare": "npm run build",
-    "prepublishOnly": "npm run build",
-    "evolve": "npx ts-node src/cli/index.ts evolve"
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "unreal-engine",
