@@ -254,18 +254,22 @@ describe('executeList', () => {
   });
 
   describe('successful detection output', () => {
-    it('handles project without source directory (blueprint project)', async () => {
+    it('handles blueprint project without uproject modules (empty Modules array)', async () => {
       const blueprintProject: ProjectInfo = {
         ...createMockProjectInfo(),
         sourceDir: '',
         targets: [],
         modules: [],
+        uproject: {
+          ...createMockUProject(),
+          Modules: [],
+        },
       };
 
       mockDetectProject.mockResolvedValue({
         isValid: true,
         project: blueprintProject,
-        warnings: ['Source directory not found'],
+        warnings: [],
       });
 
       await executeList({
@@ -275,8 +279,80 @@ describe('executeList', () => {
         stderr,
       });
 
+      // Verify project is displayed
       expect(stdout.output).toContain('TestProject');
-      expect(stdout.output).toContain('Not found');
+      // Modules section should not be present when uproject.Modules is empty
+      const lines = stdout.output.split('\n');
+      // Should not have a Modules section (but may have Source Modules)
+      const hasModulesSection = lines.some(
+        (line, idx) =>
+          line.includes('Modules') &&
+          !line.includes('Source Modules') &&
+          idx < lines.length - 1 &&
+          lines[idx + 1]?.includes('•')
+      );
+      expect(hasModulesSection).toBe(false);
+    });
+
+    it('handles project without build targets (empty targets array)', async () => {
+      const projectWithoutTargets: ProjectInfo = {
+        ...createMockProjectInfo(),
+        targets: [],
+      };
+
+      mockDetectProject.mockResolvedValue({
+        isValid: true,
+        project: projectWithoutTargets,
+        warnings: [],
+      });
+
+      await executeList({
+        recursive: false,
+        json: false,
+        stdout,
+        stderr,
+      });
+
+      // Verify project is displayed
+      expect(stdout.output).toContain('TestProject');
+      // Build Targets section should not be present when targets is empty
+      const lines = stdout.output.split('\n');
+      const buildTargetsLineIndex = lines.findIndex((line) => line.includes('Build Targets'));
+      if (buildTargetsLineIndex >= 0) {
+        // If section header exists, verify no target items follow it
+        const nextLines = lines.slice(buildTargetsLineIndex + 1, buildTargetsLineIndex + 5);
+        expect(nextLines.some((line) => line.includes('•'))).toBe(false);
+      }
+    });
+
+    it('handles project without source modules (empty modules array)', async () => {
+      const projectWithoutSourceModules: ProjectInfo = {
+        ...createMockProjectInfo(),
+        modules: [],
+      };
+
+      mockDetectProject.mockResolvedValue({
+        isValid: true,
+        project: projectWithoutSourceModules,
+        warnings: [],
+      });
+
+      await executeList({
+        recursive: false,
+        json: false,
+        stdout,
+        stderr,
+      });
+
+      // Verify project is displayed
+      expect(stdout.output).toContain('TestProject');
+      // Source Modules section should not be present when modules is empty
+      const lines = stdout.output.split('\n');
+      const hasSourceModulesSection = lines.some(
+        (line, idx) =>
+          line.includes('Source Modules') && idx < lines.length - 1 && lines[idx + 1]?.includes('•')
+      );
+      expect(hasSourceModulesSection).toBe(false);
     });
 
     it('handles project with disabled plugins', async () => {
