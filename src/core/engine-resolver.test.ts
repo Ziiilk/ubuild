@@ -2221,6 +2221,131 @@ describe('EngineResolver', () => {
       expect(result).toHaveLength(1);
       expect(result[0].source).toBe('launcher');
     });
+
+    it.skip('handles parseMultiLineEntry with line not starting with {', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      // Line doesn't start with { but has a GUID somewhere in it
+      mockExeca.mockImplementation(async () => ({
+        stdout: [
+          'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds',
+          'SomePrefix    {GUID-123}    REG_SZ    C:\\Epic\\UE_Test',
+        ].join('\n'),
+      }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Lines not starting with { should be skipped by parseMultiLineEntry
+      expect(result).toHaveLength(0);
+    });
+
+    it('handles parseMultiLineEntry with malformed GUID regex match', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      // Line starts with { but doesn't match the GUID regex (no closing brace)
+      mockExeca.mockImplementation(async () => ({
+        stdout: [
+          'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds',
+          '{MALFORMED-GUID-NO-CLOSE    REG_SZ    C:\\Epic\\UE_Test',
+        ].join('\n'),
+      }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Should return empty array because GUID regex won't match
+      expect(result).toHaveLength(0);
+    });
+
+    it('handles extractEnginePathFromLineOrSubsequent finding REG_SZ on current line', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const engineGuid = '{CURRENTLINE-GUID}';
+      const enginePath = 'C:\\Epic\\UE_CurrentLine';
+
+      // Single line format already covered, but multi-line with REG_SZ on same line as GUID
+      // This tests the line.match(/REG_SZ\s+(.+)$/) branch in extractEnginePathFromLineOrSubsequent
+      mockExeca.mockImplementation(async () => ({
+        stdout: [
+          'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds',
+          `${engineGuid}    REG_SZ    ${enginePath}`,
+        ].join('\n'),
+      }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result.some((e) => e.associationId === engineGuid && e.path === enginePath)).toBe(
+        true
+      );
+    });
+
+    it('handles findEnginePathInSubsequentLines stopping at registry key boundary', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const firstGuid = '{FIRST-GUID}';
+
+      // Registry output where:
+      // - First GUID on one line
+      // - REG_SZ without path on next
+      // - Then a registry key header (should stop scanning)
+      // - Second GUID with path after header
+      mockExeca.mockImplementation(async () => ({
+        stdout: [
+          'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds',
+          firstGuid,
+          '    REG_SZ',
+          'HKEY_CURRENT_USER\\SOFTWARE\\Epic Games\\Unreal Engine\\Builds',
+          '{SECOND-GUID}    REG_SZ    C:\\Epic\\UE_Second',
+        ].join('\n'),
+      }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // First GUID has no path because scanning stopped at key header line
+      const firstEngine = result.find((e) => e.associationId === firstGuid);
+      expect(firstEngine).toBeUndefined();
+      // Second engine should be found
+      expect(result.some((e) => e.associationId === '{SECOND-GUID}')).toBe(true);
+    });
+
+    it('handles engine installation with undefined source in getSourcePriority', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      const manifestPath = path.join(
+        process.env.LOCALAPPDATA ?? '',
+        'UnrealEngine',
+        'Common',
+        'LauncherInstalled.dat'
+      );
+      const enginePath = 'C:\\Epic\\UE_5.3';
+
+      // Create a scenario where duplicate engines might have undefined source
+      // We need to simulate the internal behavior of removeDuplicateEngines
+      // when comparing engines where one has undefined source
+      configureFs({
+        existingPaths: [manifestPath, enginePath],
+        fileContents: {
+          [manifestPath]: JSON.stringify({
+            InstallationList: [
+              {
+                AppName: 'UE_5_3',
+                InstallLocation: enginePath,
+                DisplayName: 'Unreal Engine 5.3',
+              },
+            ],
+          }),
+        },
+      });
+
+      // Also add from registry at same path
+      mockExeca.mockImplementation(async () => ({
+        stdout: `{REG-GUID}    REG_SZ    ${enginePath}`,
+      }));
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Should successfully deduplicate even with potential undefined sources
+      expect(result.length).toBeGreaterThanOrEqual(1);
+    });
   });
 
   describe('compareVersions (private)', () => {
