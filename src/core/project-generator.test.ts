@@ -1032,5 +1032,83 @@ describe('ProjectGenerator', () => {
         expect(result.error).toContain('exit code 2');
       });
     });
+
+    it('handles child process with null stdout and stderr', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'NullStreamGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        // Create a mock child process with null stdout/stderr
+        const nullStreamProcess = Promise.resolve({
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+        }) as MockChildProcess;
+        nullStreamProcess.stdout = null as unknown as PassThrough;
+        nullStreamProcess.stderr = null as unknown as PassThrough;
+
+        mockExeca.mockReturnValueOnce(nullStreamProcess);
+
+        const result = await ProjectGenerator.generate({
+          ide: 'sln',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(true);
+      });
+    });
+
+    it('handles null result from execa', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'NullResultGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        // Create a mock child process that resolves to null
+        const nullResultProcess = Promise.resolve(
+          null as unknown as ExecaResult
+        ) as MockChildProcess;
+        nullResultProcess.stdout = new PassThrough();
+        nullResultProcess.stderr = new PassThrough();
+
+        mockExeca.mockReturnValueOnce(nullResultProcess);
+
+        const result = await ProjectGenerator.generate({
+          ide: 'sln',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('exit code unknown');
+      });
+    });
+
+    it('handles when generateVSCodeTasks returns null for non-vscode ide', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'SlnGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: { stdout: 'Project files generated' },
+          })
+        );
+
+        // For non-vscode IDE, generateVSCodeTasks is not called, so tasksFile is undefined
+        // This tests the branch where tasksFile is falsy
+        const result = await ProjectGenerator.generate({
+          ide: 'sln',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(true);
+        // Should not include tasks.json in generated files for sln
+        const projectDir = path.dirname(project.uprojectPath);
+        const tasksPath = path.join(projectDir, '.vscode', 'tasks.json');
+        expect(result.generatedFiles).not.toContain(tasksPath);
+      });
+    });
   });
 });
