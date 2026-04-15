@@ -539,7 +539,9 @@ describe('CleanExecutor', () => {
     });
 
     it('continues cleaning after individual path failures', async () => {
+      // Setup mocks for this test
       let callCount = 0;
+      mockFsPathExists.mockResolvedValue(true);
       mockFsRemove.mockImplementation(() => {
         callCount++;
         if (callCount === 1) {
@@ -595,6 +597,8 @@ describe('CleanExecutor', () => {
     });
 
     it('logs error for each failed path', async () => {
+      // Setup mocks for this test
+      mockFsPathExists.mockResolvedValue(true);
       mockFsRemove.mockRejectedValue(new Error('Failed'));
 
       await executor.execute({ projectPath: mockProjectPath });
@@ -663,12 +667,84 @@ describe('CleanExecutor', () => {
       expect(silentLogger.success).not.toHaveBeenCalled();
       expect(silentLogger.error).not.toHaveBeenCalled();
     });
+
+    it('does not log success messages in silent mode when paths are deleted', async () => {
+      // Setup mocks for this test
+      mockFsPathExists.mockResolvedValue(true);
+      mockFsRemove.mockResolvedValue(undefined);
+      mockFsReaddir.mockResolvedValue([]);
+
+      const silentLogger = {
+        info: jest.fn(),
+        success: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        divider: jest.fn(),
+        title: jest.fn(),
+        subTitle: jest.fn(),
+        json: jest.fn(),
+        write: jest.fn(),
+        writeError: jest.fn(),
+        warning: jest.fn(),
+        clearProgress: jest.fn(),
+        progress: jest.fn(),
+      } as unknown as import('../utils/logger').Logger;
+      const silentExecutor = new CleanExecutor({ logger: silentLogger, silent: true });
+
+      const result = await silentExecutor.execute({ projectPath: mockProjectPath });
+
+      // Should report success
+      expect(result.success).toBe(true);
+      expect(result.deletedPaths.length).toBeGreaterThan(0);
+
+      // Should not have logged success messages in silent mode
+      expect(silentLogger.success).not.toHaveBeenCalled();
+    });
+
+    it('does not log warning in silent mode when plugin cleaning fails', async () => {
+      // Setup mocks for this test
+      mockFsPathExists.mockImplementation((path: string) => {
+        if (path.includes('Plugins')) {
+          return Promise.resolve(true);
+        }
+        return Promise.resolve(false);
+      });
+      mockFsReaddir.mockRejectedValue(new Error('Permission denied'));
+
+      const silentLogger = {
+        info: jest.fn(),
+        success: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        divider: jest.fn(),
+        title: jest.fn(),
+        subTitle: jest.fn(),
+        json: jest.fn(),
+        write: jest.fn(),
+        writeError: jest.fn(),
+        warning: jest.fn(),
+        clearProgress: jest.fn(),
+        progress: jest.fn(),
+      } as unknown as import('../utils/logger').Logger;
+      const silentExecutor = new CleanExecutor({ logger: silentLogger, silent: true });
+
+      const result = await silentExecutor.execute({ projectPath: mockProjectPath });
+
+      // Should report failure due to plugin cleaning error
+      expect(result.success).toBe(false);
+      expect(result.failedPaths!.some((fp) => fp.path.includes('Plugins'))).toBe(true);
+
+      // Should not have logged warning in silent mode
+      expect(silentLogger.warning).not.toHaveBeenCalled();
+    });
   });
 
   describe('result object', () => {
     it('returns success with deleted paths on success', async () => {
-      mockFsPathExists.mockResolvedValue(true);
-      mockFsRemove.mockResolvedValue(undefined);
+      // Reset mocks and set up fresh implementations
+      mockFsPathExists.mockReset().mockResolvedValue(true);
+      mockFsRemove.mockReset().mockResolvedValue(undefined);
+      mockFsReaddir.mockReset().mockResolvedValue([]);
 
       const result = await executor.execute({ projectPath: mockProjectPath });
 
