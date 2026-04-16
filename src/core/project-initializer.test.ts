@@ -324,7 +324,7 @@ describe('ProjectInitializer', () => {
       const result = await ProjectInitializer.initialize(options);
 
       expect(result.success).toBe(true);
-      expect(result.engineAssociation).toBe('5.3');
+      expect(result.engineAssociation).toBe('UE_5.3');
       // Should NOT have prompted user — inquirer not called
       expect(inquirer.prompt).not.toHaveBeenCalled();
     });
