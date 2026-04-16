@@ -385,6 +385,31 @@ describe('ProjectRunner', () => {
       });
     });
 
+    it('shows "Current directory" when no project is specified in dry run', async () => {
+      await withTempDir(async (rootDir) => {
+        await createFakeProject(rootDir);
+        const engine = await createFakeEngine(rootDir);
+        const capture = createOutputCapture();
+
+        mockResolveEngine.mockResolvedValue({
+          engine: { path: engine.enginePath },
+          warnings: [],
+        });
+        mockResolveEnginePath.mockResolvedValue(engine.enginePath);
+
+        const runner = new ProjectRunner({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await runner.run({
+          dryRun: true,
+        });
+
+        expect(capture.getStdout()).toContain('Project: Current directory');
+      });
+    });
+
     it('shows not detected message when resolveEngine returns no engine', async () => {
       await withTempDir(async (rootDir) => {
         const project = await createFakeProject(rootDir, { projectName: 'TestGame' });

@@ -449,6 +449,28 @@ describe('cleanCommand', () => {
     mockExit.mockRestore();
   });
 
+  it('handles failure with failed paths but no error message', async () => {
+    const program = new Command();
+    cleanCommand(program);
+
+    mockExecute.mockResolvedValue({
+      success: false,
+      deletedPaths: [],
+      failedPaths: [{ path: 'C:\\Projects\\TestProject\\Binaries', error: 'Permission denied' }],
+      error: undefined,
+    });
+
+    const mockExit = jest.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error('process.exit called');
+    }) as (code?: string | number | null | undefined) => never);
+
+    const cleanCmd = program.commands.find((cmd) => cmd.name() === 'clean');
+    await expect(cleanCmd?.parseAsync([])).rejects.toThrow('process.exit called');
+
+    expect(mockExit).toHaveBeenCalledWith(1);
+    mockExit.mockRestore();
+  });
+
   it('handles exceptions during cleaning', async () => {
     const program = new Command();
     cleanCommand(program);
