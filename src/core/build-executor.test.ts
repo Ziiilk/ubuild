@@ -979,4 +979,101 @@ describe('BuildExecutor', () => {
       });
     });
   });
+
+  describe('constructor options handling', () => {
+    it('handles when options parameter is provided (not using default)', () => {
+      const capture = createOutputCapture();
+      const executor = new BuildExecutor({
+        stdout: capture.stdout,
+        stderr: capture.stderr,
+        silent: true,
+      });
+
+      expect(executor).toBeDefined();
+    });
+  });
+
+  describe('validateOptions with all values provided', () => {
+    it('uses provided values instead of defaults when all options are specified', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, {
+          projectName: 'FullOptionsGame',
+          withSource: true,
+          targets: [{ name: 'FullOptionsGame', type: 'Game' }],
+        });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: {
+              stdout: 'Build with custom options',
+              exitCode: 0,
+            },
+          })
+        );
+
+        const result = await BuildExecutor.execute({
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+          target: 'Game',
+          config: 'Shipping',
+          platform: 'Win64',
+          clean: true,
+          verbose: true,
+          silent: true,
+        });
+
+        expect(result.success).toBe(true);
+        // Verify the custom config was used (Shipping instead of default Development)
+        expect(mockExeca).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.arrayContaining(['Shipping']),
+          expect.any(Object)
+        );
+        // Verify clean and verbose flags are present
+        expect(mockExeca).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.arrayContaining(['-clean']),
+          expect.any(Object)
+        );
+        expect(mockExeca).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.arrayContaining(['-verbose']),
+          expect.any(Object)
+        );
+      });
+    });
+  });
+
+  describe('executeWithStreaming exitCode handling', () => {
+    it('handles undefined exitCode by defaulting to 0', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'NoExitCodeGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        // Create a mock result with undefined exitCode
+        const mockResult: ExecaResult = {
+          stdout: 'success',
+          stderr: '',
+          exitCode: undefined as unknown as number,
+        };
+        const mockChildProcess = Object.assign(Promise.resolve(mockResult), {
+          stdout: null as unknown as PassThrough,
+          stderr: null as unknown as PassThrough,
+        });
+
+        mockExeca.mockReturnValueOnce(mockChildProcess as MockChildProcess);
+
+        const result = await BuildExecutor.execute({
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+          target: 'Game',
+          silent: true,
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.exitCode).toBe(0);
+      });
+    });
+  });
 });
