@@ -200,6 +200,25 @@ describe('executeList', () => {
       expect(stderr.output).toContain('No .uproject file found');
     });
 
+    it('throws error with fallback message when project detection fails without error details', async () => {
+      mockDetectProject.mockResolvedValue({
+        isValid: false,
+        error: undefined,
+        warnings: [],
+      });
+
+      await expect(
+        executeList({
+          recursive: false,
+          json: false,
+          stdout,
+          stderr,
+        })
+      ).rejects.toThrow('Project detection failed');
+
+      expect(stderr.output).toContain('Project detection failed');
+    });
+
     it('throws error when no project is returned', async () => {
       mockDetectProject.mockResolvedValue({
         isValid: true,

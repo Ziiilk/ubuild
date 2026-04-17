@@ -698,6 +698,13 @@ describe('BuildExecutor', () => {
 
       expect(executor).toBeDefined();
     });
+
+    it('creates executor with no arguments using defaults', () => {
+      const executor = new BuildExecutor();
+
+      expect(executor).toBeDefined();
+      expect(executor).toBeInstanceOf(BuildExecutor);
+    });
   });
 
   describe('execute() error handling', () => {
