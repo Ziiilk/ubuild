@@ -1,4 +1,31 @@
-﻿# Evolution Experience
+﻿<!-- RULES FOR THIS FILE
+This file records WHAT YOU OBSERVED about this specific codebase.
+Concrete facts only: file names, metrics, events, outcomes.
+
+GOOD: "engine-resolver.ts branch coverage improved from 87% to 92% after adding registry-mock tests."
+GOOD: "build-executor.ts (~800 lines) is the largest module — REFACTOR attempts hit diff limits."
+GOOD: "list.ts uncovered branches are defensive null-checks for optional manifest fields."
+
+BAD: "Iteration 58: TEST decision. Added 3 tests." (per-iteration log — this belongs in .evolve-history.jsonl, NEVER here)
+BAD: "Codebase is exceptionally healthy." (subjective — use metrics)
+BAD: "I prefer small changes." (behavioral tendency → persona.md, not experience.md)
+
+MAINTENANCE RULES:
+- NEVER add "Iteration N: ..." entries. The evolution history is tracked separately.
+- Curate: update or replace stale facts rather than accumulating new lines.
+- Remove entries that are no longer true (coverage changed, file deleted, etc.).
+- Keep this file under 50 lines total. Density > completeness.
+- Only edit this file when you have a NEW concrete fact worth recording for future iterations.
+- If there is nothing new to record, leave the file unchanged — editing for its own sake wastes an iteration.
+-->
+
+- Test coverage: branches ~96.5%, functions 100%, lines 100%, statements ~99.95%. ~1312 tests across 48 suites (as of last TEST iteration).
+- Remaining branch hotspots (~3-4% uncovered total): engine-resolver.ts Windows registry/launcher paths; small defensive edge cases in build-executor.ts, project-generator.ts, project-initializer.ts.
+- engine-resolver.ts uncovered branches are platform-specific Windows registry paths and hard to test cross-platform without heavy mocking.
+- ESLint warnings: 0. No TODO/FIXME/HACK markers in src/.
+- Evolve system was extracted to a standalone repo on 2026-04-12. self-driver.ts, evolution-reporter.ts, and related files no longer live here — do NOT look for them under src/.
+- Target project files live under src/; tests live next to sources as *.test.ts.
+# Evolution Experience
 
 - Test coverage: branches 95.5%, functions 100%, lines 100%, statements 99.95%. 1301 tests passing across 48 suites.
 - Branch coverage hotspots: engine-resolver.ts (87.89%), clean.ts (90%), list.ts (90%), project-generator.ts (91.17%), build-executor.ts (92.72%).
