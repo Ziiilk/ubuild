@@ -47,7 +47,7 @@ export class ProjectInitializer {
 
     try {
       const validatedOptions = await this.validateOptions(options);
-      const { name, type, directory, enginePath, force } = validatedOptions;
+      const { name, type, template, directory, enginePath, force } = validatedOptions;
 
       Logger.title(`Initializing ${name}`);
 
@@ -80,7 +80,7 @@ export class ProjectInitializer {
       createdFiles.push(uprojectPath);
 
       if (type === 'cpp') {
-        const sourceFiles = await this.createSourceFiles(name, directory, enginePath);
+        const sourceFiles = await this.createSourceFiles(name, directory, enginePath, template);
         createdFiles.push(...sourceFiles);
       }
 
@@ -329,7 +329,8 @@ export class ProjectInitializer {
   private static async createSourceFiles(
     name: string,
     directory: string,
-    enginePath: string
+    enginePath: string,
+    template: string
   ): Promise<string[]> {
     const createdFiles: string[] = [];
     const sourceDir = path.join(directory, 'Source');
@@ -360,7 +361,7 @@ export class ProjectInitializer {
     const gameModeHeader = await this.createGameModeHeader(name, publicDir);
     createdFiles.push(gameModeHeader);
 
-    const gameModeSource = await this.createGameModeSource(name, privateDir);
+    const gameModeSource = await this.createGameModeSource(name, privateDir, template);
     createdFiles.push(gameModeSource);
 
     return createdFiles;
@@ -532,21 +533,32 @@ public:
    * Creates the game mode source file.
    * @param name - Project name
    * @param privateDir - Private directory path
+   * @param template - Project template name (e.g. 'ThirdPerson', 'Basic')
    * @returns Promise resolving to the path of the created game mode source file
    */
-  private static async createGameModeSource(name: string, privateDir: string): Promise<string> {
+  private static async createGameModeSource(
+    name: string,
+    privateDir: string,
+    template: string
+  ): Promise<string> {
     const filePath = path.join(privateDir, `${name}GameModeBase.cpp`);
+
+    let constructorBody: string;
+    if (template === 'ThirdPerson') {
+      constructorBody = `    static ConstructorHelpers::FClassFinder<APawn> PlayerPawnBPClass(TEXT("/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter"));
+    if (PlayerPawnBPClass.Class != nullptr)
+    {
+        DefaultPawnClass = PlayerPawnBPClass.Class;
+    }`;
+    } else {
+      constructorBody = '';
+    }
 
     const content = `#include "${name}GameModeBase.h"
 
 A${name}GameModeBase::A${name}GameModeBase()
 {
-    static ConstructorHelpers::FClassFinder<APawn> PlayerPawnBPClass(TEXT("/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter"));
-    if (PlayerPawnBPClass.Class != nullptr)
-    {
-        DefaultPawnClass = PlayerPawnBPClass.Class;
-    }
-}`;
+${constructorBody}}`;
 
     await fs.writeFile(filePath, content, 'utf-8');
     return filePath;

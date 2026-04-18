@@ -982,7 +982,48 @@ describe('ProjectInitializer', () => {
       );
       expect(source).toContain('#include "PlatformGameGameModeBase.h"');
       expect(source).toContain('APlatformGameGameModeBase::APlatformGameGameModeBase()');
+      expect(source).not.toContain('ConstructorHelpers::FClassFinder<APawn>');
+    });
+
+    it('includes ThirdPerson pawn class in GameMode when template is ThirdPerson', async () => {
+      const tempDir = await createTempDir();
+      const enginePath = path.join(tempDir, 'Engine');
+      await createMockEngineStructure(enginePath);
+
+      const mockEngine = createMockEngineInstallation({ path: enginePath });
+      jest.mocked(EngineResolver.findEngineInstallations).mockResolvedValue([mockEngine]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      const options: InitOptions = {
+        name: 'TPSGame',
+        type: 'cpp',
+        template: 'ThirdPerson',
+        directory: path.join(tempDir, 'project'),
+        enginePath,
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+      expect(result.success).toBe(true);
+
+      const source = await fs.readFile(
+        path.join(
+          options.directory!,
+          'Source',
+          'TPSGame',
+          'Private',
+          'TPSGameGameModeBase.cpp'
+        ),
+        'utf-8'
+      );
+      expect(source).toContain('#include "TPSGameGameModeBase.h"');
       expect(source).toContain('ConstructorHelpers::FClassFinder<APawn>');
+      expect(source).toContain('/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter');
     });
 
     it('verifies DefaultEngine.ini contains a ProjectID', async () => {

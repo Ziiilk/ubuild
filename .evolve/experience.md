@@ -21,5 +21,5 @@ MAINTENANCE RULES:
 
 - engine-resolver.ts (~749 lines) is the largest core module. Branch coverage 87.89% (iter 40) → 96%+ after env var fallback + getSourcePriority + parseInt tests.
 - project-detector.ts:153 contradicts validator.ts:207 on .uproject Modules validation — FIXED in iter 41. Detector now accepts missing Modules (blueprint projects), only rejects non-array Modules values.
-- project-initializer.ts:544 hardcodes /Game/ThirdPerson/Blueprints/ path in generated C++ — incorrect for Basic/blank templates.
+- project-initializer.ts:544 hardcoded ThirdPerson path — FIXED in iter 42. createGameModeSource() now receives template param; ConstructorHelpers pawn class only generated for ThirdPerson template.
 - Coverage metrics (iter 41): 98.04% branches (1004/1024), 100% functions/lines, 100% statements.
