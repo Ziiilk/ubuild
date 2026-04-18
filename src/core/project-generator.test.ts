@@ -1084,6 +1084,33 @@ describe('ProjectGenerator', () => {
       });
     });
 
+    it('filters "Log file created" lines from UBT stdout output', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'FilterGame' });
+        const engine = await createFakeEngine(rootDir);
+
+        mockExeca.mockReturnValueOnce(
+          createMockChildProcess({
+            result: { stdout: '', exitCode: 0 },
+            streamedStdout: [
+              'Log file created: C:\\Logs\\UBT.log',
+              'Generating SLN project files',
+              'Log file created: C:\\Logs\\UBT2.log',
+              'Project files generated successfully',
+            ],
+          })
+        );
+
+        const result = await ProjectGenerator.generate({
+          ide: 'sln',
+          projectPath: project.uprojectPath,
+          enginePath: engine.enginePath,
+        });
+
+        expect(result.success).toBe(true);
+      });
+    });
+
     it('handles when generateVSCodeTasks returns null for non-vscode ide', async () => {
       await withTempDir(async (rootDir) => {
         const project = await createFakeProject(rootDir, { projectName: 'SlnGame' });

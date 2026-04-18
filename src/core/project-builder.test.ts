@@ -230,6 +230,38 @@ describe('ProjectBuilder', () => {
       });
     });
 
+    it('uses process.cwd() when project path not specified for listing targets', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+        mockGetAvailableTargets.mockResolvedValueOnce([
+          { name: 'TestGameEditor', type: 'Editor' },
+        ]);
+
+        const originalCwd = process.cwd();
+        process.chdir(project.projectDir);
+
+        try {
+          const capture = createOutputCapture();
+          const builder = new ProjectBuilder({
+            stdout: capture.stdout,
+            stderr: capture.stderr,
+            silent: true,
+          });
+
+          await builder.build({
+            listTargets: true,
+          });
+
+          const output = capture.getStdout();
+          expect(output).toContain('TestGameEditor');
+          expect(mockGetAvailableTargets).toHaveBeenCalledWith(project.projectDir);
+        } finally {
+          process.chdir(originalCwd);
+        }
+      });
+    });
+
     it('handles errors when listing targets fails', async () => {
       await withTempDir(async (rootDir) => {
         const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
@@ -390,6 +422,38 @@ describe('ProjectBuilder', () => {
         expect(stdout).toContain('ERROR: Error 10');
         expect(stdout).not.toContain('ERROR: Error 11');
         expect(stdout).toContain('... and 5 more errors');
+      });
+    });
+
+    it('skips error summary when stderr has no error keywords', async () => {
+      await withTempDir(async (rootDir) => {
+        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
+
+        mockBuildExecutorExecute.mockResolvedValueOnce({
+          success: false,
+          exitCode: 1,
+          stdout: '',
+          stderr: 'Info: Starting build\nInfo: Linking objects\nInfo: Cleanup done',
+          error: 'Build process exited with code 1',
+        });
+
+        const capture = createOutputCapture();
+        const builder = new ProjectBuilder({
+          stdout: capture.stdout,
+          stderr: capture.stderr,
+        });
+
+        await expect(
+          builder.build({
+            project: project.projectDir,
+            target: 'Editor',
+            config: 'Development',
+            platform: 'Win64',
+          })
+        ).rejects.toThrow('Build failed with exit code 1');
+
+        const stdout = capture.getStdout();
+        expect(stdout).not.toContain('Error Summary');
       });
     });
 
