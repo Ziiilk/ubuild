@@ -1,4 +1,4 @@
-﻿import path from 'path';
+import path from 'path';
 import { Writable } from 'stream';
 import { EngineResolver } from './engine-resolver';
 import { Platform } from '../utils/platform';
@@ -2418,6 +2418,65 @@ describe('EngineResolver', () => {
       expect(compareVersions(a, b)).toBeLessThan(0);
       expect(compareVersions(b, a)).toBeGreaterThan(0);
       expect(compareVersions(a, a)).toBe(0);
+    });
+  });
+
+  describe('resolveEngine with no displayName', () => {
+    it('uses associationId in warning when displayName is not available', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(false);
+
+      // Setup environment variable engine without displayName set
+      const enginePath = 'C:\\Custom\\UE_5.4';
+      process.env.UE_ENGINE_PATH = enginePath;
+
+      // Create a version file so engine is valid
+      const versionFile = path.join(enginePath, 'Engine', 'Build', 'Build.version');
+
+      configureFs({
+        existingPaths: [enginePath, versionFile],
+        fileContents: {
+          [versionFile]: JSON.stringify({
+            MajorVersion: 5,
+            MinorVersion: 4,
+            PatchVersion: 0,
+            Changelist: 2000,
+            CompatibleChangelist: 2000,
+            IsLicenseeVersion: 0,
+            IsPromotedBuild: 1,
+            BranchName: '++UE5+Release-5.4',
+            BuildId: 'test-2000',
+          }),
+        },
+      });
+
+      // Create a .uproject file with a different engine association
+      const uprojectPath = 'C:\\Projects\\TestGame\\TestGame.uproject';
+
+      configureFs({
+        existingPaths: [enginePath, versionFile, uprojectPath],
+        fileContents: {
+          [versionFile]: JSON.stringify({
+            MajorVersion: 5,
+            MinorVersion: 4,
+            PatchVersion: 0,
+            Changelist: 2000,
+            CompatibleChangelist: 2000,
+            IsLicenseeVersion: 0,
+            IsPromotedBuild: 1,
+            BranchName: '++UE5+Release-5.4',
+            BuildId: 'test-2000',
+          }),
+          [uprojectPath]: JSON.stringify({ EngineAssociation: 'UE_5.3' }),
+        },
+      });
+
+      const result = await EngineResolver.resolveEngine(uprojectPath);
+
+      // The engine should be matched (from env) but association doesn't match
+      expect(result.engine).toBeDefined();
+      // Check that warning contains the associationId since displayName was not set on the env engine initially
+      const warning = result.warnings.find((w) => w.includes('Using engine') && w.includes('not associated'));
+      expect(warning).toBeDefined();
     });
   });
 

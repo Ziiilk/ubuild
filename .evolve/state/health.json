@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "capturedAt": "2026-04-18T07:08:34.139Z",
+  "project": "ubuild",
+  "runtime": "node",
+  "capabilities": {
+    "build": true,
+    "test": true,
+    "lint": true,
+    "coverage": true
+  },
+  "iterations": 40,
+  "consecutiveSkips": 0,
+  "lastDecision": "UNKNOWN",
+  "lastSuccess": false,
+  "presentFiles": [
+    "memory/insights.md",
+    "history/iterations.jsonl",
+    "state/lock.pid"
+  ],
+  "warnings": [
+    "migrated: .evolve-history.jsonl → .evolve/history/iterations.jsonl"
+  ]
+}
