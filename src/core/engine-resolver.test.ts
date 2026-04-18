@@ -2584,4 +2584,84 @@ describe('EngineResolver', () => {
       );
     });
   });
+
+  describe('env var fallback in getLauncherManifestPaths', () => {
+    it('handles all launcher manifest path env vars being undefined', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
+
+      // Delete all env vars used by getLauncherManifestPaths
+      // so the `|| ''` fallback branches are exercised
+      delete process.env.LOCALAPPDATA;
+      delete process.env.PROGRAMDATA;
+      delete process.env.APPDATA;
+      delete process.env.PROGRAMFILES;
+      delete process.env['PROGRAMFILES(X86)'];
+
+      // No manifests exist, no registry entries, no env engine
+      configureFs({ existingPaths: [] });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      // Should still return an empty array without errors
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getSourcePriority (private)', () => {
+    const getSourcePriority = (source?: string): number => {
+      return (
+        EngineResolver as unknown as {
+          getSourcePriority(source?: string): number;
+        }
+      ).getSourcePriority(source);
+    };
+
+    it('returns default priority when source is undefined', () => {
+      expect(getSourcePriority(undefined)).toBe(2);
+    });
+
+    it('returns default priority when source is an unknown string', () => {
+      expect(getSourcePriority('unknown_source')).toBe(2);
+    });
+
+    it('returns correct priority for launcher source', () => {
+      expect(getSourcePriority('launcher')).toBe(0);
+    });
+
+    it('returns correct priority for environment source', () => {
+      expect(getSourcePriority('environment')).toBe(1);
+    });
+
+    it('returns correct priority for registry source', () => {
+      expect(getSourcePriority('registry')).toBe(2);
+    });
+  });
+
+  describe('loadEngineVersionInfo parseInt fallbacks', () => {
+    it('exercises MinorVersion and PatchVersion fallback when path has only major version', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(false);
+
+      // Use a path that matches the UE_ regex but produces minimal version parts.
+      // The regex /UE_((?:5|4)[._]\d+(?:[._]\d+)*)/i requires at least X.Y
+      // For "UE_4.0" path → versionStr "4.0" → versionParts ["4", "0"]
+      // MinorVersion: parseInt("0") = 0, which is falsy, so `|| 0` returns 0
+      // PatchVersion: parseInt(undefined) = NaN → `|| 0` returns 0
+      const enginePath = 'C:\\Engines\\UE_4.0';
+      process.env.UE_ENGINE_PATH = enginePath;
+
+      configureFs({
+        existingPaths: [enginePath],
+      });
+
+      const result = await EngineResolver.findEngineInstallations();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].version).toBeDefined();
+      expect(result[0].version!.MajorVersion).toBe(4);
+      // parseInt("0") = 0 is falsy, so `|| 0` returns 0
+      expect(result[0].version!.MinorVersion).toBe(0);
+      // parseInt(undefined) = NaN, so `|| 0` returns 0
+      expect(result[0].version!.PatchVersion).toBe(0);
+    });
+  });
 });
