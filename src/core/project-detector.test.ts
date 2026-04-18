@@ -100,21 +100,40 @@ describe('ProjectDetector', () => {
     expect(recursiveResult.project.path).toBe(nestedProjectDir);
   });
 
-  it('reports structurally invalid .uproject files as invalid project results', async () => {
+  it('accepts .uproject files without Modules as valid blueprint projects', async () => {
     const cwd = await createTempDir();
-    const projectFilePath = path.join(cwd, 'BrokenProject.uproject');
+    const projectFilePath = path.join(cwd, 'BlueprintProject.uproject');
 
     await writeJsonFile(projectFilePath, {
       FileVersion: 3,
       EngineAssociation: '5.3',
     });
-    await fs.ensureDir(path.join(cwd, 'Source'));
+
+    const result = await ProjectDetector.detectProject({ cwd, recursive: false });
+
+    expect(result.isValid).toBe(true);
+    expect(result.project).toBeDefined();
+    expect(result.error).toBeUndefined();
+    expect(result.warnings).toEqual([
+      'Source directory not found - this may be a blueprint-only project',
+    ]);
+  });
+
+  it('rejects .uproject files with a non-array Modules field', async () => {
+    const cwd = await createTempDir();
+    const projectFilePath = path.join(cwd, 'BadModulesProject.uproject');
+
+    await writeJsonFile(projectFilePath, {
+      FileVersion: 3,
+      EngineAssociation: '5.3',
+      Modules: 'not-an-array',
+    });
 
     const result = await ProjectDetector.detectProject({ cwd, recursive: false });
 
     expect(result.isValid).toBe(false);
     expect(result.project).toBeUndefined();
-    expect(result.error).toBe('Invalid .uproject file: Missing or invalid Modules array');
+    expect(result.error).toBe('Invalid .uproject file: Invalid Modules field');
     expect(result.warnings).toEqual([]);
   });
 

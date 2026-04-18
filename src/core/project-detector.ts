@@ -150,8 +150,8 @@ export class ProjectDetector {
       return { isValid: false, error: 'Missing EngineAssociation field', warnings };
     }
 
-    if (!uproject.Modules || !Array.isArray(uproject.Modules)) {
-      return { isValid: false, error: 'Missing or invalid Modules array', warnings };
+    if (uproject.Modules !== undefined && !Array.isArray(uproject.Modules)) {
+      return { isValid: false, error: 'Invalid Modules field', warnings };
     }
 
     return { isValid: true, warnings };

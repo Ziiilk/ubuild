@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "capturedAt": "2026-04-18T07:08:34.139Z",
+  "capturedAt": "2026-04-18T13:20:20.027Z",
   "project": "ubuild",
   "runtime": "node",
   "capabilities": {
@@ -15,10 +15,12 @@
   "lastSuccess": false,
   "presentFiles": [
     "memory/insights.md",
+    "experience.md",
     "history/iterations.jsonl",
+    "state/health.json",
     "state/lock.pid"
   ],
   "warnings": [
-    "migrated: .evolve-history.jsonl → .evolve/history/iterations.jsonl"
+    "experience.md: destination already exists, leaving legacy in place"
   ]
 }
