@@ -27,7 +27,7 @@ export class CapturedWritable extends Writable {
     _encoding: BufferEncoding,
     callback: (error?: Error | null) => void
   ): void {
-    const value = typeof chunk === 'string' ? chunk : chunk.toString();
+    const value = chunk.toString();
     this.chunks.push(value);
     callback();
   }

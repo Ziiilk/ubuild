@@ -94,7 +94,7 @@ export function createFakeExecaChild(
   const emitter = new EventEmitter();
   const stdout = new PassThrough();
   const stderr = new PassThrough();
-  const resolvedResult: FakeExecaResult = {
+  const resolvedResult = {
     stdout: result.stdout ?? options.emitStdout ?? '',
     stderr: result.stderr ?? options.emitStderr ?? '',
     exitCode: result.exitCode ?? 0,
@@ -131,7 +131,7 @@ export function createFakeExecaChild(
     stderr.end();
 
     if (!options.rejectWith) {
-      emitter.emit('exit', resolvedResult.exitCode ?? 0);
+      emitter.emit('exit', resolvedResult.exitCode);
     }
   });
 
