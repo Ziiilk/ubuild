@@ -14,6 +14,7 @@ import { EngineResolver } from '../core/engine-resolver';
 import { Logger } from '../utils/logger';
 import { ProjectDetector } from '../core/project-detector';
 import { handleCommandError } from '../utils/error';
+import { formatEngineVersion } from '../utils/version';
 
 /** Options for the engine command. */
 export interface EngineCommandOptions {
@@ -78,7 +79,7 @@ export async function executeEngine(options: EngineCommandOptions): Promise<void
         logger.write(`    Display Name: ${engine.displayName || '(none)'}`);
         if (engine.version) {
           logger.write(
-            `    Version: ${engine.version.MajorVersion}.${engine.version.MinorVersion}.${engine.version.PatchVersion}`
+            `    Version: ${formatEngineVersion(engine.version)}`
           );
         }
         if (engine.installedDate) {
@@ -105,7 +106,7 @@ export async function executeEngine(options: EngineCommandOptions): Promise<void
 
     if (engine.version) {
       logger.write(
-        `  Version: ${engine.version.MajorVersion}.${engine.version.MinorVersion}.${engine.version.PatchVersion}`
+        `  Version: ${formatEngineVersion(engine.version)}`
       );
       logger.write(`  Build ID: ${engine.version.BuildId}`);
       logger.write(`  Branch: ${engine.version.BranchName}`);

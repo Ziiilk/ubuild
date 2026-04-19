@@ -17,6 +17,7 @@ import type { EngineInstallation, EngineVersionInfo } from '../types/engine';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
 import { formatError } from '../utils/error';
+import { formatEngineVersion } from '../utils/version';
 import { DEFAULTS } from '../utils/constants';
 import { EngineResolver } from './engine-resolver';
 
@@ -188,7 +189,7 @@ export class ProjectInitializer {
     const choices = engines.map((engine, _index) => {
       let description = engine.path;
       if (engine.version) {
-        description += ` (UE ${engine.version.MajorVersion}.${engine.version.MinorVersion}.${engine.version.PatchVersion})`;
+        description += ` (UE ${formatEngineVersion(engine.version)})`;
       }
       if (engine.displayName) {
         description = `${engine.displayName} - ${description}`;
@@ -337,7 +338,7 @@ export class ProjectInitializer {
     const versionInfo = await this.getEngineVersionInfo(enginePath);
     if (versionInfo) {
       Logger.debug(
-        `Engine version: ${versionInfo.MajorVersion}.${versionInfo.MinorVersion}.${versionInfo.PatchVersion}`
+        `Engine version: ${formatEngineVersion(versionInfo)}`
       );
     }
 

@@ -24,7 +24,7 @@ import { Platform } from '../utils/platform';
 import { Logger } from '../utils/logger';
 import { ProjectPathResolver } from './project-path-resolver';
 import { formatError, formatErrorWithPrefix } from '../utils/error';
-import { compareVersions as compareVersionStrings } from '../utils/version';
+import { compareVersions as compareVersionStrings, formatEngineVersion } from '../utils/version';
 
 /**
  * Registry key locations to search for Unreal Engine installations.
@@ -625,7 +625,7 @@ export class EngineResolver {
             const versionInfo: EngineVersionInfo = JSON.parse(content);
             installation.version = versionInfo;
 
-            installation.displayName = `UE ${versionInfo.MajorVersion}.${versionInfo.MinorVersion}.${versionInfo.PatchVersion}`;
+            installation.displayName = `UE ${formatEngineVersion(versionInfo)}`;
 
             return;
           } catch (parseError) {

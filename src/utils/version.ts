@@ -39,6 +39,25 @@
  * compareVersions('1.2', '1.2.0');   // Returns 0 (missing parts treated as 0)
  * ```
  */
+/**
+ * Formats engine version info as a human-readable string.
+ *
+ * @param version - Version info object with MajorVersion, MinorVersion, PatchVersion
+ * @returns Formatted version string (e.g., "5.3.2")
+ *
+ * @example
+ * ```typescript
+ * formatEngineVersion({ MajorVersion: 5, MinorVersion: 3, PatchVersion: 2 }); // "5.3.2"
+ * ```
+ */
+export function formatEngineVersion(version: {
+  MajorVersion: number;
+  MinorVersion: number;
+  PatchVersion: number;
+}): string {
+  return `${version.MajorVersion}.${version.MinorVersion}.${version.PatchVersion}`;
+}
+
 export function compareVersions(a: string, b: string): number {
   // Strip prerelease suffix (e.g., "1.0.0-rc.1" → "1.0.0") before splitting.
   // This prevents "-rc.1" from being split into ["0-rc", "1"] which would

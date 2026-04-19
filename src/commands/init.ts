@@ -17,6 +17,7 @@ import { InitOptions, InitResult } from '../types/init';
 import { Logger } from '../utils/logger';
 import { Validator } from '../utils/validator';
 import { handleCommandError, formatError } from '../utils/error';
+import { formatEngineVersion } from '../utils/version';
 import { DEFAULTS } from '../utils/constants';
 
 /** Command line options specific to the init command. */
@@ -198,7 +199,7 @@ async function dryRunInit(options: InitCommandOptions, logger: Logger): Promise<
         );
         engines.forEach((engine, i) => {
           const version = engine.version
-            ? `UE ${engine.version.MajorVersion}.${engine.version.MinorVersion}.${engine.version.PatchVersion}`
+            ? `UE ${formatEngineVersion(engine.version)}`
             : 'Unknown version';
           logger.write(
             `    ${i + 1}. ${engine.displayName || engine.associationId} (${version})\n`
