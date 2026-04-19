@@ -182,7 +182,7 @@ export class EngineResolver {
         engineInstallations.sort((a, b) => this.compareVersions(b.version, a.version));
         matchedEngine = engineInstallations[0];
         warnings.push(
-          `Using engine ${matchedEngine.displayName || matchedEngine.associationId} (not associated with project)`
+          `Using engine ${matchedEngine.displayName} (not associated with project)`
         );
       }
 
@@ -572,8 +572,7 @@ export class EngineResolver {
       installations.push({
         path: entry.InstallLocation as string,
         associationId: appName,
-        displayName:
-          (entry.DisplayName as string) || appName || `UE ${entry.AppVersion || 'Unknown'}`,
+        displayName: (entry.DisplayName as string) || appName,
         installedDate: entry.InstallDate as string | undefined,
         version: undefined,
         source: 'launcher',
@@ -639,7 +638,7 @@ export class EngineResolver {
         const versionStr = pathMatch[1].replace(/_/g, '.');
         const versionParts = versionStr.split('.');
         installation.version = {
-          MajorVersion: parseInt(versionParts[0]) || 5,
+          MajorVersion: parseInt(versionParts[0]),
           MinorVersion: parseInt(versionParts[1]) || 0,
           PatchVersion: parseInt(versionParts[2]) || 0,
           Changelist: 0,
@@ -737,7 +736,7 @@ export class EngineResolver {
     try {
       const engineResult = await EngineResolver.resolveEngine(projectPath);
       if (engineResult.engine) {
-        stdout.write(`  Engine: ${engineResult.engine.displayName || engineResult.engine.path}\n`);
+        stdout.write(`  Engine: ${engineResult.engine.displayName}\n`);
       } else {
         stdout.write(`  Engine: ${chalk.yellow('Not detected - specify with --engine-path')}\n`);
       }

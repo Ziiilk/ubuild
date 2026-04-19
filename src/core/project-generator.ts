@@ -104,9 +104,7 @@ export class ProjectGenerator {
         generatedFiles.push(...(await this.findVSCodeConfigFiles(projectPath)));
 
         const tasksFile = await this.generateVSCodeTasks(projectPath, logger);
-        if (tasksFile) {
-          generatedFiles.push(tasksFile);
-        }
+        generatedFiles.push(tasksFile);
       } else if (ide === 'clion') {
         generatedFiles.push(...(await this.findGeneratedCLionFiles(projectPath)));
       } else if (ide === 'xcode') {
@@ -311,7 +309,7 @@ export class ProjectGenerator {
   private static async generateVSCodeTasks(
     projectPath: string,
     logger: Logger
-  ): Promise<string | null> {
+  ): Promise<string> {
     const projectDir = path.dirname(projectPath);
     const vscodeDir = path.join(projectDir, '.vscode');
     const tasksPath = path.join(vscodeDir, 'tasks.json');
