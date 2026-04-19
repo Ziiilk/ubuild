@@ -788,6 +788,18 @@ describe('CleanExecutor', () => {
       expect(result.error).toBeDefined();
     });
   });
+
+  describe('default option fallbacks', () => {
+    it('uses process.cwd() when projectPath is omitted', async () => {
+      // No paths to clean — exercises the options.projectPath || process.cwd() branch
+      mockFsPathExists.mockResolvedValue(false);
+
+      const result = await executor.execute({});
+
+      expect(result.success).toBe(true);
+      expect(ProjectPathResolver.resolveOrThrow).toHaveBeenCalledWith(process.cwd());
+    });
+  });
 });
 
 /**

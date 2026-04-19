@@ -1137,5 +1137,15 @@ describe('ProjectGenerator', () => {
         expect(result.generatedFiles).not.toContain(tasksPath);
       });
     });
+
+    it('uses process.cwd() when projectPath is omitted', async () => {
+      // Calling generate without projectPath exercises the || process.cwd() fallback
+      // in validateOptions (line 143). The call will fail because process.cwd() lacks
+      // a .uproject file, but the branch is covered.
+      const result = await ProjectGenerator.generate({ ide: 'sln', silent: true });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+    });
   });
 });

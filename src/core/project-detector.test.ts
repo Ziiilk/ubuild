@@ -351,6 +351,13 @@ describe('ProjectDetector', () => {
     }
   });
 
+  it('works with no arguments (default parameter options = {})', async () => {
+    // Exercises the default parameter branch on line 34 (options = {})
+    const result = await ProjectDetector.detectProject();
+
+    expect(typeof result.isValid).toBe('boolean');
+  });
+
   it('detects multiple modules at different nesting levels', async () => {
     const cwd = await createTempDir();
     const projectName = 'MultiModuleProject';

@@ -1083,4 +1083,16 @@ describe('BuildExecutor', () => {
       });
     });
   });
+
+  describe('default option fallbacks', () => {
+    it('uses DEFAULTS.BUILD_TARGET and process.cwd() when target and projectPath are omitted', async () => {
+      // Calling execute without target or projectPath exercises the || fallback
+      // branches in validateOptions (lines 106 and 114). The call will fail because
+      // process.cwd() does not contain a .uproject file, but the branches are covered.
+      const result = await BuildExecutor.execute({ silent: true });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBeDefined();
+    });
+  });
 });

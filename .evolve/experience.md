@@ -23,5 +23,5 @@ MAINTENANCE RULES:
 - project-detector.ts:153 contradicts validator.ts:207 on .uproject Modules validation — FIXED in iter 41. Detector now accepts missing Modules (blueprint projects), only rejects non-array Modules values.
 - project-initializer.ts:544 hardcoded ThirdPerson path — FIXED in iter 42. createGameModeSource() now receives template param; ConstructorHelpers pawn class only generated for ThirdPerson template.
 - Coverage metrics (iter 41): 98.34% branches, 100% functions/lines, 100% statements. Remaining gaps are defensive `||` fallbacks in core modules.
-- Coverage metrics: 98.63% branches (1012/1026). project-initializer.ts now 100% branches. Remaining 14 gaps: engine-resolver (6, mostly dead-code displayName fallbacks), build-executor (2), project-generator (2), clean-executor (1), project-detector (1), test-utils (2).
+- Coverage metrics: 99.12% branches (1017/1026). build-executor, clean-executor, project-detector now 100%. Remaining 9 gaps: engine-resolver (6, all unreachable — `||` fallbacks behind regex/truthy guards), project-generator (1, `if(tasksFile)` always truthy), test-utils (2, Buffer/null-exitCode branches).
 - `formatEngineVersion()` extracted to src/utils/version.ts (iter 41). Replaced 6 inline `${v.Major}.${v.Minor}.${v.Patch}` duplications across engine-resolver, project-initializer, commands/engine, commands/init.
