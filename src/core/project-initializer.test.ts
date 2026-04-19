@@ -1114,5 +1114,95 @@ describe('ProjectInitializer', () => {
       expect(result.success).toBe(true);
       expect(result.engineAssociation).toBe('4.27');
     });
+
+    it('handles engine without version and displayName in multi-engine prompt', async () => {
+      const tempDir = await createTempDir();
+      const enginePath1 = path.join(tempDir, 'Engine1');
+      const enginePath2 = path.join(tempDir, 'Engine2');
+      await createMockEngineStructure(enginePath1);
+      // enginePath2 has no version file — minimal structure
+      await fs.ensureDir(path.join(enginePath2, 'Engine', 'Binaries'));
+
+      const mockEngine1 = createMockEngineInstallation({
+        path: enginePath1,
+        displayName: 'Unreal Engine 5.3',
+        associationId: '5.3',
+      });
+      // Engine without displayName and version — triggers false branches at lines 191, 194
+      const mockEngine2 = createMockEngineInstallation({
+        path: enginePath2,
+        displayName: undefined,
+        version: undefined,
+        associationId: 'custom_engine',
+      });
+
+      jest
+        .mocked(EngineResolver.findEngineInstallations)
+        .mockResolvedValue([mockEngine1, mockEngine2]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      // Mock inquirer to select the second engine
+      jest.mocked(inquirer.prompt).mockResolvedValue({ selectedEngine: enginePath2 });
+
+      const options: InitOptions = {
+        name: 'MultiEngineNoVersion',
+        type: 'blueprint',
+        directory: path.join(tempDir, 'project'),
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+
+      expect(result.success).toBe(true);
+      expect(inquirer.prompt).toHaveBeenCalledTimes(1);
+
+      // Verify the prompt choices include the path-based description (no displayName)
+      const promptArgs = jest.mocked(inquirer.prompt).mock.calls[0] as [
+        Array<{ choices: Array<{ name: string }> }>
+      ];
+      const choiceNames: string[] = promptArgs[0][0].choices.map(
+        (c: { name: string }) => c.name
+      );
+      // Engine without displayName should have only the raw path as description
+      expect(choiceNames.some((name) => name.includes(enginePath2))).toBe(true);
+    });
+
+    it('initializes C++ project when engine has no version file', async () => {
+      const tempDir = await createTempDir();
+      const enginePath = path.join(tempDir, 'Engine');
+      // Create engine directory WITHOUT Build.version — triggers false branch at line 339
+      await fs.ensureDir(path.join(enginePath, 'Engine', 'Binaries'));
+
+      const mockEngine = createMockEngineInstallation({ path: enginePath });
+      jest.mocked(EngineResolver.findEngineInstallations).mockResolvedValue([mockEngine]);
+      jest.mocked(Validator.isValidProjectName).mockReturnValue(true);
+      jest.mocked(Validator.isValidProjectType).mockReturnValue(true);
+      jest.mocked(Validator.isValidEnginePath).mockResolvedValue(true);
+      jest.mocked(Validator.isSafeForInit).mockResolvedValue({
+        safe: true,
+        message: 'Directory is safe',
+      });
+
+      const options: InitOptions = {
+        name: 'NoVersionProject',
+        type: 'cpp',
+        directory: path.join(tempDir, 'project'),
+        enginePath,
+      };
+
+      const result = await ProjectInitializer.initialize(options);
+
+      expect(result.success).toBe(true);
+      expect(result.projectPath).toBe(options.directory);
+      expect(result.createdFiles.length).toBeGreaterThan(0);
+
+      // Verify source files were still created (versionInfo was undefined)
+      expect(await fs.pathExists(path.join(options.directory!, 'Source'))).toBe(true);
+    });
   });
 });
