@@ -8,6 +8,7 @@ import {
   createOutputCapture,
   withTempDir,
 } from '../test-utils';
+import { formatError } from '../utils/error';
 
 interface MockBuildResult {
   success: boolean;
@@ -79,7 +80,7 @@ jest.mock('../core/engine-resolver', () => ({
           stdout.write(`  Engine: ${chalk.yellow('Not detected - specify with --engine-path')}\n`);
         }
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = formatError(error);
         logger.debug(`Engine resolution failed: ${msg}`);
         stdout.write(
           `  Engine: ${chalk.yellow('Detection failed - specify with --engine-path')}\n`

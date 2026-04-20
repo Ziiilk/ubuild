@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import { resolveUnrealBuildToolPath } from './unreal-paths';
 import { withTempDir } from '../test-utils';
+import { formatError } from './error';
 
 describe('resolveUnrealBuildToolPath', () => {
   it('resolves UBT path when the executable exists', async () => {
@@ -116,7 +117,7 @@ describe('resolveUnrealBuildToolPath', () => {
         await resolveUnrealBuildToolPath(enginePath);
         fail('Expected an error to be thrown');
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = formatError(error);
         expect(message).toContain('UnrealBuildTool not found');
         // Should mention both locations in the error
         expect(message).toContain('DotNET');
