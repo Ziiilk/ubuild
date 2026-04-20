@@ -19,9 +19,11 @@ MAINTENANCE RULES:
 - If there is nothing new to record, leave the file unchanged — editing for its own sake wastes an iteration.
 -->
 
-- engine-resolver.ts (~749 lines) is the largest core module.
+- engine-resolver.ts (~773 lines) is the largest core module. Now includes `resolveProjectAndEngine()` which combines `ProjectPathResolver.resolveOrThrow` + `EngineResolver.resolveEnginePath`.
+- `resolveProjectAndEngine` extracted to EngineResolver (iter 45). Replaced 4 duplicated resolveOrThrow+resolveEnginePath 2-step patterns in build-executor, project-generator, project-runner, compile-commands-generator.
 - project-detector.ts:153 contradicts validator.ts:207 on .uproject Modules validation — FIXED in iter 41. Detector now accepts missing Modules (blueprint projects), only rejects non-array Modules values.
 - project-initializer.ts:544 hardcoded ThirdPerson path — FIXED in iter 42. createGameModeSource() now receives template param; ConstructorHelpers pawn class only generated for ThirdPerson template.
 - Coverage metrics: 100% branches/funcs/lines/stmts. All files at 100%.
-- `formatEngineVersion()` extracted to src/utils/version.ts (iter 41). Replaced 6 inline `${v.Major}.${v.Minor}.${v.Patch}` duplications across engine-resolver, project-initializer, commands/engine, commands/init.
-- Logger static delegation methods (13 methods, ~100 lines) replaced with compact arrow function properties (~15 lines). Same behavior, identical type signatures.
+- Zero `as any` type assertions in production code (fully eliminated from earlier debt).
+- `formatEngineVersion()` extracted to src/utils/version.ts (iter 41). Replaced 6 inline duplications.
+- Logger static delegation methods replaced with compact arrow function properties (iter 43).
