@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "capturedAt": "2026-04-20T00:50:01.154Z",
+  "capturedAt": "2026-04-20T04:14:48.563Z",
   "project": "ubuild",
   "runtime": "node",
   "capabilities": {
@@ -17,6 +17,7 @@
     "memory/insights.md",
     "experience.md",
     "history/iterations.jsonl",
+    "backlog.md",
     "state/health.json",
     "state/lock.pid"
   ],

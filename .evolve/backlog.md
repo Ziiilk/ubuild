@@ -4,18 +4,21 @@ Actionable ideas for future iterations, ordered by impact.
 
 ## High Impact
 
-### Concurrent Build/Run API
+### Concurrent Build/Run API / Programmatic API Mismatch
 **Status**: Not started
 **Type**: FEATURE
 **Estimated effort**: Large (200+ lines)
 
-README documents `UBuildAPI.concurrent.createBuilder()` and `UBuildAPI.concurrent.createRunner()` in the programmatic API, but no concurrent module exists in src/. This is a documentation/implementation mismatch.
+README "Programmatic API" section (lines 79-111) documents an entire `UEBuildAPI` namespace (`project.detect()`, `engine.resolve()`, `build.execute()`, `generate.generate()`, `init.initialize()`, `concurrent.createBuilder()`, `concurrent.createRunner()`) that does not exist. `src/index.ts` only exports Commander registration functions — no `UEBuildAPI` object, no default export.
+
+The mismatch is broader than just `concurrent`. The core classes exist (ProjectDetector, EngineResolver, BuildExecutor, etc.) but are not wrapped in a unified programmatic API surface.
 
 Options:
-1. Implement a basic concurrent module with createBuilder/createRunner wrappers
-2. Remove the concurrent API docs from README to eliminate the mismatch
+1. Implement the full `UEBuildAPI` programmatic API surface wrapping existing core modules
+2. Remove the entire "Programmatic API" section from README to eliminate the mismatch
+3. Implement just the `concurrent` module and update docs to match reality
 
-Option 2 is much smaller and corrects a real misleading claim.
+Note: README.md is outside the allowed evolve file paths, so option 2 cannot be done in evolve iterations.
 
 ### Logger Static Method Boilerplate
 **Status**: Not started
@@ -27,11 +30,13 @@ Option 2 is much smaller and corrects a real misleading claim.
 ## Medium Impact
 
 ### Test-only formatError Consistency
-**Status**: Not started
+**Status**: Done
 **Type**: REFACTOR
 **Estimated effort**: Small (~20 lines)
 
 4 test files still use inline `error instanceof Error ? error.message : String(error)` instead of `formatError()`. Purely cosmetic — tests only, no production impact.
+
+Completed in commit dc7792a — all 4 test files now import `formatError` from utils.
 
 ## Low Impact
 

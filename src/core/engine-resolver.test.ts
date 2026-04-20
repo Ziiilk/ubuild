@@ -2222,7 +2222,7 @@ describe('EngineResolver', () => {
       expect(result[0].source).toBe('launcher');
     });
 
-    it.skip('handles parseMultiLineEntry with line not starting with {', async () => {
+    it('handles parseMultiLineEntry with line not starting with {', async () => {
       jest.spyOn(Platform, 'isWindows').mockReturnValue(true);
 
       // Line doesn't start with { but has a GUID somewhere in it

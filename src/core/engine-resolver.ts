@@ -368,12 +368,12 @@ export class EngineResolver {
    * @returns EngineInstallation if matched, undefined otherwise
    */
   private static parseSingleLineEntry(line: string): EngineInstallation | undefined {
-    const fullMatch = line.match(/{([^}]+)}\s+REG_SZ\s+(.+)$/);
+    const fullMatch = line.match(/^({[^}]+})\s+REG_SZ\s+(.+)$/);
     if (!fullMatch) {
       return undefined;
     }
 
-    const guid = `{${fullMatch[1]}}`;
+    const guid = fullMatch[1];
     const enginePath = fullMatch[2].trim();
 
     return {
