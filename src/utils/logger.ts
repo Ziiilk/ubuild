@@ -273,101 +273,18 @@ export class Logger {
 
   private static globalLogger = new Logger();
 
-  /**
-   * Logs an informational message using the global logger.
-   * @param message - The message to log
-   */
-  static info(message: string): void {
-    Logger.globalLogger.info(message);
-  }
-
-  /**
-   * Logs a success message using the global logger.
-   * @param message - The message to log
-   */
-  static success(message: string): void {
-    Logger.globalLogger.success(message);
-  }
-
-  /**
-   * Logs a warning message using the global logger.
-   * @param message - The message to log
-   */
-  static warning(message: string): void {
-    Logger.globalLogger.warning(message);
-  }
-
-  /**
-   * Logs an error message using the global logger.
-   * @param message - The message to log
-   */
-  static error(message: string): void {
-    Logger.globalLogger.error(message);
-  }
-
-  /**
-   * Logs a debug message using the global logger.
-   * @param message - The message to log
-   */
-  static debug(message: string): void {
-    Logger.globalLogger.debug(message);
-  }
-
-  /**
-   * Displays a progress message using the global logger.
-   * @param message - The progress message to display
-   */
-  static progress(message: string): void {
-    Logger.globalLogger.progress(message);
-  }
-
-  /** Clears the current progress message using the global logger. */
-  static clearProgress(): void {
-    Logger.globalLogger.clearProgress();
-  }
-
-  /** Outputs a horizontal divider using the global logger. */
-  static divider(): void {
-    Logger.globalLogger.divider();
-  }
-
-  /**
-   * Outputs a formatted title using the global logger.
-   * @param title - The title text to display
-   */
-  static title(title: string): void {
-    Logger.globalLogger.title(title);
-  }
-
-  /**
-   * Outputs a formatted subtitle using the global logger.
-   * @param subTitle - The subtitle text to display
-   */
-  static subTitle(subTitle: string): void {
-    Logger.globalLogger.subTitle(subTitle);
-  }
-
-  /**
-   * Outputs data as formatted JSON using the global logger.
-   * @param data - The data to stringify and output
-   */
-  static json(data: unknown): void {
-    Logger.globalLogger.json(data);
-  }
-
-  /**
-   * Writes raw data to stdout using the global logger.
-   * @param data - The data to write
-   */
-  static write(data: string): void {
-    Logger.globalLogger.write(data);
-  }
-
-  /**
-   * Writes raw data to stderr using the global logger.
-   * @param data - The data to write
-   */
-  static writeError(data: string): void {
-    Logger.globalLogger.writeError(data);
-  }
+  // Static delegation methods — each forwards to the global logger instance.
+  static info = (message: string): void => Logger.globalLogger.info(message);
+  static success = (message: string): void => Logger.globalLogger.success(message);
+  static warning = (message: string): void => Logger.globalLogger.warning(message);
+  static error = (message: string): void => Logger.globalLogger.error(message);
+  static debug = (message: string): void => Logger.globalLogger.debug(message);
+  static progress = (message: string): void => Logger.globalLogger.progress(message);
+  static clearProgress = (): void => Logger.globalLogger.clearProgress();
+  static divider = (): void => Logger.globalLogger.divider();
+  static title = (title: string): void => Logger.globalLogger.title(title);
+  static subTitle = (subTitle: string): void => Logger.globalLogger.subTitle(subTitle);
+  static json = (data: unknown): void => Logger.globalLogger.json(data);
+  static write = (data: string): void => Logger.globalLogger.write(data);
+  static writeError = (data: string): void => Logger.globalLogger.writeError(data);
 }

@@ -19,9 +19,9 @@ MAINTENANCE RULES:
 - If there is nothing new to record, leave the file unchanged — editing for its own sake wastes an iteration.
 -->
 
-- engine-resolver.ts (~749 lines) is the largest core module. Branch coverage 87.89% (iter 40) → 96%+ after env var fallback + getSourcePriority + parseInt tests.
+- engine-resolver.ts (~749 lines) is the largest core module.
 - project-detector.ts:153 contradicts validator.ts:207 on .uproject Modules validation — FIXED in iter 41. Detector now accepts missing Modules (blueprint projects), only rejects non-array Modules values.
 - project-initializer.ts:544 hardcoded ThirdPerson path — FIXED in iter 42. createGameModeSource() now receives template param; ConstructorHelpers pawn class only generated for ThirdPerson template.
-- Coverage metrics (iter 41): 98.34% branches, 100% functions/lines, 100% statements. Remaining gaps are defensive `||` fallbacks in core modules.
-- Coverage metrics: 100% branches (iter 43). All files at 100% after removing unreachable `||` fallbacks in engine-resolver (lines 185, 576, 642, 740) and dead null check in project-generator (line 107).
+- Coverage metrics: 100% branches/funcs/lines/stmts. All files at 100%.
 - `formatEngineVersion()` extracted to src/utils/version.ts (iter 41). Replaced 6 inline `${v.Major}.${v.Minor}.${v.Patch}` duplications across engine-resolver, project-initializer, commands/engine, commands/init.
+- Logger static delegation methods (13 methods, ~100 lines) replaced with compact arrow function properties (~15 lines). Same behavior, identical type signatures.

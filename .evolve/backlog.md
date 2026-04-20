@@ -21,11 +21,13 @@ Options:
 Note: README.md is outside the allowed evolve file paths, so option 2 cannot be done in evolve iterations.
 
 ### Logger Static Method Boilerplate
-**Status**: Not started
+**Status**: Done
 **Type**: REFACTOR
 **Estimated effort**: Medium (~50 lines changed)
 
 `logger.ts` has ~100 lines of static methods (lines 274-372) that are pure delegation to `globalLogger`. Could be replaced with a Proxy-based approach or a loop that generates the static methods. Low risk since all paths are tested at 100%.
+
+Completed — replaced 13 static delegation methods (~100 lines) with compact arrow function properties (~15 lines).
 
 ## Medium Impact
 
