@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "capturedAt": "2026-04-20T10:09:00.895Z",
+  "capturedAt": "2026-04-20T10:26:38.912Z",
   "project": "ubuild",
   "runtime": "node",
   "capabilities": {
@@ -9,9 +9,9 @@
     "lint": true,
     "coverage": true
   },
-  "iterations": 49,
+  "iterations": 50,
   "consecutiveSkips": 0,
-  "lastDecision": "UNKNOWN",
+  "lastDecision": "FIX",
   "lastSuccess": false,
   "presentFiles": [
     "memory/insights.md",

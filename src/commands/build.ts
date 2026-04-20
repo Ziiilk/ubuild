@@ -62,7 +62,7 @@ export function buildCommand(program: Command): void {
         const builder = new ProjectBuilder();
         await builder.build(options);
       } catch (error) {
-        handleCommandError(error);
+        handleCommandError(error, 'Build failed');
       }
     });
 }

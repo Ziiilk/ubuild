@@ -69,7 +69,7 @@ async function isGlobalInstall(logger: Logger): Promise<boolean> {
  * @param options - Configuration options for output streams
  */
 export async function executeUpdate(options: UpdateCommandOptions = {}): Promise<void> {
-  const logger = new Logger({ stdout: options.stdout, stderr: options.stderr });
+  const logger = Logger.fromStreams(options.stdout, options.stderr);
 
   try {
     logger.title('Update ubuild');

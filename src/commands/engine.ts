@@ -151,8 +151,6 @@ export async function executeEngine(options: EngineCommandOptions): Promise<void
   logger.write('\n');
   if (result.engine && result.uprojectEngine) {
     logger.success('Engine information retrieved successfully');
-  } else if (!result.engine) {
-    logger.warning('No engine installation found');
   }
 }
 

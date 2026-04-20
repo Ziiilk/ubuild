@@ -68,7 +68,7 @@ export function runCommand(program: Command): void {
         const runner = new ProjectRunner();
         await runner.run(options);
       } catch (error) {
-        handleCommandError(error);
+        handleCommandError(error, 'Run failed');
       }
     });
 }
