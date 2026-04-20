@@ -152,6 +152,31 @@ export class EngineResolver {
   }
 
   /**
+   * Resolves both the project path and engine path in a single call.
+   * First resolves the raw input to a .uproject file using ProjectPathResolver,
+   * then resolves the engine installation for that project.
+   * @param options - Resolution options with optional projectPath and enginePath
+   * @returns Promise resolving to both resolved paths
+   * @throws Error if project path cannot be resolved
+   * @throws Error if engine path cannot be resolved
+   */
+  static async resolveProjectAndEngine(options: {
+    projectPath?: string;
+    enginePath?: string;
+  } = {}): Promise<{ projectPath: string; enginePath: string }> {
+    const projectPath = await ProjectPathResolver.resolveOrThrow(
+      options.projectPath || process.cwd()
+    );
+
+    const enginePath = await EngineResolver.resolveEnginePath({
+      projectPath,
+      enginePath: options.enginePath,
+    });
+
+    return { projectPath, enginePath };
+  }
+
+  /**
    * Resolves the engine installation for a given project.
    * @param projectPath - Optional path to the project to find associated engine
    * @returns Promise resolving to engine detection result with matched engine info

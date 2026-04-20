@@ -14,7 +14,6 @@ import type { GenerateOptions, GenerateResult, IDE } from '../types/generate';
 import { EngineResolver } from './engine-resolver';
 import { Logger } from '../utils/logger';
 import { formatError } from '../utils/error';
-import { ProjectPathResolver } from './project-path-resolver';
 import { DEFAULTS } from '../utils/constants';
 import { resolveUnrealBuildToolPath } from '../utils/unreal-paths';
 
@@ -137,12 +136,8 @@ export class ProjectGenerator {
     const ide: IDE = options.ide || DEFAULTS.IDE;
     const force = options.force || false;
 
-    const projectPath = await ProjectPathResolver.resolveOrThrow(
-      options.projectPath || process.cwd()
-    );
-
-    const enginePath = await EngineResolver.resolveEnginePath({
-      projectPath,
+    const { projectPath, enginePath } = await EngineResolver.resolveProjectAndEngine({
+      projectPath: options.projectPath,
       enginePath: options.enginePath,
     });
 

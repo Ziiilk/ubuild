@@ -16,7 +16,6 @@ import { BuildOptions, BuildResult } from '../types/build';
 import { EngineResolver } from './engine-resolver';
 import { Logger, resolveLoggerStreams, type LoggableOptions } from '../utils/logger';
 import { formatError } from '../utils/error';
-import { ProjectPathResolver } from './project-path-resolver';
 import { inferTargetType } from '../utils/target-helpers';
 import { TargetResolver } from './target-resolver';
 import { resolveUnrealBuildToolPath } from '../utils/unreal-paths';
@@ -110,12 +109,8 @@ export class BuildExecutor {
     const verbose = options.verbose || false;
     const additionalArgs = options.additionalArgs || [];
 
-    const projectPath = await ProjectPathResolver.resolveOrThrow(
-      options.projectPath || process.cwd()
-    );
-
-    const enginePath = await EngineResolver.resolveEnginePath({
-      projectPath,
+    const { projectPath, enginePath } = await EngineResolver.resolveProjectAndEngine({
+      projectPath: options.projectPath,
       enginePath: options.enginePath,
     });
 

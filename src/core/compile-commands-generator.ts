@@ -12,7 +12,6 @@ import path from 'path';
 import fs from 'fs-extra';
 import { execa } from 'execa';
 import { EngineResolver } from './engine-resolver';
-import { ProjectPathResolver } from './project-path-resolver';
 import { Logger } from '../utils/logger';
 import { TargetResolver } from './target-resolver';
 import { formatError } from '../utils/error';
@@ -77,12 +76,11 @@ export class CompileCommandsGenerator {
    * @throws Error if project file not found, UBT not found, or generation fails
    */
   static async generate(options: CompileCommandsGenerateOptions): Promise<string> {
-    const projectPath = await ProjectPathResolver.resolveOrThrow(options.project || process.cwd());
     const silent = options.silent || false;
     const logger = new Logger({ silent });
 
-    const enginePath = await EngineResolver.resolveEnginePath({
-      projectPath,
+    const { projectPath, enginePath } = await EngineResolver.resolveProjectAndEngine({
+      projectPath: options.project,
       enginePath: options.enginePath,
     });
 

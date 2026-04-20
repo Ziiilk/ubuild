@@ -44,6 +44,10 @@ const mockResolveEnginePath = jest.fn<
   Promise<string>,
   [{ projectPath?: string; enginePath?: string }]
 >();
+const mockResolveProjectAndEngine = jest.fn<
+  Promise<{ projectPath: string; enginePath: string }>,
+  [{ projectPath?: string; enginePath?: string }]
+>();
 const mockResolveTarget = jest.fn<Promise<string>, [string, string]>();
 const mockExeca = jest.fn<ReturnType<typeof createFakeExecaChild>, ExecaInvocation>();
 
@@ -59,6 +63,9 @@ jest.mock('./engine-resolver', () => ({
     resolveEngine: (...args: [string]) => mockResolveEngine(...args),
     resolveEnginePath: (...args: [{ projectPath?: string; enginePath?: string }]) =>
       mockResolveEnginePath(...args),
+    resolveProjectAndEngine: (
+      ...args: [{ projectPath?: string; enginePath?: string }]
+    ) => mockResolveProjectAndEngine(...args),
     writeEngineStatus: async (
       projectPath: string | undefined,
       stdout: { write: (data: string) => void },
@@ -100,6 +107,17 @@ describe('ProjectRunner', () => {
     jest.clearAllMocks();
     mockResolveEngine.mockResolvedValue({ warnings: [] });
     mockResolveEnginePath.mockResolvedValue('');
+    mockResolveProjectAndEngine.mockImplementation(async (opts) => {
+      const { ProjectPathResolver: Resolver } = jest.requireActual('./project-path-resolver');
+      const projectPath = await Resolver.resolveOrThrow(
+        opts?.projectPath || process.cwd()
+      );
+      const enginePath = await mockResolveEnginePath({
+        projectPath,
+        enginePath: opts?.enginePath,
+      });
+      return { projectPath, enginePath };
+    });
     mockResolveTarget.mockImplementation((_, target) => Promise.resolve(target));
   });
 

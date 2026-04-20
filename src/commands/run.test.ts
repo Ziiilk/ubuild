@@ -59,36 +59,51 @@ jest.mock('../core/build-executor', () => {
   return { BuildExecutor };
 });
 
-jest.mock('../core/engine-resolver', () => ({
-  EngineResolver: {
-    resolveEngine: (...args: [string]) => mockResolveEngine(...args),
-    resolveEnginePath: (...args: [{ projectPath?: string; enginePath?: string }]) =>
-      mockResolveEnginePath(...args),
-    writeEngineStatus: async (
-      projectPath: string | undefined,
-      stdout: { write: (data: string) => void },
-      logger: { debug: (msg: string) => void }
-    ) => {
-      const chalk = { yellow: (s: string) => s };
-      try {
-        const engineResult = await mockResolveEngine(projectPath ?? '');
-        if (engineResult.engine) {
-          stdout.write(
-            `  Engine: ${engineResult.engine.displayName || engineResult.engine.path}\n`
-          );
-        } else {
-          stdout.write(`  Engine: ${chalk.yellow('Not detected - specify with --engine-path')}\n`);
-        }
-      } catch (error) {
-        const msg = formatError(error);
-        logger.debug(`Engine resolution failed: ${msg}`);
-        stdout.write(
-          `  Engine: ${chalk.yellow('Detection failed - specify with --engine-path')}\n`
+jest.mock('../core/engine-resolver', () => {
+  const { ProjectPathResolver } = jest.requireActual('../core/project-path-resolver');
+  return {
+    EngineResolver: {
+      resolveEngine: (...args: [string]) => mockResolveEngine(...args),
+      resolveEnginePath: (...args: [{ projectPath?: string; enginePath?: string }]) =>
+        mockResolveEnginePath(...args),
+      resolveProjectAndEngine: async (
+        ...args: [{ projectPath?: string; enginePath?: string }]
+      ) => {
+        const projectPath = await ProjectPathResolver.resolveOrThrow(
+          args[0]?.projectPath || process.cwd()
         );
-      }
+        const enginePath = await mockResolveEnginePath({
+          projectPath,
+          enginePath: args[0]?.enginePath,
+        });
+        return { projectPath, enginePath };
+      },
+      writeEngineStatus: async (
+        projectPath: string | undefined,
+        stdout: { write: (data: string) => void },
+        logger: { debug: (msg: string) => void }
+      ) => {
+        const chalk = { yellow: (s: string) => s };
+        try {
+          const engineResult = await mockResolveEngine(projectPath ?? '');
+          if (engineResult.engine) {
+            stdout.write(
+              `  Engine: ${engineResult.engine.displayName || engineResult.engine.path}\n`
+            );
+          } else {
+            stdout.write(`  Engine: ${chalk.yellow('Not detected - specify with --engine-path')}\n`);
+          }
+        } catch (error) {
+          const msg = formatError(error);
+          logger.debug(`Engine resolution failed: ${msg}`);
+          stdout.write(
+            `  Engine: ${chalk.yellow('Detection failed - specify with --engine-path')}\n`
+          );
+        }
+      },
     },
-  },
-}));
+  };
+});
 
 jest.mock('execa', () => ({
   execa: (...args: ExecaInvocation) => mockExeca(...args),

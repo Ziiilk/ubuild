@@ -2664,4 +2664,14 @@ describe('EngineResolver', () => {
       expect(result[0].version!.PatchVersion).toBe(0);
     });
   });
+
+  describe('resolveProjectAndEngine', () => {
+    it('throws when called without arguments and no engine available', async () => {
+      jest.spyOn(Platform, 'isWindows').mockReturnValue(false);
+
+      configureFs({ existingPaths: [] });
+
+      await expect(EngineResolver.resolveProjectAndEngine()).rejects.toThrow();
+    });
+  });
 });

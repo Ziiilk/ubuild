@@ -159,14 +159,8 @@ export class ProjectRunner {
   private async runProject(options: ValidatedRunOptions): Promise<void> {
     const startTime = Date.now();
 
-    const projectPath = await ProjectPathResolver.resolveOrThrow(options.project || process.cwd());
-
-    if (!(await fs.pathExists(projectPath))) {
-      throw new Error(`Project file not found: ${projectPath}`);
-    }
-
-    const enginePath = await EngineResolver.resolveEnginePath({
-      projectPath,
+    const { projectPath, enginePath } = await EngineResolver.resolveProjectAndEngine({
+      projectPath: options.project,
       enginePath: options.enginePath,
     });
     this.logger.debug(`Resolved engine path: ${enginePath}`);

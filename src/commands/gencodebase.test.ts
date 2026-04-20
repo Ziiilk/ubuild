@@ -36,13 +36,28 @@ const mockResolveEnginePath = jest.fn<
 const mockGetAvailableTargets = jest.fn<Promise<Array<{ name: string; type: string }>>, [string]>();
 const mockExeca = jest.fn<ReturnType<typeof createFakeExecaChild>, GencodebaseExecaInvocation>();
 
-jest.mock('../core/engine-resolver', () => ({
-  EngineResolver: {
-    resolveEngine: (...args: [string]) => mockResolveEngine(...args),
-    resolveEnginePath: (...args: [{ projectPath?: string; enginePath?: string }]) =>
-      mockResolveEnginePath(...args),
-  },
-}));
+jest.mock('../core/engine-resolver', () => {
+  const { ProjectPathResolver } = jest.requireActual('../core/project-path-resolver');
+  return {
+    EngineResolver: {
+      resolveEngine: (...args: [string]) => mockResolveEngine(...args),
+      resolveEnginePath: (...args: [{ projectPath?: string; enginePath?: string }]) =>
+        mockResolveEnginePath(...args),
+      resolveProjectAndEngine: async (
+        ...args: [{ projectPath?: string; enginePath?: string }]
+      ) => {
+        const projectPath = await ProjectPathResolver.resolveOrThrow(
+          args[0]?.projectPath || process.cwd()
+        );
+        const enginePath = await mockResolveEnginePath({
+          projectPath,
+          enginePath: args[0]?.enginePath,
+        });
+        return { projectPath, enginePath };
+      },
+    },
+  };
+});
 
 jest.mock('../core/build-executor', () => ({
   BuildExecutor: {
