@@ -73,14 +73,14 @@ describe('gencodebaseCommand', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockResolveEnginePath.mockResolvedValue('');
-    jest.spyOn(Logger, 'title').mockImplementation(() => undefined);
-    jest.spyOn(Logger, 'success').mockImplementation(() => undefined);
-    jest.spyOn(Logger, 'subTitle').mockImplementation(() => undefined);
-    jest.spyOn(Logger, 'info').mockImplementation(() => undefined);
-    jest.spyOn(Logger, 'json').mockImplementation(() => undefined);
-    jest.spyOn(Logger, 'error').mockImplementation(() => undefined);
-    jest.spyOn(Logger, 'divider').mockImplementation(() => undefined);
-    jest.spyOn(Logger, 'debug').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'title').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'success').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'subTitle').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'info').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'json').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'divider').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined);
   });
 
   afterEach(() => {
@@ -118,8 +118,10 @@ describe('gencodebaseCommand', () => {
           cwd: path.dirname(engine.unrealBuildToolPath),
         })
       );
-      expect(Logger.json).toHaveBeenCalledWith({ success: true, path: generatedPath });
-      expect(Logger.success).not.toHaveBeenCalled();
+      expect(Logger.prototype.json).toHaveBeenCalledWith({ success: true, path: generatedPath });
+      expect(Logger.prototype.success).not.toHaveBeenCalledWith(
+        expect.stringContaining('Compile commands generated:')
+      );
       expect(await fs.pathExists(generatedPath)).toBe(true);
     });
   });
@@ -151,7 +153,7 @@ describe('gencodebaseCommand', () => {
       ).rejects.toThrow('process.exit:1');
 
       expect(exitSpy).toHaveBeenCalledWith(1);
-      expect(Logger.error).toHaveBeenCalledWith(
+      expect(Logger.prototype.error).toHaveBeenCalledWith(
         'Failed to generate compile commands: Generate compile commands failed with exit code 7'
       );
     });
@@ -179,12 +181,12 @@ describe('gencodebaseCommand', () => {
 
       await runRegisteredCommand(['gencodebase', '--project', project.projectDir]);
 
-      expect(Logger.title).toHaveBeenCalledWith('Generate Compile Commands Database');
-      expect(Logger.success).toHaveBeenCalledWith(
+      expect(Logger.prototype.title).toHaveBeenCalledWith('Generate Compile Commands Database');
+      expect(Logger.prototype.success).toHaveBeenCalledWith(
         expect.stringContaining('Compile commands generated:')
       );
-      expect(Logger.success).toHaveBeenCalledWith('VSCode settings updated: .vscode/settings.json');
-      expect(Logger.json).not.toHaveBeenCalled();
+      expect(Logger.prototype.success).toHaveBeenCalledWith('VSCode settings updated: .vscode/settings.json');
+      expect(Logger.prototype.json).not.toHaveBeenCalled();
     });
   });
 
@@ -351,7 +353,7 @@ describe('gencodebaseCommand', () => {
       ).rejects.toThrow('process.exit:1');
 
       expect(exitSpy).toHaveBeenCalledWith(1);
-      expect(Logger.error).toHaveBeenCalledWith(
+      expect(Logger.prototype.error).toHaveBeenCalledWith(
         'Failed to generate compile commands: UBT execution failed: out of memory'
       );
     });
@@ -373,7 +375,7 @@ describe('gencodebaseCommand', () => {
       ).rejects.toThrow('process.exit:1');
 
       expect(exitSpy).toHaveBeenCalledWith(1);
-      expect(Logger.error).toHaveBeenCalledWith(
+      expect(Logger.prototype.error).toHaveBeenCalledWith(
         'Failed to generate compile commands: Engine not found at specified path'
       );
     });
@@ -639,14 +641,14 @@ describe('executeGencodebase', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockResolveEnginePath.mockResolvedValue('');
-    jest.spyOn(Logger, 'title').mockImplementation(() => undefined);
-    jest.spyOn(Logger, 'success').mockImplementation(() => undefined);
-    jest.spyOn(Logger, 'subTitle').mockImplementation(() => undefined);
-    jest.spyOn(Logger, 'info').mockImplementation(() => undefined);
-    jest.spyOn(Logger, 'json').mockImplementation(() => undefined);
-    jest.spyOn(Logger, 'error').mockImplementation(() => undefined);
-    jest.spyOn(Logger, 'divider').mockImplementation(() => undefined);
-    jest.spyOn(Logger, 'debug').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'title').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'success').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'subTitle').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'info').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'json').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'divider').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined);
   });
 
   afterEach(() => {

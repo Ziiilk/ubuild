@@ -9,6 +9,7 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
+import { Writable } from 'stream';
 import { CompileCommandsGenerator } from '../core/compile-commands-generator';
 import type { CompileCommandsGenerateOptions } from '../core/compile-commands-generator';
 import { Logger } from '../utils/logger';
@@ -37,6 +38,10 @@ export type GencodebaseCommandOptions = CompileCommandsGenerateOptions & {
    * @default false
    */
   json?: boolean;
+  /** Writable stream for standard output (defaults to process.stdout) */
+  stdout?: Writable;
+  /** Writable stream for error output (defaults to process.stderr) */
+  stderr?: Writable;
 };
 
 /**
@@ -58,22 +63,27 @@ export type GencodebaseCommandOptions = CompileCommandsGenerateOptions & {
  * ```
  */
 export async function executeGencodebase(options: GencodebaseCommandOptions): Promise<string> {
+  const logger = new Logger({
+    stdout: options.stdout || process.stdout,
+    stderr: options.stderr || process.stderr,
+  });
+
   // When JSON output is requested, suppress non-JSON logging
   if (options.json) {
     options.silent = true;
   } else {
-    Logger.title('Generate Compile Commands Database');
+    logger.title('Generate Compile Commands Database');
   }
 
   const compileCommandsPath = await CompileCommandsGenerator.generate(options);
 
   if (options.json) {
-    Logger.json({ success: true, path: compileCommandsPath });
+    logger.json({ success: true, path: compileCommandsPath });
     return compileCommandsPath;
   }
 
-  Logger.success(`Compile commands generated: ${chalk.bold(compileCommandsPath)}`);
-  Logger.success('VSCode settings updated: .vscode/settings.json');
+  logger.success(`Compile commands generated: ${chalk.bold(compileCommandsPath)}`);
+  logger.success('VSCode settings updated: .vscode/settings.json');
 
   return compileCommandsPath;
 }

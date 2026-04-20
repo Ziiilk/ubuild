@@ -72,7 +72,11 @@ export function cleanCommand(program: Command): void {
     .option('--binaries-only', 'Clean only Binaries and Intermediate folders')
     .option('--silent', 'Suppress all output')
     .action(async (options) => {
-      const logger = new Logger({ silent: options.silent });
+      const logger = new Logger({
+        stdout: options.stdout || process.stdout,
+        stderr: options.stderr || process.stderr,
+        silent: options.silent,
+      });
 
       try {
         logger.title('Clean Project');

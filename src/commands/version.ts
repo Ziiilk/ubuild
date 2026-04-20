@@ -38,7 +38,7 @@ export interface VersionInfo {
  * Reads version information from package.json.
  * @returns Promise resolving to version information
  */
-async function getVersionInfo(): Promise<VersionInfo> {
+async function getVersionInfo(logger: Logger): Promise<VersionInfo> {
   // Traverse up from src/commands/ to find package.json
   const packageJsonPath = path.resolve(__dirname, '..', '..', 'package.json');
 
@@ -50,7 +50,7 @@ async function getVersionInfo(): Promise<VersionInfo> {
       description: packageJson.description || 'Unreal Engine project management CLI tool',
     };
   } catch (error) {
-    Logger.debug(`Failed to read package.json: ${formatError(error)}`);
+    logger.debug(`Failed to read package.json: ${formatError(error)}`);
     // Fallback if package.json cannot be read
     return {
       version: 'unknown',
@@ -68,7 +68,7 @@ async function getVersionInfo(): Promise<VersionInfo> {
 export async function executeVersion(options: VersionCommandOptions = {}): Promise<void> {
   const logger = Logger.fromStreams(options.stdout, options.stderr);
 
-  const info = await getVersionInfo();
+  const info = await getVersionInfo(logger);
 
   if (options.json) {
     logger.json(info);
