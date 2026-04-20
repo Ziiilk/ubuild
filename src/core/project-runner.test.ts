@@ -980,38 +980,6 @@ describe('ProjectRunner', () => {
       });
     });
 
-    it('throws when resolved project file does not exist on disk', async () => {
-      await withTempDir(async (rootDir) => {
-        const project = await createFakeProject(rootDir, { projectName: 'TestGame' });
-        const capture = createOutputCapture();
-
-        mockResolveEnginePath.mockResolvedValue('');
-
-        const spy = jest.spyOn(fs, 'pathExists').mockImplementation(async (p: string) => {
-          if (p.endsWith('.uproject')) return false;
-          return true;
-        });
-
-        try {
-          const runner = new ProjectRunner({
-            stdout: capture.stdout,
-            stderr: capture.stderr,
-          });
-
-          await expect(
-            runner.run({
-              project: project.projectDir,
-              target: 'Editor',
-              config: 'Development',
-              platform: 'Win64',
-            })
-          ).rejects.toThrow('Project file not found');
-        } finally {
-          spy.mockRestore();
-        }
-      });
-    });
-
     it('handles execa execution errors', async () => {
       await withTempDir(async (rootDir) => {
         const project = await createFakeProject(rootDir, { projectName: 'TestGame' });

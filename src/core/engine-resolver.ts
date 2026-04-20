@@ -104,6 +104,27 @@ const ENGINE_SOURCE_PRIORITY = {
 
 /** Default priority for unknown or missing source values. */
 const DEFAULT_SOURCE_PRIORITY = 2;
+
+/** Regex to extract the path value from a REG_SZ registry entry. */
+const REG_SZ_PATH_REGEX = /REG_SZ\s+(.+)$/;
+
+/** Creates an EngineInstallation from a registry GUID and path. */
+function createRegistryInstallation(guid: string, enginePath: string): EngineInstallation {
+  return {
+    path: enginePath,
+    associationId: guid,
+    displayName: `UE Engine ${guid}`,
+    version: undefined,
+    source: 'registry',
+  };
+}
+
+/** Validates that an engine path exists on disk, throwing if not found. */
+async function validateEnginePathExists(enginePath: string): Promise<void> {
+  if (!(await fs.pathExists(enginePath))) {
+    throw new Error(`Engine path does not exist: ${enginePath}`);
+  }
+}
 export class EngineResolver {
   /**
    * Resolves the engine path using the provided options or auto-detection.
@@ -115,9 +136,7 @@ export class EngineResolver {
     const { projectPath, enginePath } = options;
 
     if (enginePath) {
-      if (!(await fs.pathExists(enginePath))) {
-        throw new Error(`Engine path does not exist: ${enginePath}`);
-      }
+      await validateEnginePathExists(enginePath);
 
       return enginePath;
     }
@@ -127,9 +146,7 @@ export class EngineResolver {
       throw new Error('Could not determine engine path. Please specify --engine-path');
     }
 
-    if (!(await fs.pathExists(engineResult.engine.path))) {
-      throw new Error(`Engine path does not exist: ${engineResult.engine.path}`);
-    }
+    await validateEnginePathExists(engineResult.engine.path);
 
     return engineResult.engine.path;
   }
@@ -376,13 +393,7 @@ export class EngineResolver {
     const guid = fullMatch[1];
     const enginePath = fullMatch[2].trim();
 
-    return {
-      path: enginePath,
-      associationId: guid,
-      displayName: `UE Engine ${guid}`,
-      version: undefined,
-      source: 'registry',
-    };
+    return createRegistryInstallation(guid, enginePath);
   }
 
   /**
@@ -421,13 +432,7 @@ export class EngineResolver {
       return undefined;
     }
 
-    return {
-      path: enginePath,
-      associationId: guid,
-      displayName: `UE Engine ${guid}`,
-      version: undefined,
-      source: 'registry',
-    };
+    return createRegistryInstallation(guid, enginePath);
   }
 
   /**
@@ -445,7 +450,7 @@ export class EngineResolver {
     registryKey: string
   ): string | undefined {
     // Check current line first for REG_SZ
-    const regSzMatch = line.match(/REG_SZ\s+(.+)$/);
+    const regSzMatch = line.match(REG_SZ_PATH_REGEX);
     if (regSzMatch) {
       return regSzMatch[1].trim();
     }
@@ -471,7 +476,7 @@ export class EngineResolver {
       const nextLine = lines[j].trim();
 
       if (nextLine.includes('REG_SZ')) {
-        const pathMatch = nextLine.match(/REG_SZ\s+(.+)$/);
+        const pathMatch = nextLine.match(REG_SZ_PATH_REGEX);
         if (pathMatch) {
           return pathMatch[1].trim();
         }
