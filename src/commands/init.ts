@@ -59,15 +59,13 @@ export async function executeInit(options: InitCommandOptions): Promise<InitResu
   }
 
   if (!Validator.isValidProjectName(options.name)) {
-    logger.error(`Invalid project name: ${options.name}`);
     logger.info('Project name can only contain: a-z, A-Z, 0-9, _, -');
-    throw new Error('Invalid project name');
+    throw new Error(`Invalid project name: ${options.name}`);
   }
 
   if (!Validator.isValidProjectType(projectType)) {
-    logger.error(`Invalid project type: ${projectType}`);
     logger.info('Valid types: cpp, blueprint, blank');
-    throw new Error('Invalid project type');
+    throw new Error(`Invalid project type: ${projectType}`);
   }
 
   logger.info(`Initializing ${chalk.bold(options.name)} as ${projectType.toUpperCase()} project`);
@@ -132,7 +130,6 @@ export async function executeInit(options: InitCommandOptions): Promise<InitResu
     logger.info(`Project location: ${result.projectPath}`);
     logger.write(`Engine association: ${result.engineAssociation}\n`);
   } else {
-    logger.error(`Failed to initialize project: ${result.error}`);
     throw new Error(result.error || 'Project initialization failed');
   }
 

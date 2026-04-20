@@ -25,6 +25,8 @@ MAINTENANCE RULES:
 - extractEngineInstallations() now validates InstallLocation is a non-empty string before adding to installations. Prevents undefined path crashes from malformed launcher manifests. (iter 48)
 - createGameModeSource() template now emits correct C++ formatting (closing brace on own line instead of `}}`). (iter 48)
 - Coverage: 99.82% branches (engine-resolver.ts:604-605 are untested defensive guards for malformed InstallLocation).
+- Double error logging fixed: 4 command files (generate, init, list, engine) had `logger.error()` before `throw`, then `handleCommandError` re-logged the same error. Removed the redundant `logger.error()` calls. Also made init.ts throw messages more specific (include the invalid value).
+- Known remaining inconsistencies: update.ts uses `new Logger({...})` instead of `Logger.fromStreams()`; gencodebase.ts uses static Logger methods instead of instance (breaks stream redirection/silencing); build.ts and run.ts lack handleCommandError prefixes; engine.ts:156 duplicates "No engine installation found" warning from line 122.
 - Zero `as any` type assertions in production code (fully eliminated from earlier debt).
 - `formatEngineVersion()` extracted to src/utils/version.ts (iter 41). Replaced 6 inline duplications.
 - Logger static delegation methods replaced with compact arrow function properties (iter 43).

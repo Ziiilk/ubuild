@@ -53,7 +53,6 @@ export async function executeGenerate(options: GenerateCommandOptions): Promise<
   const ide = options.ide || DEFAULTS.IDE;
 
   if (!Validator.isValidIDE(ide)) {
-    logger.error(`Invalid IDE type: ${ide}`);
     listAvailableIDEs(logger);
     throw new Error(`Invalid IDE type: ${ide}`);
   }
@@ -71,7 +70,6 @@ export async function executeGenerate(options: GenerateCommandOptions): Promise<
   logger.divider();
 
   if (!result.success) {
-    logger.error(`Failed to generate project files: ${result.error}`);
     throw new Error(result.error || 'Failed to generate project files');
   }
 

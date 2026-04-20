@@ -196,8 +196,6 @@ describe('executeList', () => {
           stderr,
         })
       ).rejects.toThrow('No .uproject file found');
-
-      expect(stderr.output).toContain('No .uproject file found');
     });
 
     it('throws error with fallback message when project detection fails without error details', async () => {
@@ -215,8 +213,6 @@ describe('executeList', () => {
           stderr,
         })
       ).rejects.toThrow('Project detection failed');
-
-      expect(stderr.output).toContain('Project detection failed');
     });
 
     it('throws error when no project is returned', async () => {
@@ -233,8 +229,6 @@ describe('executeList', () => {
           stderr,
         })
       ).rejects.toThrow('No project found');
-
-      expect(stderr.output).toContain('No project found');
     });
 
     it('throws error on unexpected exception', async () => {
@@ -266,7 +260,6 @@ describe('executeList', () => {
         })
       ).rejects.toThrow();
 
-      expect(stderr.output).toContain('Invalid project');
       expect(stdout.output).toContain('Warning 1');
       expect(stdout.output).toContain('Warning 2');
     });

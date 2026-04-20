@@ -75,7 +75,6 @@ describe('executeInit', () => {
         )
       ).rejects.toThrow('Invalid project name');
 
-      expect(stderr.output).toContain('Invalid project name');
       expect(mockInitialize).not.toHaveBeenCalled();
     });
 
@@ -124,7 +123,6 @@ describe('executeInit', () => {
         )
       ).rejects.toThrow('Invalid project type');
 
-      expect(stderr.output).toContain('Invalid project type');
       expect(mockInitialize).not.toHaveBeenCalled();
     });
 
@@ -391,8 +389,6 @@ describe('executeInit', () => {
       await expect(executeInit(createOptions({ stdout, stderr }))).rejects.toThrow(
         'Engine not found'
       );
-
-      expect(stderr.output).toContain('Engine not found');
     });
 
     it('throws error with default message when error is empty', async () => {

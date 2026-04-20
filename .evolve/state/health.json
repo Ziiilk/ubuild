@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "capturedAt": "2026-04-20T09:06:13.869Z",
+  "capturedAt": "2026-04-20T10:09:00.895Z",
   "project": "ubuild",
   "runtime": "node",
   "capabilities": {
@@ -9,7 +9,7 @@
     "lint": true,
     "coverage": true
   },
-  "iterations": 47,
+  "iterations": 49,
   "consecutiveSkips": 0,
   "lastDecision": "UNKNOWN",
   "lastSuccess": false,

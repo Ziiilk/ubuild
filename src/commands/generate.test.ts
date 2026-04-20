@@ -117,8 +117,6 @@ describe('executeGenerate', () => {
           stderr,
         })
       ).rejects.toThrow('Invalid IDE type: invalid-ide');
-
-      expect(stderr.output).toContain('Invalid IDE type: invalid-ide');
     });
   });
 
@@ -265,8 +263,6 @@ describe('executeGenerate', () => {
           stderr,
         })
       ).rejects.toThrow('Engine path not found');
-
-      expect(stderr.output).toContain('Engine path not found');
     });
 
     it('throws error on unexpected exception', async () => {
@@ -294,8 +290,6 @@ describe('executeGenerate', () => {
           stderr,
         })
       ).rejects.toThrow('Failed to generate project files');
-
-      expect(stderr.output).toContain('Failed to generate project files');
     });
   });
 

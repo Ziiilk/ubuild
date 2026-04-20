@@ -49,7 +49,6 @@ export async function executeList(options: ListCommandOptions): Promise<void> {
   logger.title('Project Detection');
 
   if (!result.isValid) {
-    logger.error(result.error || 'Project detection failed');
     if (result.warnings.length > 0) {
       logger.warning('Warnings:');
       result.warnings.forEach((warning) => logger.write(`  • ${warning}\n`));
@@ -58,7 +57,6 @@ export async function executeList(options: ListCommandOptions): Promise<void> {
   }
 
   if (!result.project) {
-    logger.error('No project found');
     throw new Error('No project found');
   }
 

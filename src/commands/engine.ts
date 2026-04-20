@@ -91,7 +91,6 @@ export async function executeEngine(options: EngineCommandOptions): Promise<void
   }
 
   if (result.error) {
-    logger.error(result.error);
     throw new Error(result.error);
   }
 
