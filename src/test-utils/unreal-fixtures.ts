@@ -3,7 +3,7 @@ import path from 'path';
 import { EngineInstallation, EngineVersionInfo } from '../types/engine';
 import { UProject } from '../types/project';
 
-type UProjectModule = UProject['Modules'][number];
+type UProjectModule = NonNullable<UProject['Modules']>[number];
 type UProjectPlugin = NonNullable<UProject['Plugins']>[number];
 type ProjectTargetType = 'Editor' | 'Game' | 'Client' | 'Server';
 

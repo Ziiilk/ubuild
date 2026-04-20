@@ -72,7 +72,7 @@ export async function executeList(options: ListCommandOptions): Promise<void> {
   logger.write(`  Source Directory: ${project.sourceDir || 'Not found'}\n`);
   logger.write(`  Engine Association: ${project.uproject.EngineAssociation}\n`);
 
-  if (project.uproject.Modules.length > 0) {
+  if (project.uproject.Modules && project.uproject.Modules.length > 0) {
     logger.subTitle('Modules');
     project.uproject.Modules.forEach((module) => {
       logger.write(`  • ${module.Name} (${module.Type}) - Loading: ${module.LoadingPhase}\n`);

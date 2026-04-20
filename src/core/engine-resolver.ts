@@ -598,9 +598,16 @@ export class EngineResolver {
         continue;
       }
 
-      Logger.debug(`Found UE installation: ${appName} at ${entry.InstallLocation}`);
+      // Validate InstallLocation — skip entries with missing or non-string paths
+      const installLocation = entry.InstallLocation;
+      if (typeof installLocation !== 'string' || installLocation.length === 0) {
+        Logger.debug(`Skipping UE installation with invalid InstallLocation: ${appName}`);
+        continue;
+      }
+
+      Logger.debug(`Found UE installation: ${appName} at ${installLocation}`);
       installations.push({
-        path: entry.InstallLocation as string,
+        path: installLocation,
         associationId: appName,
         displayName: (entry.DisplayName as string) || appName,
         installedDate: entry.InstallDate as string | undefined,

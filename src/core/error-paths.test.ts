@@ -121,7 +121,7 @@ describe('Error path coverage', () => {
         const result = await ProjectDetector.detectProject({ cwd: rootDir, recursive: false });
 
         expect(result.isValid).toBe(true);
-        expect(result.project?.uproject.Modules[0].Name).toBe(longName);
+        expect(result.project?.uproject.Modules![0].Name).toBe(longName);
       });
     });
 

@@ -23,10 +23,10 @@ describe('createFakeProject', () => {
     // Verify uproject content
     expect(project.uproject.FileVersion).toBe(3);
     expect(project.uproject.EngineAssociation).toBe('5.3');
-    expect(project.uproject.Modules).toHaveLength(1);
-    expect(project.uproject.Modules[0].Name).toBe('TestProject');
-    expect(project.uproject.Modules[0].Type).toBe('Runtime');
-    expect(project.uproject.Modules[0].LoadingPhase).toBe('Default');
+    expect(project.uproject.Modules!).toHaveLength(1);
+    expect(project.uproject.Modules![0].Name).toBe('TestProject');
+    expect(project.uproject.Modules![0].Type).toBe('Runtime');
+    expect(project.uproject.Modules![0].LoadingPhase).toBe('Default');
 
     await tempDir.cleanup();
   });
@@ -38,7 +38,7 @@ describe('createFakeProject', () => {
     expect(project.projectName).toBe('MyGame');
     expect(project.projectDir).toBe(path.join(tempDir.path, 'MyGame'));
     expect(project.uprojectPath).toBe(path.join(tempDir.path, 'MyGame', 'MyGame.uproject'));
-    expect(project.uproject.Modules[0].Name).toBe('MyGame');
+    expect(project.uproject.Modules![0].Name).toBe('MyGame');
 
     await tempDir.cleanup();
   });
@@ -84,13 +84,13 @@ describe('createFakeProject', () => {
       ],
     });
 
-    expect(project.uproject.Modules).toHaveLength(2);
-    expect(project.uproject.Modules[0].Name).toBe('CoreModule');
-    expect(project.uproject.Modules[0].Type).toBe('Runtime');
-    expect(project.uproject.Modules[0].LoadingPhase).toBe('PreDefault');
-    expect(project.uproject.Modules[1].Name).toBe('EditorExt');
-    expect(project.uproject.Modules[1].Type).toBe('Editor');
-    expect(project.uproject.Modules[1].LoadingPhase).toBe('PostDefault');
+    expect(project.uproject.Modules!).toHaveLength(2);
+    expect(project.uproject.Modules![0].Name).toBe('CoreModule');
+    expect(project.uproject.Modules![0].Type).toBe('Runtime');
+    expect(project.uproject.Modules![0].LoadingPhase).toBe('PreDefault');
+    expect(project.uproject.Modules![1].Name).toBe('EditorExt');
+    expect(project.uproject.Modules![1].Type).toBe('Editor');
+    expect(project.uproject.Modules![1].LoadingPhase).toBe('PostDefault');
 
     // Verify module files are created
     expect(project.modulePaths).toHaveLength(2);

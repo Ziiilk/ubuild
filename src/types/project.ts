@@ -37,8 +37,11 @@ export interface UProject {
   Category?: string;
   /** Project description */
   Description?: string;
-  /** Array of project modules with build configuration */
-  Modules: Array<{
+  /** Array of project modules with build configuration.
+   *  Optional for Blueprint projects that have no source modules.
+   *  When present, must be an array of module descriptors.
+   */
+  Modules?: Array<{
     /** Module name */
     Name: string;
     /** Module type determining when/how it loads */

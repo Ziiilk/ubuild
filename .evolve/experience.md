@@ -19,11 +19,12 @@ MAINTENANCE RULES:
 - If there is nothing new to record, leave the file unchanged — editing for its own sake wastes an iteration.
 -->
 
-- engine-resolver.ts (~773 lines) is the largest core module. Now includes `resolveProjectAndEngine()` which combines `ProjectPathResolver.resolveOrThrow` + `EngineResolver.resolveEnginePath`.
+- engine-resolver.ts (~780 lines) is the largest core module. Now includes `resolveProjectAndEngine()` which combines `ProjectPathResolver.resolveOrThrow` + `EngineResolver.resolveEnginePath`.
 - `resolveProjectAndEngine` extracted to EngineResolver (iter 45). Replaced 4 duplicated resolveOrThrow+resolveEnginePath 2-step patterns in build-executor, project-generator, project-runner, compile-commands-generator.
-- project-detector.ts:153 contradicts validator.ts:207 on .uproject Modules validation — FIXED in iter 41. Detector now accepts missing Modules (blueprint projects), only rejects non-array Modules values.
-- project-initializer.ts:544 hardcoded ThirdPerson path — FIXED in iter 42. createGameModeSource() now receives template param; ConstructorHelpers pawn class only generated for ThirdPerson template.
-- Coverage metrics: 100% branches/funcs/lines/stmts. All files at 100%.
+- UProject.Modules type is now optional — blueprint projects may have no Modules. list.ts uses optional chaining to guard access. (iter 48)
+- extractEngineInstallations() now validates InstallLocation is a non-empty string before adding to installations. Prevents undefined path crashes from malformed launcher manifests. (iter 48)
+- createGameModeSource() template now emits correct C++ formatting (closing brace on own line instead of `}}`). (iter 48)
+- Coverage: 99.82% branches (engine-resolver.ts:604-605 are untested defensive guards for malformed InstallLocation).
 - Zero `as any` type assertions in production code (fully eliminated from earlier debt).
 - `formatEngineVersion()` extracted to src/utils/version.ts (iter 41). Replaced 6 inline duplications.
 - Logger static delegation methods replaced with compact arrow function properties (iter 43).

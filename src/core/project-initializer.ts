@@ -559,7 +559,8 @@ public:
 
 A${name}GameModeBase::A${name}GameModeBase()
 {
-${constructorBody}}`;
+${constructorBody}
+}`;
 
     await fs.writeFile(filePath, content, 'utf-8');
     return filePath;
