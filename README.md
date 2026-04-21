@@ -1,6 +1,6 @@
 # ubuild
 
-Unreal Engine project management CLI tool for Agent integration.
+Unreal Engine project management CLI tool.
 
 ## Features
 
@@ -13,7 +13,6 @@ Unreal Engine project management CLI tool for Agent integration.
 - **Update Tool** (`ubuild update`): Update ubuild to the latest version
 - **Generate Compile Commands** (`ubuild gencodebase`): Generate compile_commands.json for IDE code completion
 - **Clean Build Artifacts** (`ubuild clean`): Remove Binaries, Intermediate, and Saved directories
-- **Self-Evolution** (`ubuild evolve`): Continuously improve ubuild codebase using AI (requires OpenCode)
 
 ## Installation
 
@@ -69,45 +68,20 @@ ubuild clean --binaries-only
 # Display version information
 ubuild version
 ubuild version --json
-
-# Self-evolve ubuild codebase (requires OpenCode)
-ubuild evolve
-ubuild evolve --once
-ubuild evolve --dry-run
 ```
 
 ### Programmatic API
 
-```javascript
-import UEBuildAPI from '@zitool/ubuild';
+```typescript
+import { buildCommand, listCommand, engineCommand } from '@zitool/ubuild';
+import { Command } from 'commander';
 
-// Detect project
-const project = await UEBuildAPI.project.detect();
+const program = new Command();
 
-// Resolve engine
-const engine = await UEBuildAPI.engine.resolve();
-
-// Build project
-const buildResult = await UEBuildAPI.build.execute({
-  target: 'Editor',
-  config: 'Development',
-  platform: 'Win64',
-});
-
-// Generate project files
-const genResult = await UEBuildAPI.generate.generate({
-  ide: 'vscode',
-});
-
-// Initialize new project
-const initResult = await UEBuildAPI.init.initialize({
-  name: 'MyProject',
-  type: 'cpp',
-});
-
-// Create concurrent builder/runner
-const builder = UEBuildAPI.concurrent.createBuilder();
-const runner = UEBuildAPI.concurrent.createRunner();
+// Register commands with your Commander program
+listCommand(program);
+engineCommand(program);
+buildCommand(program);
 ```
 
 ## Command Reference
@@ -234,22 +208,6 @@ Display ubuild version information.
 Options:
 
 - `-j, --json`: Output result as JSON
-
-### `ubuild evolve`
-
-Self-evolve ubuild codebase using OpenCode. Runs a continuous improvement loop that analyzes the codebase, applies changes, and verifies them. Requires OpenCode CLI to be installed (`npm install -g opencode`).
-
-Options:
-
-- `--once`: Run only one iteration and exit (default: run forever)
-- `--dry-run`: Show what would be done without actually executing
-- `--sleep <ms>`: Sleep duration between iterations in milliseconds (default: 5000)
-- `--use-ts-node`: Use ts-node for verification instead of compiled dist
-- `--verify-timeout <ms>`: Timeout for verification checks in milliseconds (default: 60000)
-- `--opencode-timeout <ms>`: Timeout for OpenCode execution in milliseconds (default: 600000)
-- `--max-retries <n>`: Maximum consecutive retry attempts on failure (default: 5, use -1 for unlimited)
-
-**Note:** Press `Ctrl+C` to stop the evolution loop.
 
 ## Engine Detection
 

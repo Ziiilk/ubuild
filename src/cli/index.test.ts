@@ -1,8 +1,8 @@
 /**
  * Tests for CLI entry point.
  *
- * Tests the main CLI initialization, command registration, conditional evolve
- * command loading, and error handling behavior.
+ * Tests the main CLI initialization, command registration,
+ * and error handling behavior.
  */
 
 import { Command } from 'commander';

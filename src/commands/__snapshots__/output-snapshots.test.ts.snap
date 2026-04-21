@@ -11,28 +11,28 @@ exports[`CLI Output Snapshots version command matches snapshot for JSON version 
 
 exports[`CLI Output Snapshots version command matches snapshot for fallback version output: version-fallback-output 1`] = `
 "
-[1m[36mubuild - Unreal Engine Project Management[39m[22m
-[36m═════════════════════════════════════════[39m
+ubuild - Unreal Engine Project Management
+═════════════════════════════════════════
 
-  Version: [1m[36munknown[39m[22m
-  Package: [90m@zitool/ubuild[39m
+  Version: unknown
+  Package: @zitool/ubuild
 
 Unreal Engine project management CLI tool
 
-[32m✓[39m Version information retrieved successfully
+✓ Version information retrieved successfully
 "
 `;
 
 exports[`CLI Output Snapshots version command matches snapshot for normal version output: version-normal-output 1`] = `
 "
-[1m[36mubuild - Unreal Engine Project Management[39m[22m
-[36m═════════════════════════════════════════[39m
+ubuild - Unreal Engine Project Management
+═════════════════════════════════════════
 
-  Version: [1m[36m1.0.0[39m[22m
-  Package: [90m@zitool/ubuild[39m
+  Version: 1.0.0
+  Package: @zitool/ubuild
 
 Unreal Engine project management CLI tool
 
-[32m✓[39m Version information retrieved successfully
+✓ Version information retrieved successfully
 "
 `;

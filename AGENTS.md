@@ -151,18 +151,11 @@ Match the surrounding file and keep edits Prettier-compatible.
 
 ## ESLint notes
 
-Two ESLint configs exist:
-
-- `eslint.config.js`
-- `.eslintrc.json`
-
-Both express roughly the same intent:
+ESLint config: `eslint.config.mjs` (flat config format).
 
 - `@typescript-eslint/no-explicit-any` is `warn`
 - `@typescript-eslint/no-unused-vars` ignores `_`-prefixed args
 - `no-console` warns, except for `warn` and `error`
-
-Do not assume which config is authoritative unless tooling output confirms it.
 
 ## Import conventions
 
@@ -317,8 +310,7 @@ There is an ad hoc script `test-build.js`, but it is not part of the standard np
 - `package.json`
 - `tsconfig.json`
 - `jest.config.js`
-- `eslint.config.js`
-- `.eslintrc.json`
+- `eslint.config.mjs`
 - `.prettierrc.json`
 - `src/cli/index.ts`
 - the relevant file in `src/commands/`
