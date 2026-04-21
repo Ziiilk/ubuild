@@ -24,7 +24,7 @@ describe('CLI Output Snapshots', () => {
       mockedFs.readJson.mockResolvedValue({
         version: '1.0.0',
         name: '@zitool/ubuild',
-        description: 'Unreal Engine project management CLI tool for Agent integration',
+        description: 'Unreal Engine project management CLI tool',
       });
 
       await executeVersion({ stdout: capture.stdout, stderr: capture.stderr });
@@ -39,7 +39,7 @@ describe('CLI Output Snapshots', () => {
       mockedFs.readJson.mockResolvedValue({
         version: '1.0.0',
         name: '@zitool/ubuild',
-        description: 'Unreal Engine project management CLI tool for Agent integration',
+        description: 'Unreal Engine project management CLI tool',
       });
 
       await executeVersion({ stdout: capture.stdout, stderr: capture.stderr, json: true });

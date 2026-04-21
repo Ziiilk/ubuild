@@ -1,7 +1,7 @@
 {
   "name": "@zitool/ubuild",
   "version": "0.0.11",
-  "description": "Unreal Engine project management CLI tool for Agent integration",
+  "description": "Unreal Engine project management CLI tool",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
