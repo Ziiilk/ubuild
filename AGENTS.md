@@ -100,7 +100,7 @@ npx jest -t "test name"
 
 Reality check:
 
-- Jest is configured with 42 test files covering core modules, commands, types, and utilities
+- Jest is configured with 48 test files covering core modules, commands, types, and utilities
 - All tests pass: `npm test`
 - Single-test execution works via Jest CLI: `npx jest --runTestsByPath "src/path/to/file.test.ts"`
 
@@ -297,7 +297,7 @@ Reuse `Validator` where it already matches the responsibility.
 
 ## Testing guidance
 
-Because Jest is configured with comprehensive test coverage (42 test files), maintain the existing high standard:
+Because Jest is configured with comprehensive test coverage (48 test files), maintain the existing high standard:
 
 - If you add a clear unit boundary, consider adding a Jest test under `src/` with `*.test.ts` or `*.spec.ts` naming.
 - If you add a test, verify it with `npx jest --runTestsByPath <path>`.
