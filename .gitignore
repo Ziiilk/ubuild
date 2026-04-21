@@ -12,6 +12,7 @@ dist/
 coverage/
 .nyc_output
 *coverage_report.txt
+coverage-output.txt
 
 # Environment
 .env
