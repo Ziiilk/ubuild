@@ -33,6 +33,7 @@ import { runCommand } from '../commands/run';
 import { updateCommand } from '../commands/update';
 import { gencodebaseCommand } from '../commands/gencodebase';
 import { cleanCommand } from '../commands/clean';
+import { switchCommand } from '../commands/switch';
 import { versionCommand } from '../commands/version';
 import { version, description } from '../../package.json';
 
@@ -55,6 +56,7 @@ runCommand(program);
 updateCommand(program);
 gencodebaseCommand(program);
 cleanCommand(program);
+switchCommand(program);
 versionCommand(program);
 
 program.configureHelp({

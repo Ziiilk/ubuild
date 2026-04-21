@@ -13,6 +13,7 @@ Unreal Engine project management CLI tool.
 - **Update Tool** (`ubuild update`): Update ubuild to the latest version
 - **Generate Compile Commands** (`ubuild gencodebase`): Generate compile_commands.json for IDE code completion
 - **Clean Build Artifacts** (`ubuild clean`): Remove Binaries, Intermediate, and Saved directories
+- **Switch Engine** (`ubuild switch`): Switch project engine association to a different installation
 
 ## Installation
 
@@ -64,6 +65,10 @@ ubuild update
 # Clean build artifacts
 ubuild clean
 ubuild clean --binaries-only
+
+# Switch engine association
+ubuild switch
+ubuild switch --engine-path "C:/Program Files/Epic Games/UE_5.4"
 
 # Display version information
 ubuild version
@@ -208,6 +213,15 @@ Display ubuild version information.
 Options:
 
 - `-j, --json`: Output result as JSON
+
+### `ubuild switch`
+
+Switch Unreal Engine association for the current project. Lists available engine installations and updates the `.uproject` file's `EngineAssociation` field.
+
+Options:
+
+- `-p, --project <path>`: Path to project directory or .uproject file
+- `--engine-path <path>`: Path to target Unreal Engine installation
 
 ## Engine Detection
 

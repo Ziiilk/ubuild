@@ -23,6 +23,7 @@ import { runCommand } from './commands/run';
 import { updateCommand } from './commands/update';
 import { gencodebaseCommand, executeGencodebase } from './commands/gencodebase';
 import { cleanCommand } from './commands/clean';
+import { switchCommand, executeSwitch } from './commands/switch';
 import { versionCommand } from './commands/version';
 
 // Command registration functions
@@ -47,6 +48,10 @@ export {
   executeGencodebase,
   /** Register the 'clean' command for cleaning build artifacts */
   cleanCommand,
+  /** Register the 'switch' command for switching engine association */
+  switchCommand,
+  /** Execute the switch command programmatically */
+  executeSwitch,
   /** Register the 'version' command for displaying version information */
   versionCommand,
 };

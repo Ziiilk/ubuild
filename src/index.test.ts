@@ -11,6 +11,8 @@ const mockUpdateCommand = jest.fn();
 const mockGencodebaseCommand = jest.fn();
 const mockExecuteGencodebase = jest.fn();
 const mockCleanCommand = jest.fn();
+const mockSwitchCommand = jest.fn();
+const mockExecuteSwitch = jest.fn();
 const mockVersionCommand = jest.fn();
 
 jest.mock('./commands/list', () => ({
@@ -50,6 +52,11 @@ jest.mock('./commands/clean', () => ({
   cleanCommand: mockCleanCommand,
 }));
 
+jest.mock('./commands/switch', () => ({
+  switchCommand: mockSwitchCommand,
+  executeSwitch: mockExecuteSwitch,
+}));
+
 jest.mock('./commands/version', () => ({
   versionCommand: mockVersionCommand,
 }));
@@ -66,6 +73,8 @@ import {
   gencodebaseCommand,
   executeGencodebase,
   cleanCommand,
+  switchCommand,
+  executeSwitch,
   versionCommand,
 } from './index';
 
@@ -123,6 +132,16 @@ describe('Public API exports', () => {
     it('exports cleanCommand', () => {
       expect(cleanCommand).toBeDefined();
       expect(typeof cleanCommand).toBe('function');
+    });
+
+    it('exports switchCommand', () => {
+      expect(switchCommand).toBeDefined();
+      expect(typeof switchCommand).toBe('function');
+    });
+
+    it('exports executeSwitch', () => {
+      expect(executeSwitch).toBeDefined();
+      expect(typeof executeSwitch).toBe('function');
     });
 
     it('exports versionCommand', () => {

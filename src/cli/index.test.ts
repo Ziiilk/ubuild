@@ -29,6 +29,7 @@ const mockRunCommand = jest.fn();
 const mockUpdateCommand = jest.fn();
 const mockGencodebaseCommand = jest.fn();
 const mockCleanCommand = jest.fn();
+const mockSwitchCommand = jest.fn();
 const mockVersionCommand = jest.fn();
 
 jest.mock('../commands/list', () => ({
@@ -65,6 +66,10 @@ jest.mock('../commands/gencodebase', () => ({
 
 jest.mock('../commands/clean', () => ({
   cleanCommand: (program: Command) => mockCleanCommand(program),
+}));
+
+jest.mock('../commands/switch', () => ({
+  switchCommand: (program: Command) => mockSwitchCommand(program),
 }));
 
 jest.mock('../commands/version', () => ({
@@ -118,6 +123,7 @@ describe('CLI Entry Point', () => {
       expect(mockUpdateCommand).toHaveBeenCalled();
       expect(mockGencodebaseCommand).toHaveBeenCalled();
       expect(mockCleanCommand).toHaveBeenCalled();
+      expect(mockSwitchCommand).toHaveBeenCalled();
       expect(mockVersionCommand).toHaveBeenCalled();
     });
   });

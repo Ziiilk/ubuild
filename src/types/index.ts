@@ -177,3 +177,21 @@ export type {
  * ```
  */
 export type { CleanOptions, CleanResult } from './clean';
+
+/**
+ * Engine switch types for changing project engine associations.
+ *
+ * Defines options and results for switching an Unreal Engine project
+ * to a different engine installation.
+ *
+ * @example
+ * ```typescript
+ * import type { SwitchOptions, SwitchResult } from '@zitool/ubuild/types';
+ *
+ * const options: SwitchOptions = {
+ *   projectPath: './MyGame',
+ *   enginePath: 'C:/Program Files/Epic Games/UE_5.4',
+ * };
+ * ```
+ */
+export type { SwitchOptions, SwitchResult } from './switch';
