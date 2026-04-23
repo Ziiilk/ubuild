@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.12]
+
+- Add `switch` command for switching Unreal Engine association of a project
+- Refactor: extract `resolveProjectAndEngine` helper to eliminate duplicated resolution pattern across core modules
+- Refactor: convert static Logger calls to instance-based usage in command handlers
+- Fix: make UProject.Modules optional, validate InstallLocation
+- Fix: remove double error logging in generate, init, list, engine commands
+- Internal cleanup: remove dead evolve feature, remove unused dependencies
+
 ## [0.0.11]
 
 - Fix `build` command failing on Windows due to embedded quotes in `-project` argument causing UnrealBuildTool to misinterpret the project path
