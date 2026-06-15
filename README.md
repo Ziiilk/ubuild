@@ -18,13 +18,21 @@ Unreal Engine project management CLI tool — single binary, zero dependencies.
 
 ## Installation
 
-Download the latest release binary from [Releases](https://github.com/Ziiilk/ubuild/releases) and place it in your PATH.
-
-Or build from source:
+### cargo-binstall (recommended)
 
 ```bash
-cargo install --path .
+cargo binstall ubuild
 ```
+
+### cargo install (from source)
+
+```bash
+cargo install --git https://github.com/Ziiilk/ubuild
+```
+
+### Manual download
+
+Download the latest binary from [Releases](https://github.com/Ziiilk/ubuild/releases), extract, and place in your PATH.
 
 ## Usage
 
