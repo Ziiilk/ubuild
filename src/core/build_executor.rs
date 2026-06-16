@@ -11,6 +11,7 @@ use crate::utils::logger::Logger;
 use crate::utils::unreal_paths::{resolve_build_bat_path, resolve_ubt_path};
 
 use super::engine_resolver::EngineResolver;
+use super::project_path_resolver::ProjectPathResolver;
 use super::target_resolver::TargetResolver;
 
 pub struct BuildExecutor;
@@ -60,7 +61,13 @@ impl BuildExecutor {
         Logger::info(&format!("Project: {}", project.display()));
         Logger::info(&format!("Engine: {}", engine.display()));
 
-        let args = Self::build_args(
+        // Prefer Build.bat, fallback to UBT directly
+        let (executable, use_ubt_directly) = match resolve_build_bat_path(&engine) {
+            Some(bat) => (bat, false),
+            None => (resolve_ubt_path(&engine)?, true),
+        };
+
+        let mut args = Self::build_args(
             &resolved_target,
             config,
             platform,
@@ -70,12 +77,16 @@ impl BuildExecutor {
             additional_args,
         );
 
-        // Prefer Build.bat, fallback to UBT directly
-        let executable = if let Some(bat) = resolve_build_bat_path(&engine) {
-            bat
-        } else {
-            resolve_ubt_path(&engine)?
-        };
+        // When invoking UBT directly, its log defaults to the global
+        // %LOCALAPPDATA%\UnrealBuildTool\Log.txt, which collides across
+        // concurrent builds. Redirect it to a per-project log file.
+        if use_ubt_directly {
+            let log_path = ProjectPathResolver::project_dir(&project)
+                .join("Saved")
+                .join("UnrealBuildTool")
+                .join("Log.txt");
+            args.push(format!("-Log={}", log_path.display()));
+        }
 
         let (stdout, stderr, exit_code) = Self::execute_streaming(&executable, &args)?;
         let duration = start.elapsed();
