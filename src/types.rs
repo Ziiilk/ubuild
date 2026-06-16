@@ -2,6 +2,11 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+// ──── Distribution ────
+
+pub const REPO_OWNER: &str = "Ziiilk";
+pub const REPO_NAME: &str = "ubuild";
+
 // ──── Build ────
 
 pub const BUILD_TARGETS: &[&str] = &["Editor", "Game", "Client", "Server"];

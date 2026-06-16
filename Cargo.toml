@@ -1,6 +1,6 @@
 [package]
 name = "ubuild"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Unreal Engine project management CLI tool"
 license = "MIT"
@@ -20,6 +20,14 @@ thiserror = "2"
 console = "0.15"
 dialoguer = "0.11"
 glob = "0.3"
+ctrlc = "3"
+self_update = { version = "0.42", default-features = false, features = [
+    "rustls",
+    "archive-zip",
+    "archive-tar",
+    "compression-zip-deflate",
+    "compression-flate2",
+] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"

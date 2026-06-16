@@ -93,13 +93,22 @@ impl ProjectRunner {
             drop(child.stderr.take());
             Logger::success(&format!("Started process in detached mode: {basename}"));
         } else {
-            let status = Command::new(&exec_path)
+            let mut child = Command::new(&exec_path)
                 .args(&args)
                 .stdin(Stdio::inherit())
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
-                .status()
+                .spawn()
                 .with_context(|| format!("Failed to run {basename}"))?;
+
+            // Kill the spawned executable when the user presses Ctrl+C so the
+            // editor/game does not keep running after ubuild is interrupted.
+            let pid = child.id();
+            let _ = ctrlc::set_handler(move || platform::kill_process(pid));
+
+            let status = child
+                .wait()
+                .with_context(|| format!("Failed to wait for {basename}"))?;
 
             Logger::divider();
             let code = status.code().unwrap_or(-1);
