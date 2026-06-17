@@ -62,12 +62,12 @@ impl BuildExecutor {
         Logger::info(&format!("Engine: {}", engine.display()));
 
         // Prefer Build.bat, fallback to UBT directly
-        let (executable, use_ubt_directly) = match resolve_build_bat_path(&engine) {
-            Some(bat) => (bat, false),
-            None => (resolve_ubt_path(&engine)?, true),
+        let executable = match resolve_build_bat_path(&engine) {
+            Some(bat) => bat,
+            None => resolve_ubt_path(&engine)?,
         };
 
-        let mut args = Self::build_args(
+        let args = Self::build_args(
             &resolved_target,
             config,
             platform,
@@ -77,18 +77,30 @@ impl BuildExecutor {
             additional_args,
         );
 
-        // When invoking UBT directly, its log defaults to the global
-        // %LOCALAPPDATA%\UnrealBuildTool\Log.txt, which collides across
-        // concurrent builds. Redirect it to a per-project log file.
-        if use_ubt_directly {
-            let log_path = ProjectPathResolver::project_dir(&project)
-                .join("Saved")
-                .join("UnrealBuildTool")
-                .join("Log.txt");
-            args.push(format!("-Log={}", log_path.display()));
-        }
-
         let (stdout, stderr, exit_code) = Self::execute_streaming(&executable, &args)?;
+
+        // By default UBT logs to the global %LOCALAPPDATA%\UnrealBuildTool\Log.txt
+        // to stay close to native behavior. When a concurrent build holds that
+        // file, UBT aborts before doing any work. Only in that case, retry once
+        // with a per-project log file so parallel builds no longer block.
+        let (stdout, stderr, exit_code) =
+            if exit_code != 0 && Self::is_log_locked_failure(&stdout, &stderr) {
+                let log_path = ProjectPathResolver::project_dir(&project)
+                    .join("Saved")
+                    .join("UnrealBuildTool")
+                    .join("Log.txt");
+                Logger::warning(
+                    "Global UnrealBuildTool log is locked by another build; \
+                     retrying with a per-project log file",
+                );
+
+                let mut retry_args = args.clone();
+                retry_args.push(format!("-Log={}", log_path.display()));
+                Self::execute_streaming(&executable, &retry_args)?
+            } else {
+                (stdout, stderr, exit_code)
+            };
+
         let duration = start.elapsed();
 
         Ok(BuildResult {
@@ -98,6 +110,16 @@ impl BuildExecutor {
             stderr,
             duration,
         })
+    }
+
+    /// Detect the UBT failure where the global log file could not be rotated
+    /// because another process holds it open.
+    fn is_log_locked_failure(stdout: &str, stderr: &str) -> bool {
+        let mentions_backup =
+            stdout.contains("BackupLogFile") || stderr.contains("BackupLogFile");
+        let mentions_lock = stdout.contains("being used by another process")
+            || stderr.contains("being used by another process");
+        mentions_backup && mentions_lock
     }
 
     fn build_args(
