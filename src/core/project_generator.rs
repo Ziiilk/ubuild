@@ -59,6 +59,12 @@ impl ProjectGenerator {
             }
         }
 
+        if let Some(stderr) = child.stderr.take() {
+            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                eprintln!("  {line}");
+            }
+        }
+
         let status = child.wait()?;
         if !status.success() {
             anyhow::bail!(
