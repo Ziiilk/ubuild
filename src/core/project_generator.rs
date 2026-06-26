@@ -138,16 +138,17 @@ impl ProjectGenerator {
                     "type": "shell",
                     "command": "ubuild",
                     "args": ["build"],
-                    "group": { "kind": "build", "isDefault": true },
-                    "problemMatcher": []
+                    "group": "build",
+                    "problemMatcher": ["$msCompile"],
+                    "detail": "Build Unreal Engine project using ubuild"
                 },
                 {
                     "label": "ubuild: Run Project",
                     "type": "shell",
                     "command": "ubuild",
                     "args": ["run", "--build-first"],
-                    "group": "none",
-                    "problemMatcher": []
+                    "group": "build",
+                    "detail": "Build and run Unreal Engine project using ubuild"
                 }
             ]
         });

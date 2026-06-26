@@ -1,4 +1,3 @@
-use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -38,7 +37,7 @@ impl CompileCommandsGenerator {
         let mut args = vec![
             "-mode=GenerateClangDatabase".to_string(),
             format!("-Project={}", project_path.display()),
-            format!("-Target=\"{resolved_target} {platform} {config}\""),
+            format!("-Target={resolved_target} {platform} {config}"),
         ];
 
         if include_plugin_sources {
@@ -62,16 +61,17 @@ impl CompileCommandsGenerator {
             .output()
             .with_context(|| "Failed to run UnrealBuildTool")?;
 
-        // Stream output
-        for line in BufReader::new(output.stdout.as_slice()).lines().map_while(Result::ok) {
-            Logger::debug(&line);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            Logger::debug(line);
         }
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!(
-                "UBT exited with code {}: {stderr}",
-                output.status.code().unwrap_or(-1)
+                "UBT exited with code {}:\n{}\n{stderr}",
+                output.status.code().unwrap_or(-1),
+                stdout.trim_end()
             );
         }
 
