@@ -72,12 +72,7 @@ impl ProjectRunner {
         Logger::info(&format!("Running: {basename}"));
         Logger::divider();
 
-        let mut args: Vec<String> = Vec::new();
-        let lower_target = target.to_lowercase();
-        if lower_target.contains("editor") {
-            args.push(project_path.to_string_lossy().to_string());
-        }
-        args.extend(extra_args.iter().cloned());
+        let args = Self::build_launch_args(target, &project_path, extra_args);
 
         if detached {
             let mut child = Command::new(&exec_path)
@@ -181,6 +176,19 @@ impl ProjectRunner {
         candidates[0].clone()
     }
 
+    fn build_launch_args(target: &str, project_path: &Path, extra_args: &[String]) -> Vec<String> {
+        let mut args: Vec<String> = Vec::new();
+        if target.to_lowercase().contains("editor") {
+            args.push(project_path.to_string_lossy().to_string());
+            // Skip the editor's own module up-to-date check on startup; ubuild
+            // already builds (or the binaries are assumed current), so let the
+            // editor go straight to loading instead of re-validating modules.
+            args.push("-skipcompile".to_string());
+        }
+        args.extend(extra_args.iter().cloned());
+        args
+    }
+
     fn dry_run(
         target: &str,
         config: &str,
@@ -213,6 +221,9 @@ impl ProjectRunner {
             exec_path.display(),
             if exists { "Yes" } else { "No (may need build)" }
         ));
+
+        let launch_args = Self::build_launch_args(target, &project_path, extra_args);
+        Logger::info(&format!("Launch args: {}", launch_args.join(" ")));
 
         Logger::info("This is a dry run - no actual run will be performed");
         Ok(())
