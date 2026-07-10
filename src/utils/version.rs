@@ -2,11 +2,8 @@ use std::cmp::Ordering;
 
 /// Compare two version strings like "5.3.2" numerically.
 pub fn compare_versions(a: &str, b: &str) -> Ordering {
-    let parse = |s: &str| -> Vec<u32> {
-        s.split(['.', '-'])
-            .filter_map(|p| p.parse().ok())
-            .collect()
-    };
+    let parse =
+        |s: &str| -> Vec<u32> { s.split(['.', '-']).filter_map(|p| p.parse().ok()).collect() };
     let va = parse(a);
     let vb = parse(b);
 
@@ -15,7 +12,7 @@ pub fn compare_versions(a: &str, b: &str) -> Ordering {
         let pa = va.get(i).copied().unwrap_or(0);
         let pb = vb.get(i).copied().unwrap_or(0);
         match pa.cmp(&pb) {
-            Ordering::Equal => {},
+            Ordering::Equal => {}
             other => return other,
         }
     }

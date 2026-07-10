@@ -17,6 +17,9 @@ pub enum UbuildError {
     #[error("UnrealBuildTool not found. Tried:\n{}", paths.iter().map(|p| format!("  - {}", p.display())).collect::<Vec<_>>().join("\n"))]
     UbtNotFound { paths: Vec<PathBuf> },
 
+    #[error("RunUAT not found at: {0}")]
+    RunUatNotFound(PathBuf),
+
     // ── Project ──
     #[error("No .uproject file found in: {0}")]
     NoUprojectFound(PathBuf),

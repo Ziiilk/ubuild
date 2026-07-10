@@ -99,13 +99,12 @@ impl CompileCommandsGenerator {
     fn update_vscode_settings(vscode_dir: &Path) -> Result<()> {
         let settings_path = vscode_dir.join("settings.json");
 
-        let mut settings: serde_json::Map<String, serde_json::Value> =
-            if settings_path.exists() {
-                let content = std::fs::read_to_string(&settings_path)?;
-                serde_json::from_str(&content).unwrap_or_default()
-            } else {
-                serde_json::Map::new()
-            };
+        let mut settings: serde_json::Map<String, serde_json::Value> = if settings_path.exists() {
+            let content = std::fs::read_to_string(&settings_path)?;
+            serde_json::from_str(&content).unwrap_or_default()
+        } else {
+            serde_json::Map::new()
+        };
 
         settings.insert(
             "C_Cpp.default.compileCommands".to_string(),

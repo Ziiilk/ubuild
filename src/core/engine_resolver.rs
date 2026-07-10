@@ -55,9 +55,7 @@ impl EngineResolver {
         }
 
         let result = Self::resolve_engine(project_path);
-        let engine = result
-            .engine
-            .ok_or(UbuildError::EngineUnresolvable)?;
+        let engine = result.engine.ok_or(UbuildError::EngineUnresolvable)?;
 
         if !engine.path.exists() {
             return Err(UbuildError::EngineNotFound(engine.path).into());
@@ -163,9 +161,7 @@ impl EngineResolver {
                         }
                     })
                 } else {
-                    installations
-                        .iter()
-                        .find(|e| e.association_id == assoc.id)
+                    installations.iter().find(|e| e.association_id == assoc.id)
                 };
 
                 if let Some(m) = matched {
@@ -245,10 +241,7 @@ impl EngineResolver {
         use winreg::RegKey;
 
         let mut results = Vec::new();
-        let hives = [
-            (HKEY_CURRENT_USER, "HKCU"),
-            (HKEY_LOCAL_MACHINE, "HKLM"),
-        ];
+        let hives = [(HKEY_CURRENT_USER, "HKCU"), (HKEY_LOCAL_MACHINE, "HKLM")];
 
         for (hive, _label) in &hives {
             for location in REGISTRY_LOCATIONS {

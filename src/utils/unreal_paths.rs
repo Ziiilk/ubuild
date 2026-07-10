@@ -35,6 +35,19 @@ pub fn resolve_build_bat_path(engine_path: &Path) -> Option<PathBuf> {
     bat.exists().then_some(bat)
 }
 
+pub fn resolve_runuat_path(engine_path: &Path) -> Result<PathBuf, UbuildError> {
+    let runuat = engine_path
+        .join("Engine")
+        .join("Build")
+        .join("BatchFiles")
+        .join(format!("RunUAT{}", platform::bat_extension()));
+    if runuat.exists() {
+        Ok(runuat)
+    } else {
+        Err(UbuildError::RunUatNotFound(runuat))
+    }
+}
+
 pub fn resolve_engine_version_path(engine_path: &Path) -> Option<PathBuf> {
     let primary = engine_path
         .join("Engine")

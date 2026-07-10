@@ -40,14 +40,8 @@ impl TargetResolver {
 
     /// Find available targets from .Target.cs files in the project source.
     pub fn find_available_targets(project_path: &std::path::Path) -> Vec<ResolvedTarget> {
-        let project_dir = if project_path
-            .extension()
-            .is_some_and(|e| e == "uproject")
-        {
-            project_path
-                .parent()
-                .unwrap_or(project_path)
-                .to_path_buf()
+        let project_dir = if project_path.extension().is_some_and(|e| e == "uproject") {
+            project_path.parent().unwrap_or(project_path).to_path_buf()
         } else {
             project_path.to_path_buf()
         };

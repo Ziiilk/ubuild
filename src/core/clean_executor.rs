@@ -98,12 +98,7 @@ impl CleanExecutor {
         Ok(result)
     }
 
-    fn clean_path(
-        path: &Path,
-        project_dir: &Path,
-        dry_run: bool,
-        result: &mut CleanResult,
-    ) {
+    fn clean_path(path: &Path, project_dir: &Path, dry_run: bool, result: &mut CleanResult) {
         if !path.exists() {
             return;
         }

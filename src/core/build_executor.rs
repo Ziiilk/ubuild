@@ -115,8 +115,7 @@ impl BuildExecutor {
     /// Detect the UBT failure where the global log file could not be rotated
     /// because another process holds it open.
     fn is_log_locked_failure(stdout: &str, stderr: &str) -> bool {
-        let mentions_backup =
-            stdout.contains("BackupLogFile") || stderr.contains("BackupLogFile");
+        let mentions_backup = stdout.contains("BackupLogFile") || stderr.contains("BackupLogFile");
         let mentions_lock = stdout.contains("being used by another process")
             || stderr.contains("being used by another process");
         mentions_backup && mentions_lock
@@ -149,7 +148,7 @@ impl BuildExecutor {
         args
     }
 
-    fn execute_streaming(
+    pub(crate) fn execute_streaming(
         executable: &Path,
         args: &[String],
     ) -> Result<(String, String, i32)> {
@@ -159,9 +158,7 @@ impl BuildExecutor {
             args.join(" ")
         ));
 
-        let cwd = executable
-            .parent()
-            .unwrap_or_else(|| Path::new("."));
+        let cwd = executable.parent().unwrap_or_else(|| Path::new("."));
 
         let mut child = Command::new(executable)
             .args(args)

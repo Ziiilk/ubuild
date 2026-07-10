@@ -22,7 +22,9 @@ pub fn execute() -> Result<()> {
                 "GitHub anonymous rate limit reached and no gh CLI token is available; \
                  run `gh auth login` or try again later",
             )?;
-            Logger::warning("GitHub anonymous rate limit reached; retrying with gh CLI credentials");
+            Logger::warning(
+                "GitHub anonymous rate limit reached; retrying with gh CLI credentials",
+            );
             run_update(current, Some(&token)).context("Failed to update ubuild")?
         }
         Err(err) => return Err(err).context("Failed to update ubuild"),

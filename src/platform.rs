@@ -6,11 +6,30 @@ pub fn is_windows() -> bool {
 }
 
 pub fn exe_extension() -> &'static str {
-    if is_windows() { ".exe" } else { "" }
+    if is_windows() {
+        ".exe"
+    } else {
+        ""
+    }
 }
 
 pub fn bat_extension() -> &'static str {
-    if is_windows() { ".bat" } else { ".sh" }
+    if is_windows() {
+        ".bat"
+    } else {
+        ".sh"
+    }
+}
+
+/// UE target-platform name for the current host (Win64, Mac, Linux).
+pub fn host_target_platform() -> &'static str {
+    if is_windows() {
+        "Win64"
+    } else if cfg!(target_os = "macos") {
+        "Mac"
+    } else {
+        "Linux"
+    }
 }
 
 pub fn normalize_path(p: &Path) -> PathBuf {

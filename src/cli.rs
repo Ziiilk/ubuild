@@ -15,6 +15,8 @@ pub struct Cli {
 pub enum Command {
     /// Build Unreal Engine project
     Build(BuildArgs),
+    /// Make an Installed (redistributable) engine build
+    Installed(InstalledArgs),
     /// Detect and display project information
     List(ListArgs),
     /// Show engine information
@@ -74,6 +76,49 @@ pub struct BuildArgs {
     /// List available build targets
     #[arg(long)]
     pub list_targets: bool,
+}
+
+#[derive(Args)]
+pub struct InstalledArgs {
+    /// Path to the source engine root (auto-detected if omitted)
+    #[arg(long)]
+    pub engine_path: Option<String>,
+
+    /// Output directory for the built engine (-set:BuiltDirectory)
+    #[arg(long)]
+    pub output_dir: Option<String>,
+
+    /// Build for all engine-default platforms instead of host only
+    #[arg(long)]
+    pub all_platforms: bool,
+
+    /// Restrict to these target platforms (Win64,Linux,Mac,Android,IOS)
+    #[arg(long, value_delimiter = ',')]
+    pub platforms: Vec<String>,
+
+    /// Game configurations to include (Development,Shipping,DebugGame)
+    #[arg(long, value_delimiter = ',', default_value = "Development")]
+    pub configs: Vec<String>,
+
+    /// Do not build the derived-data cache (-set:WithDDC=false)
+    #[arg(long)]
+    pub no_ddc: bool,
+
+    /// Rebuild everything (-Clean)
+    #[arg(long)]
+    pub clean: bool,
+
+    /// Verbose output
+    #[arg(long)]
+    pub verbose: bool,
+
+    /// Show the composed RunUAT command without executing
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Raw args passed through to RunUAT BuildGraph (e.g. -set:KEY=VALUE)
+    #[arg(last = true)]
+    pub uat_args: Vec<String>,
 }
 
 #[derive(Args)]

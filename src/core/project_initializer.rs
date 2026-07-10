@@ -44,10 +44,10 @@ impl ProjectInitializer {
                 .flatten()
                 .any(|r| r.is_ok());
             if has_uproject {
-                return Err(
-                    UbuildError::UnsafeInitDirectory("directory contains a .uproject file".into())
-                        .into(),
-                );
+                return Err(UbuildError::UnsafeInitDirectory(
+                    "directory contains a .uproject file".into(),
+                )
+                .into());
             }
         }
 
@@ -116,10 +116,7 @@ impl ProjectInitializer {
         match installations.len() {
             0 => Err(UbuildError::NoEngineInstallations.into()),
             1 => {
-                Logger::info(&format!(
-                    "Using engine: {}",
-                    installations[0].display_name
-                ));
+                Logger::info(&format!("Using engine: {}", installations[0].display_name));
                 Ok(installations[0].path.clone())
             }
             _ => {
@@ -140,8 +137,7 @@ impl ProjectInitializer {
     fn get_engine_association_id(engine_path: &Path) -> String {
         if let Some(vp) = crate::utils::unreal_paths::resolve_engine_version_path(engine_path) {
             if let Ok(content) = fs::read_to_string(vp) {
-                if let Ok(info) =
-                    serde_json::from_str::<crate::types::EngineVersionInfo>(&content)
+                if let Ok(info) = serde_json::from_str::<crate::types::EngineVersionInfo>(&content)
                 {
                     return format!("{}.{}", info.major, info.minor);
                 }
@@ -196,18 +192,12 @@ impl ProjectInitializer {
 
         // Game target
         let game_target = source.join(format!("{name}.Target.cs"));
-        fs::write(
-            &game_target,
-            Self::target_cs_content(name, "Game"),
-        )?;
+        fs::write(&game_target, Self::target_cs_content(name, "Game"))?;
         created.push(game_target);
 
         // Editor target
         let editor_target = source.join(format!("{name}Editor.Target.cs"));
-        fs::write(
-            &editor_target,
-            Self::target_cs_content(name, "Editor"),
-        )?;
+        fs::write(&editor_target, Self::target_cs_content(name, "Editor"))?;
         created.push(editor_target);
 
         // Build.cs

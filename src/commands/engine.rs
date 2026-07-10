@@ -43,7 +43,11 @@ pub fn execute(args: EngineArgs) -> Result<()> {
             Logger::info(&format!("Changelist: {}", v.changelist));
             Logger::info(&format!(
                 "Promoted Build: {}",
-                if v.is_promoted_build != 0 { "Yes" } else { "No" }
+                if v.is_promoted_build != 0 {
+                    "Yes"
+                } else {
+                    "No"
+                }
             ));
         }
         Logger::info(&format!("Association ID: {}", engine.association_id));

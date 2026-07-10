@@ -48,10 +48,14 @@ impl ProjectRunner {
         if !no_build && build_first {
             Logger::info("Building project before running...");
             let result = BuildExecutor::execute(
-                target, config, platform,
+                target,
+                config,
+                platform,
                 Some(project_path.to_str().unwrap_or("")),
                 Some(engine.to_str().unwrap_or("")),
-                false, false, &[],
+                false,
+                false,
+                &[],
             )?;
             if !result.success {
                 anyhow::bail!("Build failed with exit code {}", result.exit_code);

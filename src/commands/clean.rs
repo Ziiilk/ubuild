@@ -12,10 +12,7 @@ pub fn execute(args: CleanArgs) -> Result<()> {
     )?;
 
     if !result.success() {
-        anyhow::bail!(
-            "Failed to clean {} path(s)",
-            result.failed_paths.len()
-        );
+        anyhow::bail!("Failed to clean {} path(s)", result.failed_paths.len());
     }
 
     Ok(())

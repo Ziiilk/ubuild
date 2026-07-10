@@ -18,7 +18,10 @@ pub fn execute(args: GencodebaseArgs) -> Result<()> {
         !args.no_engine_includes,
     )?;
 
-    Logger::success(&format!("Compile commands generated: {}", output_path.display()));
+    Logger::success(&format!(
+        "Compile commands generated: {}",
+        output_path.display()
+    ));
     Logger::success("VSCode settings updated: .vscode/settings.json");
 
     Ok(())

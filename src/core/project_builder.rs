@@ -1,6 +1,4 @@
-
 use anyhow::Result;
-use console::style;
 
 use crate::utils::logger::Logger;
 
@@ -29,7 +27,15 @@ impl ProjectBuilder {
         }
 
         if dry_run {
-            return Self::dry_run_build(target, config, platform, project, engine_path, clean, verbose);
+            return Self::dry_run_build(
+                target,
+                config,
+                platform,
+                project,
+                engine_path,
+                clean,
+                verbose,
+            );
         }
 
         Logger::info(&format!(
@@ -54,30 +60,11 @@ impl ProjectBuilder {
         if result.success {
             Logger::success(&format!("Build completed in {duration_secs:.1}s"));
         } else {
-            // Extract error lines
-            let error_lines: Vec<&str> = result
-                .stderr
-                .lines()
-                .chain(result.stdout.lines())
-                .filter(|l| {
-                    let lower = l.to_lowercase();
-                    lower.contains("error") || lower.contains("failed") || lower.contains("fatal")
-                })
-                .take(10)
-                .collect();
-
             Logger::error(&format!(
                 "Build failed (exit code {}) after {duration_secs:.1}s",
                 result.exit_code
             ));
-
-            if !error_lines.is_empty() {
-                Logger::subtitle("Error Summary:");
-                for line in &error_lines {
-                    Logger::writeln(&format!("  {}", style(line).red()));
-                }
-            }
-
+            Logger::print_error_summary(&result.stdout, &result.stderr);
             anyhow::bail!("Build failed with exit code {}", result.exit_code);
         }
 

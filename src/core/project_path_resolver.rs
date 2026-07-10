@@ -45,9 +45,10 @@ impl ProjectPathResolver {
             0 => Err(UbuildError::NoUprojectFound(dir.to_path_buf()).into()),
             1 => {
                 // SAFETY: len == 1 guaranteed by match
-                let entry = entries.into_iter().next().ok_or_else(|| {
-                    anyhow::anyhow!("unexpected empty iterator")
-                })?;
+                let entry = entries
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("unexpected empty iterator"))?;
                 Ok(entry)
             }
             _ => {
@@ -57,9 +58,10 @@ impl ProjectPathResolver {
                     dir.display(),
                     entries[0].display()
                 ));
-                let entry = entries.into_iter().next().ok_or_else(|| {
-                    anyhow::anyhow!("unexpected empty iterator")
-                })?;
+                let entry = entries
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("unexpected empty iterator"))?;
                 Ok(entry)
             }
         }
@@ -84,8 +86,9 @@ impl ProjectPathResolver {
     pub fn read_uproject(uproject_path: &Path) -> Result<crate::types::UProject> {
         let content = fs::read_to_string(uproject_path)
             .map_err(|_| UbuildError::ProjectFileNotFound(uproject_path.to_path_buf()))?;
-        let uproject: crate::types::UProject = serde_json::from_str(&content)
-            .map_err(|e| UbuildError::InvalidUproject(format!("{}: {e}", uproject_path.display())))?;
+        let uproject: crate::types::UProject = serde_json::from_str(&content).map_err(|e| {
+            UbuildError::InvalidUproject(format!("{}: {e}", uproject_path.display()))
+        })?;
         Ok(uproject)
     }
 }

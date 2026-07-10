@@ -12,10 +12,7 @@ use super::project_path_resolver::ProjectPathResolver;
 pub struct SwitchExecutor;
 
 impl SwitchExecutor {
-    pub fn execute(
-        project: Option<&str>,
-        engine_path: Option<&str>,
-    ) -> Result<SwitchResult> {
+    pub fn execute(project: Option<&str>, engine_path: Option<&str>) -> Result<SwitchResult> {
         let project_path = ProjectPathResolver::resolve_or_throw(project)?;
         let mut uproject = ProjectPathResolver::read_uproject(&project_path)?;
 
@@ -43,11 +40,7 @@ impl SwitchExecutor {
                     } else {
                         ""
                     };
-                    format!(
-                        "{} ({}){marker}",
-                        inst.display_name,
-                        inst.path.display()
-                    )
+                    format!("{} ({}){marker}", inst.display_name, inst.path.display())
                 })
                 .collect();
 

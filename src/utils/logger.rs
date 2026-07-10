@@ -52,4 +52,26 @@ impl Logger {
             eprintln!("  {} {msg}", style("⊙").dim());
         }
     }
+
+    /// Print up to 10 build error lines (error/failed/fatal) from captured output.
+    pub fn print_error_summary(stdout: &str, stderr: &str) {
+        let error_lines: Vec<&str> = stderr
+            .lines()
+            .chain(stdout.lines())
+            .filter(|l| {
+                let lower = l.to_lowercase();
+                lower.contains("error") || lower.contains("failed") || lower.contains("fatal")
+            })
+            .take(10)
+            .collect();
+
+        if error_lines.is_empty() {
+            return;
+        }
+
+        Self::subtitle("Error Summary:");
+        for line in &error_lines {
+            Self::writeln(&format!("  {}", style(line).red()));
+        }
+    }
 }
