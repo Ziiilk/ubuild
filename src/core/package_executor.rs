@@ -4,7 +4,7 @@ use std::time::Instant;
 use anyhow::Result;
 
 use crate::types::BUILD_CONFIGS;
-use crate::utils::command::display_args;
+use crate::utils::command::{display_args, uat_arg_key};
 use crate::utils::logger::Logger;
 use crate::utils::unreal_paths::resolve_runuat_path;
 
@@ -107,11 +107,7 @@ impl PackageExecutor {
 
     fn validate_uat_args(args: &[String]) -> Result<()> {
         for arg in args {
-            let key = arg
-                .trim_start_matches('-')
-                .split_once('=')
-                .map_or(arg.trim_start_matches('-'), |(key, _)| key)
-                .to_ascii_lowercase();
+            let key = uat_arg_key(arg);
             let conflicts = matches!(
                 key.as_str(),
                 "project"

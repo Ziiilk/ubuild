@@ -4,6 +4,7 @@ pub mod compile_commands_generator;
 pub mod engine_resolver;
 pub mod installed_build_executor;
 pub mod package_executor;
+pub mod plugin_builder;
 pub mod project_builder;
 pub mod project_detector;
 pub mod project_generator;

@@ -5,6 +5,7 @@ Unreal Engine project management CLI tool — single binary, zero dependencies.
 ## Features
 
 - **Project Packaging** (`ubuild package`) - build, cook, stage, package, and archive projects
+- **Plugin Packaging** (`ubuild plugin`) - build distributable plugins with UAT BuildPlugin
 
 - **Project Detection** (`ubuild list`) — detect and analyze Unreal Engine projects
 - **Engine Information** (`ubuild engine`) — resolve engine associations and versions
@@ -52,6 +53,11 @@ ubuild build
 ubuild build --target Game --config Shipping
 ubuild build --platform Linux --verbose
 ubuild build --dry-run --list-targets
+
+# Build and package a plugin (default: current host platform)
+ubuild plugin --plugin "D:/Plugins/MyPlugin"
+ubuild plugin --platforms Win64,Linux
+ubuild plugin --dry-run -- -StrictIncludes
 
 # Package project (default: Shipping, Win64)
 ubuild package
@@ -106,6 +112,24 @@ Build Unreal Engine project.
 | `--verbose` | Verbose output | |
 | `--dry-run` | Show what would be built without building | |
 | `--list-targets` | List available build targets | |
+
+### `ubuild plugin`
+
+Build and package a distributable Unreal Engine plugin with UAT BuildPlugin.
+Plugin dependencies declared in the descriptor are discovered recursively.
+
+| Option | Description | Default |
+|---|---|---|
+| `--plugin` | Path to a plugin directory or .uplugin file | unambiguous .uplugin in cwd |
+| `--output` | Final packaged plugin directory | `<plugin parent>/Dist/<plugin name>` |
+| `--engine-path` | Path to Unreal Engine installation | inferred or auto-detected |
+| `--platforms` | Target platforms; repeat or use commas | current host platform |
+| `--dry-run` | Validate and show the RunUAT command without executing | |
+| `-- <UAT_ARGS>...` | Additional non-conflicting BuildPlugin arguments | |
+
+Builds are staged before replacing an existing package, so a failed build leaves
+the previous successful package intact. BuildPlugin arguments managed by ubuild
+(`Plugin`, `Package`, `EngineDir`, and `TargetPlatforms`) cannot be overridden.
 
 ### `ubuild package`
 

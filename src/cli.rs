@@ -15,6 +15,8 @@ pub struct Cli {
 pub enum Command {
     /// Build Unreal Engine project
     Build(BuildArgs),
+    /// Build and package an Unreal Engine plugin
+    Plugin(PluginArgs),
     /// Make an Installed (redistributable) engine build
     Installed(InstalledArgs),
     /// Package an Unreal Engine project for distribution
@@ -119,6 +121,33 @@ pub struct InstalledArgs {
     pub dry_run: bool,
 
     /// Raw args passed through to RunUAT BuildGraph (e.g. -set:KEY=VALUE)
+    #[arg(last = true)]
+    pub uat_args: Vec<String>,
+}
+
+#[derive(Args)]
+pub struct PluginArgs {
+    /// Path to a plugin directory or .uplugin file
+    #[arg(long)]
+    pub plugin: Option<String>,
+
+    /// Final packaged plugin directory
+    #[arg(long)]
+    pub output: Option<String>,
+
+    /// Path to Unreal Engine installation
+    #[arg(long)]
+    pub engine_path: Option<String>,
+
+    /// Target platforms (repeat or use comma-separated values)
+    #[arg(long, value_delimiter = ',')]
+    pub platforms: Vec<String>,
+
+    /// Show the composed RunUAT command without executing
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Raw args passed through to RunUAT BuildPlugin
     #[arg(last = true)]
     pub uat_args: Vec<String>,
 }

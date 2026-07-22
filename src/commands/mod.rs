@@ -7,6 +7,7 @@ pub mod init;
 pub mod installed;
 pub mod list;
 pub mod package;
+pub mod plugin;
 pub mod run;
 pub mod switch;
 pub mod update;

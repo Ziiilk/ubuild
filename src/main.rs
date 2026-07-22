@@ -15,6 +15,7 @@ fn main() {
 
     let result = match cli.command {
         cli::Command::Build(args) => commands::build::execute(args),
+        cli::Command::Plugin(args) => commands::plugin::execute(args),
         cli::Command::Installed(args) => commands::installed::execute(args),
         cli::Command::Package(args) => commands::package::execute(args),
         cli::Command::List(args) => commands::list::execute(args),
