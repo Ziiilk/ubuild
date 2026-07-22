@@ -131,6 +131,10 @@ impl PackageExecutor {
                     | "skipstage"
                     | "skippackage"
                     | "skiparchive"
+                    | "pak"
+                    | "iostore"
+                    | "skippak"
+                    | "skipiostore"
                     | "unattended"
                     | "utf8output"
                     | "nop4"
@@ -250,6 +254,8 @@ impl PackageExecutor {
             "-cook".to_string(),
             "-stage".to_string(),
             "-package".to_string(),
+            "-pak".to_string(),
+            "-iostore".to_string(),
             "-archive".to_string(),
             format!("-archivedirectory={}", output.display()),
             "-unattended".to_string(),
@@ -280,8 +286,17 @@ mod tests {
 
     #[test]
     fn accepts_unmanaged_uat_arguments() {
-        let args = vec!["-pak".to_string(), "-iostore".to_string()];
+        let args = vec!["-compressed".to_string()];
         assert!(PackageExecutor::validate_uat_args(&args).is_ok());
+    }
+
+    #[test]
+    fn rejects_managed_container_arguments() {
+        for arg in ["-pak", "-iostore", "-skippak", "-skipiostore"] {
+            let error = PackageExecutor::validate_uat_args(&[arg.to_string()])
+                .expect_err("managed container argument should be rejected");
+            assert!(error.to_string().contains(arg));
+        }
     }
 
     #[test]
@@ -292,7 +307,7 @@ mod tests {
             "Win64",
             "Shipping",
             Path::new("C:/Output"),
-            &["-pak".to_string()],
+            &[],
         );
         for required in [
             "BuildCookRun",
@@ -300,12 +315,13 @@ mod tests {
             "-cook",
             "-stage",
             "-package",
+            "-pak",
+            "-iostore",
             "-archive",
             "-unattended",
             "-utf8output",
             "-nop4",
             "-target=Game",
-            "-pak",
         ] {
             assert!(args.iter().any(|arg| arg == required));
         }

@@ -56,7 +56,7 @@ ubuild build --dry-run --list-targets
 # Package project (default: Shipping, Win64)
 ubuild package
 ubuild package --output-dir "D:/Builds/MyGame"
-ubuild package --dry-run -- -pak -iostore
+ubuild package --dry-run -- -compressed
 
 # Generate IDE project files
 ubuild generate
@@ -121,6 +121,8 @@ Package an Unreal Engine project through the complete BuildCookRun pipeline.
 | `--output-dir` | Archive output directory | `Saved/Packages/<Platform>` |
 | `--dry-run` | Validate and show the RunUAT command without executing | |
 | `-- <UAT_ARGS>...` | Additional non-conflicting BuildCookRun arguments | |
+
+Packages use Pak and IoStore containers by default to produce standalone builds.
 
 ### `ubuild list`
 
