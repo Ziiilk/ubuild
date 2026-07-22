@@ -10,53 +10,29 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            artifact: ubuild.exe
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            artifact: ubuild
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            artifact: ubuild
-
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: x86_64-pc-windows-msvc
 
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target x86_64-pc-windows-msvc
 
       - name: Package artifact
         shell: bash
         run: |
-          src="target/${{ matrix.target }}/release/${{ matrix.artifact }}"
-          case "${{ matrix.target }}" in
-            x86_64-pc-windows-msvc)
-              cp "$src" ubuild.exe
-              7z a "ubuild-${{ matrix.target }}.zip" ubuild.exe
-              echo "ASSET=ubuild-${{ matrix.target }}.zip" >> "$GITHUB_ENV"
-              ;;
-            *)
-              cp "$src" ubuild
-              tar czf "ubuild-${{ matrix.target }}.tar.gz" ubuild
-              echo "ASSET=ubuild-${{ matrix.target }}.tar.gz" >> "$GITHUB_ENV"
-              ;;
-          esac
+          cp "target/x86_64-pc-windows-msvc/release/ubuild.exe" ubuild.exe
+          7z a "ubuild-x86_64-pc-windows-msvc.zip" ubuild.exe
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ASSET }}
-          path: ${{ env.ASSET }}
+          name: ubuild-x86_64-pc-windows-msvc.zip
+          path: ubuild-x86_64-pc-windows-msvc.zip
 
   release:
     needs: build
