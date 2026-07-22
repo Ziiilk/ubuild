@@ -4,6 +4,7 @@ use std::time::Instant;
 use anyhow::Result;
 
 use crate::platform;
+use crate::utils::command::display_args;
 use crate::utils::logger::Logger;
 use crate::utils::unreal_paths::resolve_runuat_path;
 
@@ -64,11 +65,7 @@ impl InstalledBuildExecutor {
 
         if dry_run {
             Logger::subtitle("Dry Run - RunUAT Command");
-            Logger::writeln(&format!(
-                "  {} {}",
-                runuat.display(),
-                Self::display_args(&args)
-            ));
+            Logger::writeln(&format!("  {} {}", runuat.display(), display_args(&args)));
             Logger::info("This is a dry run - no build will be performed");
             return Ok(());
         }
@@ -95,20 +92,6 @@ impl InstalledBuildExecutor {
         Logger::print_error_summary(&stdout, &stderr);
 
         anyhow::bail!("Installed build failed with exit code {exit_code}");
-    }
-
-    /// Render argv for display so tokens containing spaces stay copy-pastable.
-    fn display_args(args: &[String]) -> String {
-        args.iter()
-            .map(|a| {
-                if a.contains(' ') {
-                    format!("\"{a}\"")
-                } else {
-                    a.clone()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
     }
 
     fn host_target_name() -> String {

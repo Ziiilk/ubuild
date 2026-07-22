@@ -4,6 +4,8 @@ Unreal Engine project management CLI tool — single binary, zero dependencies.
 
 ## Features
 
+- **Project Packaging** (`ubuild package`) - build, cook, stage, package, and archive projects
+
 - **Project Detection** (`ubuild list`) — detect and analyze Unreal Engine projects
 - **Engine Information** (`ubuild engine`) — resolve engine associations and versions
 - **Build Execution** (`ubuild build`) — build projects with various configurations
@@ -50,6 +52,11 @@ ubuild build
 ubuild build --target Game --config Shipping
 ubuild build --platform Linux --verbose
 ubuild build --dry-run --list-targets
+
+# Package project (default: Shipping, Win64)
+ubuild package
+ubuild package --output-dir "D:/Builds/MyGame"
+ubuild package --dry-run -- -pak -iostore
 
 # Generate IDE project files
 ubuild generate
@@ -99,6 +106,21 @@ Build Unreal Engine project.
 | `--verbose` | Verbose output | |
 | `--dry-run` | Show what would be built without building | |
 | `--list-targets` | List available build targets | |
+
+### `ubuild package`
+
+Package an Unreal Engine project through the complete BuildCookRun pipeline.
+
+| Option | Description | Default |
+|---|---|---|
+| `--project` | Path to project directory or .uproject file | cwd |
+| `--engine-path` | Path to Unreal Engine installation | auto-detect |
+| `--target` | Explicit Game target name | auto-detect |
+| `--platform` | Target platform | Win64 |
+| `--config` | Build configuration | Shipping |
+| `--output-dir` | Archive output directory | `Saved/Packages/<Platform>` |
+| `--dry-run` | Validate and show the RunUAT command without executing | |
+| `-- <UAT_ARGS>...` | Additional non-conflicting BuildCookRun arguments | |
 
 ### `ubuild list`
 

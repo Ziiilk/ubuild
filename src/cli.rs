@@ -17,6 +17,8 @@ pub enum Command {
     Build(BuildArgs),
     /// Make an Installed (redistributable) engine build
     Installed(InstalledArgs),
+    /// Package an Unreal Engine project for distribution
+    Package(PackageArgs),
     /// Detect and display project information
     List(ListArgs),
     /// Show engine information
@@ -117,6 +119,41 @@ pub struct InstalledArgs {
     pub dry_run: bool,
 
     /// Raw args passed through to RunUAT BuildGraph (e.g. -set:KEY=VALUE)
+    #[arg(last = true)]
+    pub uat_args: Vec<String>,
+}
+
+#[derive(Args)]
+pub struct PackageArgs {
+    /// Path to project directory or .uproject file
+    #[arg(long)]
+    pub project: Option<String>,
+
+    /// Path to Unreal Engine installation
+    #[arg(long)]
+    pub engine_path: Option<String>,
+
+    /// Explicit Game target name
+    #[arg(long)]
+    pub target: Option<String>,
+
+    /// Target platform
+    #[arg(long, default_value = "Win64")]
+    pub platform: String,
+
+    /// Build configuration
+    #[arg(long, default_value = "Shipping")]
+    pub config: String,
+
+    /// Archive output directory
+    #[arg(long)]
+    pub output_dir: Option<String>,
+
+    /// Show the composed RunUAT command without executing
+    #[arg(long)]
+    pub dry_run: bool,
+
+    /// Raw args passed through to RunUAT BuildCookRun
     #[arg(last = true)]
     pub uat_args: Vec<String>,
 }

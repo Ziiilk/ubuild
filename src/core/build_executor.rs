@@ -168,31 +168,45 @@ impl BuildExecutor {
             .spawn()
             .with_context(|| format!("Failed to start {}", executable.display()))?;
 
-        let mut stdout_buf = String::new();
-        let mut stderr_buf = String::new();
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to capture process stdout"))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to capture process stderr"))?;
 
-        if let Some(stdout) = child.stdout.take() {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines().map_while(Result::ok) {
-                println!("  {line}");
-                stdout_buf.push_str(&line);
-                stdout_buf.push('\n');
-            }
-        }
-
-        if let Some(stderr) = child.stderr.take() {
-            let reader = BufReader::new(stderr);
-            for line in reader.lines().map_while(Result::ok) {
-                eprintln!("  {line}");
-                stderr_buf.push_str(&line);
-                stderr_buf.push('\n');
-            }
-        }
+        let (stdout_buf, stderr_buf) = std::thread::scope(|scope| {
+            let stdout_handle = scope.spawn(|| Self::read_stream(stdout, false));
+            let stderr_handle = scope.spawn(|| Self::read_stream(stderr, true));
+            let stdout_buf = stdout_handle
+                .join()
+                .map_err(|_| anyhow::anyhow!("stdout reader thread panicked"))?;
+            let stderr_buf = stderr_handle
+                .join()
+                .map_err(|_| anyhow::anyhow!("stderr reader thread panicked"))?;
+            Ok::<_, anyhow::Error>((stdout_buf, stderr_buf))
+        })?;
 
         let status = child.wait().context("Failed to wait for build process")?;
         let exit_code = status.code().unwrap_or(-1);
 
         Ok((stdout_buf, stderr_buf, exit_code))
+    }
+
+    fn read_stream(stream: impl std::io::Read, is_stderr: bool) -> String {
+        let mut buffer = String::new();
+        for line in BufReader::new(stream).lines().map_while(Result::ok) {
+            if is_stderr {
+                eprintln!("  {line}");
+            } else {
+                println!("  {line}");
+            }
+            buffer.push_str(&line);
+            buffer.push('\n');
+        }
+        buffer
     }
 
     pub fn get_available_targets(project_path: &Path) -> Vec<ResolvedTarget> {

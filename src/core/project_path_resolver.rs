@@ -8,15 +8,24 @@ use crate::error::UbuildError;
 pub struct ProjectPathResolver;
 
 impl ProjectPathResolver {
+    /// Resolve input to exactly one .uproject file path.
+    pub fn resolve_strict(project_path: Option<&str>) -> Result<PathBuf> {
+        Self::resolve(project_path, true)
+    }
+
     /// Resolve input to a .uproject file path, or throw.
     pub fn resolve_or_throw(project_path: Option<&str>) -> Result<PathBuf> {
+        Self::resolve(project_path, false)
+    }
+
+    fn resolve(project_path: Option<&str>, strict: bool) -> Result<PathBuf> {
         let input = project_path.map_or_else(
             || std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             PathBuf::from,
         );
 
         if input.is_dir() {
-            return Self::find_uproject_in_dir(&input);
+            return Self::find_uproject_in_dir(&input, strict);
         }
 
         if input
@@ -33,7 +42,7 @@ impl ProjectPathResolver {
         Err(UbuildError::NoUprojectFound(input).into())
     }
 
-    fn find_uproject_in_dir(dir: &Path) -> Result<PathBuf> {
+    fn find_uproject_in_dir(dir: &Path, strict: bool) -> Result<PathBuf> {
         let pattern = format!("{}/*.uproject", dir.display());
         let entries: Vec<PathBuf> = glob::glob(&pattern)
             .into_iter()
@@ -52,6 +61,17 @@ impl ProjectPathResolver {
                 Ok(entry)
             }
             _ => {
+                if strict {
+                    anyhow::bail!(
+                        "Multiple .uproject files found in {}: {}",
+                        dir.display(),
+                        entries
+                            .iter()
+                            .map(|path| path.display().to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
                 // Multiple .uproject files; use first, warn via logger
                 crate::utils::logger::Logger::warning(&format!(
                     "Multiple .uproject files found in {}, using {}",
