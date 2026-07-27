@@ -4,6 +4,7 @@ use std::path::Path;
 use anyhow::Result;
 
 use crate::types::SwitchResult;
+use crate::utils::file::atomic_write;
 use crate::utils::logger::Logger;
 
 use super::engine_resolver::EngineResolver;
@@ -66,7 +67,7 @@ impl SwitchExecutor {
 
         uproject.engine_association.clone_from(&new_association);
         let json = serde_json::to_string_pretty(&uproject)?;
-        fs::write(&project_path, json)?;
+        atomic_write(&project_path, json)?;
 
         Logger::success(&format!(
             "Switched engine association: {previous} → {new_association}"

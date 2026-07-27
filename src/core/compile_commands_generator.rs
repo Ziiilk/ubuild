@@ -3,6 +3,7 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result};
 
+use crate::utils::file::{atomic_copy, atomic_write};
 use crate::utils::logger::Logger;
 use crate::utils::unreal_paths::resolve_ubt_path;
 
@@ -82,8 +83,10 @@ impl CompileCommandsGenerator {
 
         if source_cc.exists() {
             std::fs::create_dir_all(&dest_dir)?;
-            std::fs::rename(&source_cc, &dest_cc)
-                .or_else(|_| std::fs::copy(&source_cc, &dest_cc).map(|_| ()))?;
+            if dest_cc.exists() || std::fs::rename(&source_cc, &dest_cc).is_err() {
+                atomic_copy(&source_cc, &dest_cc)?;
+                std::fs::remove_file(&source_cc)?;
+            }
 
             // Update VSCode settings
             Self::update_vscode_settings(&dest_dir)?;
@@ -132,7 +135,7 @@ impl CompileCommandsGenerator {
         );
 
         let json = serde_json::to_string_pretty(&settings)?;
-        std::fs::write(&settings_path, json)?;
+        atomic_write(&settings_path, json)?;
 
         Ok(())
     }

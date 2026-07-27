@@ -5,6 +5,7 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, Result};
 
 use crate::types::GenerateResult;
+use crate::utils::file::atomic_write;
 use crate::utils::logger::Logger;
 use crate::utils::unreal_paths::resolve_ubt_path;
 
@@ -154,7 +155,7 @@ impl ProjectGenerator {
         });
 
         let json = serde_json::to_string_pretty(&tasks)?;
-        std::fs::write(&tasks_path, json)?;
+        atomic_write(&tasks_path, json)?;
 
         Ok(())
     }
