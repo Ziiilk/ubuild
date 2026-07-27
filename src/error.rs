@@ -11,6 +11,14 @@ pub enum UbuildError {
     #[error("Could not determine engine path. Specify --engine-path")]
     EngineUnresolvable,
 
+    #[error(
+        "Could not resolve project engine association {association}: {details}. Specify --engine-path explicitly"
+    )]
+    EngineAssociationUnresolvable {
+        association: String,
+        details: String,
+    },
+
     #[error("No Unreal Engine installations found. Checked Windows Registry, Epic Launcher, and environment variables. Specify --engine-path manually.")]
     NoEngineInstallations,
 

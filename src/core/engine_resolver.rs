@@ -55,7 +55,19 @@ impl EngineResolver {
         }
 
         let result = Self::resolve_engine(project_path);
-        let engine = result.engine.ok_or(UbuildError::EngineUnresolvable)?;
+        let unresolved_association = result
+            .uproject_engine
+            .as_ref()
+            .map(|association| association.id.as_str())
+            .filter(|association| !association.is_empty());
+        let engine = result.engine.ok_or_else(|| {
+            unresolved_association.map_or(UbuildError::EngineUnresolvable, |association| {
+                UbuildError::EngineAssociationUnresolvable {
+                    association: association.to_string(),
+                    details: result.warnings.join("; "),
+                }
+            })
+        })?;
 
         if !engine.path.exists() {
             return Err(UbuildError::EngineNotFound(engine.path).into());
@@ -147,35 +159,65 @@ impl EngineResolver {
         installations: &[EngineInstallation],
         warnings: &mut Vec<String>,
     ) -> Option<EngineInstallation> {
-        if let Some(assoc) = uproject_engine {
-            if !installations.is_empty() {
-                let is_version = !assoc.id.starts_with('{');
+        if let Some(association) = uproject_engine.filter(|association| !association.id.is_empty())
+        {
+            let exact_matches = installations
+                .iter()
+                .filter(|engine| engine.association_id == association.id)
+                .collect::<Vec<_>>();
+            if let Some(engine) = Self::unique_match(&association.id, &exact_matches, warnings) {
+                return Some(engine);
+            }
+            if exact_matches.len() > 1 {
+                return None;
+            }
 
-                let matched = if is_version {
-                    installations.iter().find(|e| {
-                        if let Some(stripped) = e.association_id.strip_prefix("UE_") {
-                            let v = stripped.replace('_', ".");
-                            compare_versions(&v, &assoc.id) == std::cmp::Ordering::Equal
-                        } else {
-                            false
-                        }
+            if let Some(version) = Self::parse_major_minor(&association.id) {
+                let launcher_matches = installations
+                    .iter()
+                    .filter(|engine| {
+                        engine
+                            .association_id
+                            .strip_prefix("UE_")
+                            .and_then(Self::parse_major_minor)
+                            .is_some_and(|candidate| candidate == version)
                     })
-                } else {
-                    installations.iter().find(|e| e.association_id == assoc.id)
-                };
-
-                if let Some(m) = matched {
-                    return Some(m.clone());
+                    .collect::<Vec<_>>();
+                if let Some(engine) =
+                    Self::unique_match(&association.id, &launcher_matches, warnings)
+                {
+                    return Some(engine);
+                }
+                if launcher_matches.len() > 1 {
+                    return None;
                 }
 
-                warnings.push(format!(
-                    "Engine with association ID {} not found in installed engines",
-                    assoc.id
-                ));
+                let version_matches = installations
+                    .iter()
+                    .filter(|engine| {
+                        engine
+                            .version
+                            .as_ref()
+                            .is_some_and(|candidate| (candidate.major, candidate.minor) == version)
+                    })
+                    .collect::<Vec<_>>();
+                if let Some(engine) =
+                    Self::unique_match(&association.id, &version_matches, warnings)
+                {
+                    return Some(engine);
+                }
+                if version_matches.len() > 1 {
+                    return None;
+                }
             }
+
+            warnings.push(format!(
+                "Engine with association ID {} not found in installed engines",
+                association.id
+            ));
+            return None;
         }
 
-        // Fallback: use newest installed engine
         if let Some(first) = installations.first() {
             warnings.push(format!(
                 "Using engine {} (not associated with project)",
@@ -191,6 +233,38 @@ impl EngineResolver {
         }
 
         None
+    }
+
+    fn unique_match(
+        association: &str,
+        matches: &[&EngineInstallation],
+        warnings: &mut Vec<String>,
+    ) -> Option<EngineInstallation> {
+        match matches {
+            [engine] => Some((*engine).clone()),
+            [] => None,
+            _ => {
+                let paths = matches
+                    .iter()
+                    .map(|engine| engine.path.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                warnings.push(format!(
+                    "Engine association {association} matches multiple installed engines: {paths}"
+                ));
+                None
+            }
+        }
+    }
+
+    fn parse_major_minor(version: &str) -> Option<(u32, u32)> {
+        let normalized = version.replace('_', ".");
+        let mut components = normalized.split('.');
+        let major = components.next()?.parse().ok()?;
+        let minor = components.next()?.parse().ok()?;
+        components
+            .all(|component| component.parse::<u32>().is_ok())
+            .then_some((major, minor))
     }
 
     fn get_engine_association_from_project(
@@ -267,21 +341,31 @@ impl EngineResolver {
                     }
 
                     let engine_path = PathBuf::from(&path_str);
-                    if engine_path.exists() {
-                        results.push(EngineInstallation {
-                            path: engine_path,
-                            association_id: name.clone(),
-                            display_name: format!("UE Engine {name}"),
-                            version: None,
-                            installed_date: None,
-                            source: EngineSource::Registry,
-                        });
+                    if let Some(installation) =
+                        Self::registry_installation(name.clone(), engine_path)
+                    {
+                        results.push(installation);
                     }
                 }
             }
         }
 
         results
+    }
+
+    fn registry_installation(
+        association_id: String,
+        engine_path: PathBuf,
+    ) -> Option<EngineInstallation> {
+        let version = Self::load_engine_version(&engine_path)?;
+        Some(EngineInstallation {
+            path: engine_path,
+            display_name: format!("UE Engine {association_id}"),
+            association_id,
+            version: Some(version),
+            installed_date: None,
+            source: EngineSource::Registry,
+        })
     }
 
     fn find_from_launcher() -> Vec<EngineInstallation> {
@@ -397,5 +481,181 @@ impl EngineResolver {
                 false
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::EngineResolver;
+    use crate::types::{EngineAssociation, EngineInstallation, EngineSource, EngineVersionInfo};
+
+    #[test]
+    fn matches_version_association_using_loaded_engine_version() {
+        let installations = vec![
+            installation("5.8", "{ENGINE-58}"),
+            installation("5.5", "{ENGINE-55}"),
+        ];
+        let association = EngineAssociation {
+            id: "5.5".to_string(),
+            name: None,
+            path: None,
+            version: None,
+        };
+        let mut warnings = Vec::new();
+
+        let matched =
+            EngineResolver::match_engine(Some(&association), &installations, &mut warnings);
+
+        assert_eq!(
+            matched.map(|engine| engine.path),
+            Some(PathBuf::from("UE_5.5"))
+        );
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn does_not_fallback_when_project_association_is_unmatched() {
+        let installations = vec![installation("5.8", "{ENGINE-58}")];
+        let association = EngineAssociation {
+            id: "5.5".to_string(),
+            name: None,
+            path: None,
+            version: None,
+        };
+        let mut warnings = Vec::new();
+
+        let matched =
+            EngineResolver::match_engine(Some(&association), &installations, &mut warnings);
+
+        assert!(matched.is_none());
+        assert_eq!(
+            warnings,
+            ["Engine with association ID 5.5 not found in installed engines"]
+        );
+    }
+
+    #[test]
+    fn prefers_exact_association_id() {
+        let installations = vec![
+            installation("5.8", "custom-engine"),
+            installation("5.5", "{ENGINE-55}"),
+        ];
+        let association = EngineAssociation {
+            id: "custom-engine".to_string(),
+            name: None,
+            path: None,
+            version: None,
+        };
+        let mut warnings = Vec::new();
+
+        let matched =
+            EngineResolver::match_engine(Some(&association), &installations, &mut warnings);
+
+        assert_eq!(
+            matched.map(|engine| engine.path),
+            Some(PathBuf::from("UE_5.8"))
+        );
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn rejects_ambiguous_version_matches() {
+        let installations = vec![
+            installation_at("5.5", "{ENGINE-55-A}", "UE_5.5_A"),
+            installation_at("5.5", "{ENGINE-55-B}", "UE_5.5_B"),
+        ];
+        let association = EngineAssociation {
+            id: "5.5".to_string(),
+            name: None,
+            path: None,
+            version: None,
+        };
+        let mut warnings = Vec::new();
+
+        let matched =
+            EngineResolver::match_engine(Some(&association), &installations, &mut warnings);
+
+        assert!(matched.is_none());
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("matches multiple installed engines"));
+        assert!(warnings[0].contains("UE_5.5_A"));
+        assert!(warnings[0].contains("UE_5.5_B"));
+    }
+
+    #[test]
+    fn rejects_registry_directory_without_engine_version() -> anyhow::Result<()> {
+        let directory = tempfile::tempdir()?;
+
+        let installation = EngineResolver::registry_installation(
+            "INSTALLDIR".to_string(),
+            directory.path().to_path_buf(),
+        );
+
+        assert!(installation.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn accepts_registry_directory_with_valid_engine_version() -> anyhow::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let version_directory = directory.path().join("Engine").join("Build");
+        std::fs::create_dir_all(&version_directory)?;
+        std::fs::write(
+            version_directory.join("Build.version"),
+            r#"{
+                "MajorVersion": 5,
+                "MinorVersion": 5,
+                "PatchVersion": 4
+            }"#,
+        )?;
+
+        let installation = EngineResolver::registry_installation(
+            "{ENGINE-55}".to_string(),
+            directory.path().to_path_buf(),
+        );
+
+        let version = installation.and_then(|engine| engine.version);
+        assert_eq!(
+            version.map(|version| (version.major, version.minor)),
+            Some((5, 5))
+        );
+        Ok(())
+    }
+
+    fn installation(version: &str, association_id: &str) -> EngineInstallation {
+        installation_at(version, association_id, &format!("UE_{version}"))
+    }
+
+    fn installation_at(version: &str, association_id: &str, path: &str) -> EngineInstallation {
+        let (major, minor) = version
+            .split_once('.')
+            .map(|(major, minor)| {
+                (
+                    major.parse::<u32>().unwrap_or_default(),
+                    minor.parse::<u32>().unwrap_or_default(),
+                )
+            })
+            .unwrap_or_default();
+
+        EngineInstallation {
+            path: PathBuf::from(path),
+            association_id: association_id.to_string(),
+            display_name: format!("UE {version}"),
+            version: Some(EngineVersionInfo {
+                major,
+                minor,
+                patch: 0,
+                changelist: 0,
+                compatible_changelist: 0,
+                is_licensee_version: 0,
+                is_promoted_build: 0,
+                branch_name: String::new(),
+                build_id: String::new(),
+            }),
+            installed_date: None,
+            source: EngineSource::Registry,
+        }
     }
 }
