@@ -1,295 +1,291 @@
 # ubuild
 
-Unreal Engine project management CLI tool — single binary, zero dependencies.
+Unreal Engine 项目管理命令行工具——单一可执行文件，无外部运行时依赖。
 
-## Features
+## 功能
 
-- **Project Packaging** (`ubuild package`) - build, cook, stage, package, and archive projects
-- **Plugin Packaging** (`ubuild plugin`) - build distributable plugins with UAT BuildPlugin
+- **项目打包**（`ubuild package`）— 构建、烘焙、暂存、打包并归档项目
+- **插件打包**（`ubuild plugin`）— 使用 UAT BuildPlugin 构建可分发插件
+- **项目检测**（`ubuild list`）— 检测并分析 Unreal Engine 项目
+- **引擎信息**（`ubuild engine`）— 解析引擎关联和版本
+- **执行构建**（`ubuild build`）— 使用不同配置构建项目
+- **生成项目文件**（`ubuild generate`）— 生成 Visual Studio、VS Code 等 IDE 项目文件
+- **初始化项目**（`ubuild init`）— 创建 C++ 或 Blueprint Unreal Engine 项目
+- **运行项目**（`ubuild run`）— 运行 Unreal Editor 或游戏可执行文件
+- **生成编译数据库**（`ubuild gencodebase`）— 为 clangd 生成 `compile_commands.json`
+- **清理构建产物**（`ubuild clean`）— 删除 Binaries、Intermediate 和 Saved 目录
+- **切换引擎**（`ubuild switch`）— 将项目关联切换到其他引擎安装
+- **查看版本**（`ubuild version`）— 显示版本信息
+- **更新**（`ubuild update`）— 显示更新说明
 
-- **Project Detection** (`ubuild list`) — detect and analyze Unreal Engine projects
-- **Engine Information** (`ubuild engine`) — resolve engine associations and versions
-- **Build Execution** (`ubuild build`) — build projects with various configurations
-- **Project Generation** (`ubuild generate`) — generate IDE project files (Visual Studio, VSCode, etc.)
-- **Project Initialization** (`ubuild init`) — create new Unreal Engine projects (C++ or Blueprint)
-- **Run Project** (`ubuild run`) — run Unreal Engine Editor or Game executable
-- **Generate Compile Commands** (`ubuild gencodebase`) — generate compile_commands.json for clangd
-- **Clean Build Artifacts** (`ubuild clean`) — remove Binaries, Intermediate, and Saved directories
-- **Switch Engine** (`ubuild switch`) — switch project engine association to a different installation
-- **Version** (`ubuild version`) — display version information
-- **Update** (`ubuild update`) — show update instructions
+## 安装
 
-## Installation
-
-### cargo-binstall (recommended)
+### cargo-binstall（推荐）
 
 ```bash
 cargo binstall ubuild
 ```
 
-### cargo install (from source)
+### cargo install（从源码安装）
 
 ```bash
 cargo install --git https://github.com/Ziiilk/ubuild
 ```
 
-### Manual download
+### 手动下载
 
-Download the latest binary from [Releases](https://github.com/Ziiilk/ubuild/releases), extract, and place in your PATH.
+从 [Releases](https://github.com/Ziiilk/ubuild/releases) 下载最新可执行文件，解压后将其所在目录加入 `PATH`。
 
-## Usage
+## 使用示例
 
 ```bash
-# Detect project in current directory
+# 检测当前目录中的项目
 ubuild list
 ubuild list --recursive --json
 
-# Show engine information
+# 显示引擎信息
 ubuild engine
 ubuild engine --verbose --json
 
-# Build project (default: Editor, Development, Win64)
+# 构建项目（默认：Editor、Development、Win64）
 ubuild build
 ubuild build --target Game --config Shipping
 ubuild build --platform Linux --verbose
 ubuild build --dry-run --list-targets
 
-# Build and package a plugin (default: current host platform)
+# 构建并打包插件（默认：当前宿主平台）
 ubuild plugin --plugin "D:/Plugins/MyPlugin"
 ubuild plugin --platforms Win64,Linux
 ubuild plugin --dry-run -- -StrictIncludes
 
-# Package project (default: Shipping, Win64)
+# 打包项目（默认：Shipping、Win64）
 ubuild package
 ubuild package --output-dir "D:/Builds/MyGame"
 ubuild package --dry-run -- -compressed
 
-# Generate IDE project files
+# 生成 IDE 项目文件
 ubuild generate
 ubuild generate --ide vscode
 ubuild generate --list-ides
 
-# Initialize new project
+# 初始化新项目
 ubuild init --name MyProject --type cpp
 ubuild init --name MyBlueprintProject --type blueprint
 
-# Run project (Editor or Game)
+# 运行项目（Editor 或 Game）
 ubuild run
 ubuild run --target Game --build-first
 ubuild run --detached -- -log
 
-# Generate compile commands for clangd
+# 为 clangd 生成编译数据库
 ubuild gencodebase
 ubuild gencodebase --no-engine-sources
 
-# Clean build artifacts
+# 清理构建产物
 ubuild clean
 ubuild clean --binaries-only --dry-run
 
-# Switch engine association
+# 切换引擎关联
 ubuild switch
 ubuild switch --engine-path "C:/Program Files/Epic Games/UE_5.4"
 
-# Display version
+# 显示版本
 ubuild version
 ubuild version --json
 ```
 
-## Command Reference
+## 命令参考
 
 ### `ubuild build`
 
-Build Unreal Engine project.
+构建 Unreal Engine 项目。
 
-| Option | Description | Default |
+| 选项 | 说明 | 默认值 |
 |---|---|---|
-| `-t, --target` | Build target (Editor, Game, Client, Server) | Editor |
-| `-c, --config` | Configuration (Debug, DebugGame, Development, Shipping, Test) | Development |
-| `-p, --platform` | Platform (Win64, Win32, Linux, Mac, Android, IOS) | Win64 |
-| `--project` | Path to project directory or .uproject file | cwd |
-| `--engine-path` | Path to Unreal Engine installation | auto-detect |
-| `--clean` | Clean build (rebuild everything) | |
-| `--verbose` | Verbose output | |
-| `--dry-run` | Show what would be built without building | |
-| `--list-targets` | List available build targets | |
+| `-t, --target` | 构建目标（Editor、Game、Client、Server） | Editor |
+| `-c, --config` | 构建配置（Debug、DebugGame、Development、Shipping、Test） | Development |
+| `-p, --platform` | 平台（Win64、Win32、Linux、Mac、Android、IOS） | Win64 |
+| `--project` | 项目目录或 `.uproject` 文件路径 | 当前目录 |
+| `--engine-path` | Unreal Engine 安装路径 | 自动检测 |
+| `--clean` | 执行完整清理构建 | |
+| `--verbose` | 输出详细信息 | |
+| `--dry-run` | 仅显示将要执行的构建 | |
+| `--list-targets` | 列出可用构建目标 | |
 
 ### `ubuild plugin`
 
-Build and package a distributable Unreal Engine plugin with UAT BuildPlugin.
-Plugin dependencies declared in the descriptor are discovered recursively.
+使用 UAT BuildPlugin 构建并打包可分发的 Unreal Engine 插件。插件描述文件中声明的依赖会被递归发现。
 
-| Option | Description | Default |
+| 选项 | 说明 | 默认值 |
 |---|---|---|
-| `--plugin` | Path to a plugin directory or .uplugin file | unambiguous .uplugin in cwd |
-| `--output` | Final packaged plugin directory | `<plugin parent>/Dist/<plugin name>` |
-| `--engine-path` | Path to Unreal Engine installation | inferred or auto-detected |
-| `--platforms` | Target platforms; repeat or use commas | current host platform |
-| `--dry-run` | Validate and show the RunUAT command without executing | |
-| `-- <UAT_ARGS>...` | Additional non-conflicting BuildPlugin arguments | |
+| `--plugin` | 插件目录或 `.uplugin` 文件路径 | 当前目录中唯一明确的 `.uplugin` |
+| `--output` | 最终插件包目录 | `<插件父目录>/Dist/<插件名称>` |
+| `--engine-path` | Unreal Engine 安装路径 | 推断或自动检测 |
+| `--platforms` | 目标平台，可重复指定或用逗号分隔 | 当前宿主平台 |
+| `--dry-run` | 验证并显示 RunUAT 命令，不实际执行 | |
+| `-- <UAT_ARGS>...` | 额外且不冲突的 BuildPlugin 参数 | |
 
-Builds are staged before replacing an existing package, so a failed build leaves
-the previous successful package intact. BuildPlugin arguments managed by ubuild
-(`Plugin`, `Package`, `EngineDir`, and `TargetPlatforms`) cannot be overridden.
+构建会先在暂存目录中完成，再替换已有插件包，因此构建失败不会破坏上一次成功的产物。由 ubuild 管理的 BuildPlugin 参数（`Plugin`、`Package`、`EngineDir` 和 `TargetPlatforms`）不能被覆盖。
 
 ### `ubuild package`
 
-Package an Unreal Engine project through the complete BuildCookRun pipeline.
+通过完整的 BuildCookRun 流程打包 Unreal Engine 项目。
 
-| Option | Description | Default |
+| 选项 | 说明 | 默认值 |
 |---|---|---|
-| `--project` | Path to project directory or .uproject file | cwd |
-| `--engine-path` | Path to Unreal Engine installation | auto-detect |
-| `--target` | Explicit Game target name | auto-detect |
-| `--platform` | Target platform | Win64 |
-| `--config` | Build configuration | Shipping |
-| `--output-dir` | Archive output directory | `Saved/Packages/<Platform>` |
-| `--dry-run` | Validate and show the RunUAT command without executing | |
-| `-- <UAT_ARGS>...` | Additional non-conflicting BuildCookRun arguments | |
+| `--project` | 项目目录或 `.uproject` 文件路径 | 当前目录 |
+| `--engine-path` | Unreal Engine 安装路径 | 自动检测 |
+| `--target` | 明确指定 Game 目标名称 | 自动检测 |
+| `--platform` | 目标平台 | Win64 |
+| `--config` | 构建配置 | Shipping |
+| `--output-dir` | 归档输出目录 | `Saved/Packages/<Platform>` |
+| `--dry-run` | 验证并显示 RunUAT 命令，不实际执行 | |
+| `-- <UAT_ARGS>...` | 额外且不冲突的 BuildCookRun 参数 | |
 
-Packages use Pak and IoStore containers by default to produce standalone builds.
+项目包默认使用 Pak 和 IoStore 容器生成独立构建。
 
 ### `ubuild list`
 
-Detect and display project information.
+检测并显示项目信息。
 
-| Option | Description |
+| 选项 | 说明 |
 |---|---|
-| `-p, --project` | Path to project directory or .uproject file |
-| `-r, --recursive` | Search recursively for .uproject files |
-| `-j, --json` | Output as JSON |
+| `-p, --project` | 项目目录或 `.uproject` 文件路径 |
+| `-r, --recursive` | 递归搜索 `.uproject` 文件 |
+| `-j, --json` | 输出 JSON |
 
 ### `ubuild engine`
 
-Show engine information.
+显示引擎信息。
 
-| Option | Description |
+| 选项 | 说明 |
 |---|---|
-| `-p, --project` | Path to project directory or .uproject file |
-| `-j, --json` | Output as JSON |
-| `-v, --verbose` | Show verbose engine detection details |
+| `-p, --project` | 项目目录或 `.uproject` 文件路径 |
+| `-j, --json` | 输出 JSON |
+| `-v, --verbose` | 显示详细的引擎检测信息 |
 
 ### `ubuild generate`
 
-Generate IDE project files.
+生成 IDE 项目文件。
 
-| Option | Description | Default |
+| 选项 | 说明 | 默认值 |
 |---|---|---|
-| `-i, --ide` | IDE type (sln, vscode, clion, xcode, vs2022) | sln |
-| `--project` | Path to project directory or .uproject file | cwd |
-| `--engine-path` | Path to Unreal Engine installation | auto-detect |
-| `--force` | Force regeneration | |
-| `--list-ides` | List available IDE types | |
+| `-i, --ide` | IDE 类型（sln、vscode、clion、xcode、vs2022） | sln |
+| `--project` | 项目目录或 `.uproject` 文件路径 | 当前目录 |
+| `--engine-path` | Unreal Engine 安装路径 | 自动检测 |
+| `--force` | 强制重新生成 | |
+| `--list-ides` | 列出可用 IDE 类型 | |
 
 ### `ubuild init`
 
-Initialize a new Unreal Engine project.
+初始化新的 Unreal Engine 项目。
 
-| Option | Description | Default |
+| 选项 | 说明 | 默认值 |
 |---|---|---|
-| `-n, --name` | Project name (required) | |
-| `-t, --type` | Project type (cpp, blueprint, blank) | cpp |
-| `--template` | Template (Basic, FirstPerson, ThirdPerson) | Basic |
-| `-d, --directory` | Directory to create project in | ./{name} |
-| `--engine-path` | Path to Unreal Engine installation | auto-detect |
-| `--force` | Force initialization even if directory is not empty | |
+| `-n, --name` | 项目名称（必填） | |
+| `-t, --type` | 项目类型（cpp、blueprint、blank） | cpp |
+| `--template` | 模板（Basic、FirstPerson、ThirdPerson） | Basic |
+| `-d, --directory` | 创建项目的目录 | `./{name}` |
+| `--engine-path` | Unreal Engine 安装路径 | 自动检测 |
+| `--force` | 即使目录非空也强制初始化 | |
 
 ### `ubuild run`
 
-Run Unreal Engine project.
+运行 Unreal Engine 项目。
 
-| Option | Description | Default |
+| 选项 | 说明 | 默认值 |
 |---|---|---|
-| `-t, --target` | Run target (Editor, Game, Client, Server) | Editor |
-| `-c, --config` | Build configuration | Development |
-| `-p, --platform` | Platform | Win64 |
-| `--project` | Path to project directory or .uproject file | cwd |
-| `--engine-path` | Path to Unreal Engine installation | auto-detect |
-| `--dry-run` | Show what would be run without running | |
-| `--build-first` | Build the project before running | |
-| `--no-build` | Do not build, just run existing executable | |
-| `--detached` | Run in detached mode (non-blocking) | |
-| `-- <args>` | Additional arguments to pass to the executable | |
+| `-t, --target` | 运行目标（Editor、Game、Client、Server） | Editor |
+| `-c, --config` | 构建配置 | Development |
+| `-p, --platform` | 平台 | Win64 |
+| `--project` | 项目目录或 `.uproject` 文件路径 | 当前目录 |
+| `--engine-path` | Unreal Engine 安装路径 | 自动检测 |
+| `--dry-run` | 仅显示将要运行的内容 | |
+| `--build-first` | 运行前先构建项目 | |
+| `--no-build` | 不构建，直接运行已有可执行文件 | |
+| `--detached` | 以分离模式运行（非阻塞） | |
+| `-- <args>` | 传递给可执行文件的额外参数 | |
 
 ### `ubuild gencodebase`
 
-Generate compile_commands.json for clangd.
+为 clangd 生成 `compile_commands.json`。
 
-| Option | Description | Default |
+| 选项 | 说明 | 默认值 |
 |---|---|---|
-| `-t, --target` | Build target | Editor |
-| `-c, --config` | Build configuration | Development |
-| `-p, --platform` | Platform | Win64 |
-| `--project` | Path to project directory or .uproject file | cwd |
-| `--engine-path` | Path to Unreal Engine installation | auto-detect |
-| `--no-plugin-sources` | Exclude plugin sources | |
-| `--no-engine-sources` | Exclude engine sources | |
-| `--no-engine-includes` | Don't use engine includes | |
+| `-t, --target` | 构建目标 | Editor |
+| `-c, --config` | 构建配置 | Development |
+| `-p, --platform` | 平台 | Win64 |
+| `--project` | 项目目录或 `.uproject` 文件路径 | 当前目录 |
+| `--engine-path` | Unreal Engine 安装路径 | 自动检测 |
+| `--no-plugin-sources` | 排除插件源码 | |
+| `--no-engine-sources` | 排除引擎源码 | |
+| `--no-engine-includes` | 不使用引擎包含目录 | |
 
 ### `ubuild clean`
 
-Clean build artifacts.
+清理构建产物。
 
-| Option | Description |
+| 选项 | 说明 |
 |---|---|
-| `-p, --project` | Path to project directory or .uproject file |
-| `--engine-path` | Path to Unreal Engine installation |
-| `--dry-run` | Show what would be deleted without deleting |
-| `--binaries-only` | Only clean Binaries and Intermediate (keep Saved) |
+| `-p, --project` | 项目目录或 `.uproject` 文件路径 |
+| `--engine-path` | Unreal Engine 安装路径 |
+| `--dry-run` | 仅显示将被删除的内容 |
+| `--binaries-only` | 仅清理 Binaries 和 Intermediate，保留 Saved |
 
 ### `ubuild switch`
 
-Switch engine association.
+切换项目的引擎关联。
 
-| Option | Description |
+| 选项 | 说明 |
 |---|---|
-| `-p, --project` | Path to project directory or .uproject file |
-| `--engine-path` | Path to target Unreal Engine installation |
+| `-p, --project` | 项目目录或 `.uproject` 文件路径 |
+| `--engine-path` | 目标 Unreal Engine 安装路径 |
 
 ### `ubuild version`
 
-Display version information.
+显示版本信息。
 
-| Option | Description |
+| 选项 | 说明 |
 |---|---|
-| `-j, --json` | Output as JSON |
+| `-j, --json` | 输出 JSON |
 
 ### `ubuild update`
 
-Show update instructions.
+显示更新说明。
 
-## Engine Detection
+## 引擎检测
 
-ubuild automatically detects Unreal Engine installations using:
+ubuild 会通过以下来源自动检测 Unreal Engine 安装：
 
-1. **Windows Registry** — `HKEY_CURRENT_USER\SOFTWARE\Epic Games\Unreal Engine\Builds`
-2. **Launcher Manifest** — `%LOCALAPPDATA%\UnrealEngine\Common\LauncherInstalled.dat`
-3. **Environment Variables** — `UE_ENGINE_PATH`, `UE_ROOT`, `UNREAL_ENGINE_PATH`
-4. **Manual** — `--engine-path` option
+1. **Windows 注册表** — HKCU/HKLM 下已知的 Unreal Engine 注册表键
+2. **Launcher 清单** — LOCALAPPDATA、PROGRAMDATA 和 APPDATA 下的已知清单路径
+3. **环境变量** — `UE_ENGINE_PATH`、`UE_ROOT`、`UNREAL_ENGINE_PATH`
+4. **手动指定** — `--engine-path` 选项
 
-When multiple engines are found, interactive selection is presented.
+注册表候选必须包含可解析的引擎版本文件。项目指定 `EngineAssociation` 时，ubuild 会依次尝试精确 ID、`UE_5_5` / `UE_5.5` 形式的关联 ID 和实际引擎主次版本匹配；无法唯一匹配时会报错，不会静默回退到其他版本。
 
-## Development
+## 开发
 
 ```bash
-# Build
+# 构建
 cargo build
 
-# Build release (optimized, stripped)
+# 构建发布版本（优化并剥离符号）
 cargo build --release
 
-# Fast compile check
+# 快速编译检查
 cargo check
 
 # Lint
 cargo clippy -- -D warnings
 
-# Format
+# 格式化
 cargo fmt
 
-# Run
+# 运行
 cargo run -- <subcommand> [args]
 ```
 
-## License
+## 许可证
 
 MIT

@@ -1,46 +1,46 @@
 # AGENTS.md
 
-Guidance for coding agents working in this repository.
+本文件为在此仓库中工作的编码代理提供指导。
 
-## Repo shape
+## 仓库结构
 
-- Single-binary Rust CLI project (edition 2021)
-- Manifest: `Cargo.toml`
-- Source: `src/`
-- Build output: `target/`
-- Entry point: `src/main.rs`
-- CLI definitions: `src/cli.rs`
+- Rust 2021 edition 的单一二进制 CLI 项目
+- 清单文件：`Cargo.toml`
+- 源码目录：`src/`
+- 构建输出：`target/`
+- 程序入口：`src/main.rs`
+- CLI 定义：`src/cli.rs`
 
-Layer split:
+分层结构：
 
-- `src/cli.rs` — clap derive definitions (Parser, Subcommand, Args)
-- `src/commands/` — thin command handlers that validate, call core, format output
-- `src/core/` — implementation logic (resolver, executor, detector, generator, etc.)
-- `src/types.rs` — shared structs, enums, constants
-- `src/error.rs` — `UbuildError` enum via thiserror
-- `src/utils/` — shared helpers (Logger, unreal_paths, version)
-- `src/platform.rs` — platform detection and path normalization
+- `src/cli.rs` — clap 派生定义（Parser、Subcommand、Args）
+- `src/commands/` — 精简的命令处理器，负责验证、调用 core 并格式化输出
+- `src/core/` — 实现逻辑（解析器、执行器、检测器、生成器等）
+- `src/types.rs` — 共享结构体、枚举和常量
+- `src/error.rs` — 基于 thiserror 的 `UbuildError` 枚举
+- `src/utils/` — 共享工具（Logger、unreal_paths、version）
+- `src/platform.rs` — 平台检测和路径标准化
 
-Do not move business logic into `src/cli.rs` or `src/commands/`.
+不要将业务逻辑移入 `src/cli.rs` 或 `src/commands/`。
 
-## Canonical commands
+## 标准命令
 
-### Build
+### 构建
 
 ```bash
 cargo build
 ```
 
-### Build (release, optimized)
+### 发布构建（优化）
 
 ```bash
 cargo build --release
 ```
 
-- Produces `target/release/ubuild.exe` (Windows)
-- Release profile: `strip=true`, `lto=true`, `codegen-units=1`
+- Windows 下生成 `target/release/ubuild.exe`
+- 发布配置：`strip=true`、`lto=true`、`codegen-units=1`
 
-### Check (fast compile check, no binary)
+### 快速编译检查
 
 ```bash
 cargo check
@@ -52,201 +52,205 @@ cargo check
 cargo clippy -- -D warnings
 ```
 
-### Format
+### 格式化
 
 ```bash
 cargo fmt
 ```
 
-### Format check
+### 格式检查
 
 ```bash
 cargo fmt -- --check
 ```
 
-### Run
+### 运行
 
 ```bash
 cargo run -- <subcommand> [args]
 ```
 
-## Rust / Clippy expectations
+## Rust / Clippy 要求
 
-`Cargo.toml` lint config:
+`Cargo.toml` 中的 lint 配置：
 
 - `unsafe_code = "forbid"`
-- `clippy::pedantic = "warn"` (base)
+- `clippy::pedantic = "warn"`（基础级别）
 - `clippy::unwrap_used = "deny"`
 - `clippy::expect_used = "warn"`
-- Several pedantic lints allowed: `module_name_repetitions`, `missing_errors_doc`, `missing_panics_doc`, `must_use_candidate`, `struct_excessive_bools`, `too_many_lines`, `doc_markdown`, `too_many_arguments`, `fn_params_excessive_bools`, `needless_pass_by_value`, `similar_names`
+- 允许的部分 pedantic lint：`module_name_repetitions`、`missing_errors_doc`、`missing_panics_doc`、`must_use_candidate`、`struct_excessive_bools`、`too_many_lines`、`doc_markdown`、`too_many_arguments`、`fn_params_excessive_bools`、`needless_pass_by_value`、`similar_names`
 
-Agent rules:
+代理规则：
 
-- Never use `unsafe`.
-- Never use `.unwrap()`. Use `?`, `anyhow::bail!`, or `.ok()` patterns.
-- `.expect()` only with genuinely impossible-to-fail cases (rare).
-- Prefer `anyhow::Result` at command boundary; `thiserror` enums in core.
-- Keep types explicit. Avoid `as` casts; prefer `.into()` / `From` impls.
+- 禁止使用 `unsafe`。
+- 禁止使用 `.unwrap()`，改用 `?`、`anyhow::bail!` 或 `.ok()` 模式。
+- 仅在确实不可能失败的情况下使用 `.expect()`，这种情况应非常少见。
+- 命令边界优先返回 `anyhow::Result`，core 层使用基于 `thiserror` 的错误枚举。
+- 类型应保持明确。避免 `as` 转换，优先使用 `.into()` 或 `From` 实现。
 
-## Formatting and style
+## 格式与风格
 
-- `cargo fmt` (rustfmt defaults)
-- 4-space indentation
-- No trailing whitespace
-- Match surrounding code style
+- 使用 `cargo fmt`（rustfmt 默认配置）
+- 缩进为 4 个空格
+- 禁止行尾空格
+- 遵循周围代码的现有风格
 
-## Architecture conventions
+## 架构约定
 
-### CLI (`src/cli.rs`)
+### CLI（`src/cli.rs`）
 
-- Single `Cli` struct with `#[derive(Parser)]`
-- `Command` enum with `#[derive(Subcommand)]`
-- Per-command `*Args` structs with `#[derive(Args)]`
-- No logic here — only clap annotations
+- 单一 `Cli` 结构体，使用 `#[derive(Parser)]`
+- `Command` 枚举，使用 `#[derive(Subcommand)]`
+- 每个命令使用独立的 `*Args` 结构体和 `#[derive(Args)]`
+- 此处只放 clap 注解，不放逻辑
 
-### Commands (`src/commands/`)
+### Commands（`src/commands/`）
 
-Each command file:
+每个命令文件：
 
-- Receives its `*Args` struct
-- Validates inputs if needed
-- Calls the corresponding core module
-- Formats output via `Logger`
-- Returns `anyhow::Result<()>`
+- 接收对应的 `*Args` 结构体
+- 按需验证输入
+- 调用对应的 core 模块
+- 通过 `Logger` 格式化输出
+- 返回 `anyhow::Result<()>`
 
-### Core (`src/core/`)
+### Core（`src/core/`）
 
-All operational logic lives here:
+所有操作逻辑均位于此处：
 
-- `BuildExecutor` — runs UBT via subprocess
-- `ProjectBuilder` — orchestrates build with target listing, dry-run
-- `EngineResolver` — finds engine installations (registry, launcher manifest, env)
-- `ProjectDetector` — discovers .uproject/.Target.cs/.Build.cs
-- `ProjectPathResolver` — resolves project path from user input
-- `TargetResolver` — resolves build targets from Source directory
-- `ProjectGenerator` — generates IDE project files
-- `ProjectInitializer` — scaffolds new UE projects
-- `ProjectRunner` — runs built executables
-- `CleanExecutor` — removes build artifacts
-- `SwitchExecutor` — switches engine association
-- `CompileCommandsGenerator` — generates compile_commands.json
+- `BuildExecutor` — 通过子进程运行 UBT
+- `ProjectBuilder` — 编排构建、目标列表和 dry-run
+- `EngineResolver` — 从注册表、Launcher 清单和环境变量查找引擎安装
+- `ProjectDetector` — 发现 `.uproject`、`.Target.cs` 和 `.Build.cs`
+- `ProjectPathResolver` — 根据用户输入解析项目路径
+- `TargetResolver` — 从 Source 目录解析构建目标
+- `ProjectGenerator` — 生成 IDE 项目文件
+- `ProjectInitializer` — 初始化新的 UE 项目
+- `ProjectRunner` — 运行已构建的可执行文件
+- `CleanExecutor` — 删除构建产物
+- `SwitchExecutor` — 切换引擎关联
+- `CompileCommandsGenerator` — 生成 `compile_commands.json`
 
-Add behavior to the most relevant existing core module.
+新增行为应放入最相关的现有 core 模块。
 
-### Types (`src/types.rs`)
+### Types（`src/types.rs`）
 
-All shared structs, enums, and constants. Key types:
+所有共享结构体、枚举和常量均放在此处。主要类型：
 
-- `BuildResult`, `CleanResult`, `SwitchResult`, `InitResult`, `GenerateResult`
-- `EngineVersionInfo`, `EngineInstallation`, `EngineSource`, `EngineAssociation`
-- `UProject`, `ProjectInfo`, `ProjectDetectionResult`, `EngineDetectionResult`
-- `ResolvedTarget`, `ModuleInfo`
-- Constants: `BUILD_TARGETS`, `BUILD_CONFIGS`, `BUILD_PLATFORMS`, `PROJECT_TYPES`, `IDE_TYPES`
+- `BuildResult`、`CleanResult`、`SwitchResult`、`InitResult`、`GenerateResult`
+- `EngineVersionInfo`、`EngineInstallation`、`EngineSource`、`EngineAssociation`
+- `UProject`、`ProjectInfo`、`ProjectDetectionResult`、`EngineDetectionResult`
+- `ResolvedTarget`、`ModuleInfo`
+- 常量：`BUILD_TARGETS`、`BUILD_CONFIGS`、`BUILD_PLATFORMS`、`PROJECT_TYPES`、`IDE_TYPES`
 
-### Error (`src/error.rs`)
+### Error（`src/error.rs`）
 
-`UbuildError` enum using `thiserror::Error`. Variants for engine, project, build, IDE errors.
+`UbuildError` 是基于 `thiserror::Error` 的错误枚举，包含引擎、项目、构建和 IDE 相关错误。
 
-### Utils (`src/utils/`)
+### Utils（`src/utils/`）
 
-- `Logger` — structured CLI output (info, success, warning, error, title, subtitle, json, debug)
-- `unreal_paths` — UBT/Build.bat/engine version path resolution
-- `version` — version comparison, format, target type inference
+- `Logger` — 结构化 CLI 输出（info、success、warning、error、title、subtitle、json、debug）
+- `unreal_paths` — 解析 UBT、Build.bat 和引擎版本路径
+- `version` — 版本比较、格式化和目标类型推断
 
-### Platform (`src/platform.rs`)
+### Platform（`src/platform.rs`）
 
-- `is_windows()`, `exe_extension()`, `bat_extension()`, `normalize_path()`
+- `is_windows()`、`exe_extension()`、`bat_extension()`、`normalize_path()`
 
-## Naming conventions
+## 命名约定
 
-- Structs / Enums: `PascalCase`
-- Functions / methods: `snake_case`
-- Files: `snake_case.rs`
-- Constants: `UPPER_SNAKE_CASE`
+- 结构体和枚举：`PascalCase`
+- 函数和方法：`snake_case`
+- 文件：`snake_case.rs`
+- 常量：`UPPER_SNAKE_CASE`
 
-Examples: `EngineResolver`, `resolve_engine`, `engine_resolver.rs`, `BUILD_TARGETS`
+示例：`EngineResolver`、`resolve_engine`、`engine_resolver.rs`、`BUILD_TARGETS`
 
-## Error handling
+## 错误处理
 
-- Core modules: return `anyhow::Result<T>` or domain-specific `Result<T, UbuildError>`
-- Commands: propagate with `?`, add context with `.context("...")`
-- `main.rs`: catch top-level errors, log via `Logger::error`, exit non-zero
-- Never swallow errors silently
-- Never leave empty match arms or catch blocks
-- Use `error instanceof Error ? error.message : String(error)` pattern equivalent:
+- Core 模块返回 `anyhow::Result<T>` 或领域专用的 `Result<T, UbuildError>`
+- Commands 使用 `?` 传播错误，通过 `.context("...")` 补充上下文
+- `main.rs` 捕获顶层错误，通过 `Logger::error` 记录并以非零状态退出
+- 禁止静默吞掉错误
+- 禁止保留空的 match 分支或 catch 块
+- 对应 `error instanceof Error ? error.message : String(error)` 的 Rust 模式：
+
   ```rust
   anyhow::bail!("Failed to ...: {e}");
   ```
 
-## Logging and output
+## 日志与输出
 
-Use `Logger` (backed by `console` crate) for all CLI output:
+所有 CLI 输出均使用基于 `console` crate 的 `Logger`：
 
-- `Logger::info(msg)`, `Logger::success(msg)`, `Logger::warning(msg)`, `Logger::error(msg)`
-- `Logger::title(msg)`, `Logger::subtitle(msg)`, `Logger::divider()`
-- `Logger::write(msg)`, `Logger::writeln(msg)`
-- `Logger::json(value)` — serializes with `serde_json`
-- `Logger::debug(msg)` — only when `UBUILD_DEBUG` env is set
+- `Logger::info(msg)`、`Logger::success(msg)`、`Logger::warning(msg)`、`Logger::error(msg)`
+- `Logger::title(msg)`、`Logger::subtitle(msg)`、`Logger::divider()`
+- `Logger::write(msg)`、`Logger::writeln(msg)`
+- `Logger::json(value)` — 使用 `serde_json` 序列化
+- `Logger::debug(msg)` — 仅在设置 `UBUILD_DEBUG` 环境变量时输出
 
-Do not use raw `println!` for user-facing output in commands.
+命令中的用户可见输出不要直接使用 `println!`。
 
-## Dependencies
+## 依赖
 
-Core dependencies (keep minimal):
+保持依赖精简。主要依赖：
 
-- `clap 4` (derive) — CLI parsing
-- `serde` + `serde_json` — JSON serialization
-- `anyhow` — top-level error handling
-- `thiserror` — structured domain errors
-- `console` — terminal styling
-- `dialoguer` — interactive prompts
-- `glob` — file pattern matching
-- `winreg` (Windows only) — registry queries
+- `clap 4`（derive）— CLI 参数解析
+- `serde` + `serde_json` — JSON 序列化
+- `anyhow` — 顶层错误处理
+- `thiserror` — 结构化领域错误
+- `console` — 终端样式
+- `dialoguer` — 交互式提示
+- `glob` — 文件模式匹配
+- `tempfile` — 安全的临时文件与原子替换
+- `winreg`（仅 Windows）— 注册表查询
 
-Do not add dependencies without justification.
+不要在没有充分理由的情况下添加依赖。
 
-## Files worth checking before larger changes
+## 较大改动前应检查的文件
 
 - `Cargo.toml`
 - `src/main.rs`
 - `src/cli.rs`
 - `src/types.rs`
 - `src/error.rs`
-- the relevant file in `src/commands/`
-- the corresponding logic in `src/core/`
+- `src/commands/` 中的相关文件
+- `src/core/` 中对应的逻辑
 
-## Git conventions
+## Git 约定
 
-- Commit messages in **English**
-- Follow [Conventional Commits](https://www.conventionalcommits.org/) format:
+- 提交信息默认使用**中文**；用户明确指定其他语言时，遵循用户要求
+- 遵循 [Conventional Commits](https://www.conventionalcommits.org/) 格式：
+
+  ```text
+  <type>: <简短描述>
+
+  <可选正文>
   ```
-  <type>: <short description>
 
-  <optional body>
-  ```
-- Allowed types: `feat`, `fix`, `refactor`, `docs`, `chore`, `test`, `ci`, `perf`, `style`
-- Subject line: imperative tone, no trailing period, max 50 chars
-- Body: wrap at 72 chars, explain **what** and **why** (not how)
-- One logical change per commit — do not mix unrelated changes
-- Do not amend or force-push published commits without explicit approval
+- 允许的类型：`feat`、`fix`、`refactor`、`docs`、`chore`、`test`、`ci`、`perf`、`style`
+- 主题使用祈使语气，不加句号，尽量不超过 50 个字符
+- 正文每行不超过 72 个字符，说明改了什么以及为什么，不描述具体实现步骤
+- 每次提交只包含一个逻辑变更，不要混入无关内容
+- 未经明确批准，不要 amend 或 force-push 已发布的提交
 
-## Do / don't summary
+## 应做与禁止事项
 
-Do:
+应做：
 
-- use `cargo check`, `cargo clippy`, and `cargo build` as canonical commands
-- keep CLI definitions in `src/cli.rs`, commands in `src/commands/`, logic in `src/core/`
-- use `Logger` for structured CLI output
-- keep types in `src/types.rs`
-- return `anyhow::Result` from commands
-- use `?` for error propagation
-- add shared types when data crosses module boundaries
+- 使用 `cargo check`、`cargo clippy` 和 `cargo build` 作为标准命令
+- 将 CLI 定义放在 `src/cli.rs`、命令放在 `src/commands/`、逻辑放在 `src/core/`
+- 使用 `Logger` 输出结构化 CLI 信息
+- 将共享类型放在 `src/types.rs`
+- Commands 返回 `anyhow::Result`
+- 使用 `?` 传播错误
+- 当数据跨模块传递时新增共享类型
 
-Do not:
+禁止：
 
-- use `unsafe` code
-- use `.unwrap()`
-- move business logic into `src/cli.rs`
-- add unnecessary dependencies
-- use raw `println!` for user-facing output in commands
-- weaken types or add `#[allow(...)]` without need
+- 使用 `unsafe`
+- 使用 `.unwrap()`
+- 将业务逻辑移入 `src/cli.rs`
+- 添加不必要的依赖
+- 在命令中使用原始 `println!` 输出用户可见内容
+- 无必要地弱化类型或添加 `#[allow(...)]`
