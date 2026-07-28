@@ -85,7 +85,14 @@ impl EngineResolver {
                     warnings.extend(w);
                     Some(assoc)
                 }
-                Err(_) => None,
+                Err(error) => {
+                    warnings.push(format!("{error:#}"));
+                    return EngineDetectionResult {
+                        engine: None,
+                        uproject_engine: None,
+                        warnings,
+                    };
+                }
             }
         } else {
             None
@@ -286,10 +293,12 @@ impl EngineResolver {
                 .ok_or_else(|| UbuildError::NoUprojectFound(project_path.to_path_buf()))?
         };
 
-        let content = fs::read_to_string(&uproject_path)
-            .with_context(|| format!("Failed to read {}", uproject_path.display()))?;
-        let uproject: crate::types::UProject = serde_json::from_str(&content)
-            .with_context(|| format!("Failed to parse {}", uproject_path.display()))?;
+        let uproject = ProjectPathResolver::read_uproject(&uproject_path).with_context(|| {
+            format!(
+                "Failed to read project association from {}",
+                uproject_path.display()
+            )
+        })?;
 
         let mut warnings = Vec::new();
         if uproject.engine_association.is_empty() {
@@ -582,6 +591,21 @@ mod tests {
         assert!(warnings[0].contains("matches multiple installed engines"));
         assert!(warnings[0].contains("UE_5.5_A"));
         assert!(warnings[0].contains("UE_5.5_B"));
+    }
+
+    #[test]
+    fn does_not_fallback_when_uproject_cannot_be_parsed() -> anyhow::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let project_path = directory.path().join("Invalid.uproject");
+        std::fs::write(&project_path, "not json")?;
+
+        let result = EngineResolver::resolve_engine(Some(&project_path));
+
+        assert!(result.engine.is_none());
+        assert!(result.uproject_engine.is_none());
+        assert_eq!(result.warnings.len(), 1);
+        assert!(result.warnings[0].contains("Invalid .uproject file"));
+        Ok(())
     }
 
     #[test]

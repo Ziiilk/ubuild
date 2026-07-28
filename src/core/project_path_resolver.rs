@@ -106,9 +106,31 @@ impl ProjectPathResolver {
     pub fn read_uproject(uproject_path: &Path) -> Result<crate::types::UProject> {
         let content = fs::read_to_string(uproject_path)
             .map_err(|_| UbuildError::ProjectFileNotFound(uproject_path.to_path_buf()))?;
-        let uproject: crate::types::UProject = serde_json::from_str(&content).map_err(|e| {
+        let content = content.strip_prefix('\u{feff}').unwrap_or(&content);
+        let uproject: crate::types::UProject = serde_json::from_str(content).map_err(|e| {
             UbuildError::InvalidUproject(format!("{}: {e}", uproject_path.display()))
         })?;
         Ok(uproject)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProjectPathResolver;
+
+    #[test]
+    fn reads_uproject_with_utf8_bom() -> anyhow::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("BomProject.uproject");
+        std::fs::write(
+            &path,
+            "\u{feff}{\"FileVersion\":3,\"EngineAssociation\":\"5.5\"}",
+        )?;
+
+        let project = ProjectPathResolver::read_uproject(&path)?;
+
+        assert_eq!(project.file_version, Some(3));
+        assert_eq!(project.engine_association, "5.5");
+        Ok(())
     }
 }
