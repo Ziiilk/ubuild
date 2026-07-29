@@ -6,6 +6,7 @@ pub mod generate;
 pub mod init;
 pub mod installed;
 pub mod list;
+pub mod livecoding;
 pub mod package;
 pub mod plugin;
 pub mod run;

@@ -19,7 +19,7 @@ pub enum UbuildError {
         details: String,
     },
 
-    #[error("No Unreal Engine installations found. Checked Windows Registry, Epic Launcher, and environment variables. Specify --engine-path manually.")]
+    #[error("No Unreal Engine installations found. Checked Windows Registry and Epic Launcher. Specify --engine-path manually.")]
     NoEngineInstallations,
 
     #[error("UnrealBuildTool not found. Tried:\n{}", paths.iter().map(|p| format!("  - {}", p.display())).collect::<Vec<_>>().join("\n"))]

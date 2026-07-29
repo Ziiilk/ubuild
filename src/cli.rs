@@ -1,4 +1,4 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
 #[command(
@@ -39,6 +39,9 @@ pub enum Command {
     Clean(CleanArgs),
     /// Switch engine association
     Switch(SwitchArgs),
+    /// Enable or disable user-level Live Coding for installed engines
+    #[command(name = "livecoding")]
+    LiveCoding(LiveCodingArgs),
     /// Show version information
     Version(VersionArgs),
 }
@@ -373,6 +376,19 @@ pub struct SwitchArgs {
     /// Target engine path
     #[arg(long)]
     pub engine_path: Option<String>,
+}
+
+#[derive(Args)]
+pub struct LiveCodingArgs {
+    /// Desired Live Coding state
+    #[arg(value_enum)]
+    pub action: LiveCodingAction,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+pub enum LiveCodingAction {
+    Enable,
+    Disable,
 }
 
 #[derive(Args)]

@@ -139,7 +139,7 @@ impl ProjectInitializer {
             if let Ok(content) = fs::read_to_string(vp) {
                 if let Ok(info) = serde_json::from_str::<crate::types::EngineVersionInfo>(&content)
                 {
-                    return format!("{}.{}", info.major, info.minor);
+                    return info.major_minor();
                 }
             }
         }

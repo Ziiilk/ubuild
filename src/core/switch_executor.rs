@@ -88,7 +88,7 @@ impl SwitchExecutor {
             if let Ok(content) = fs::read_to_string(version_path) {
                 if let Ok(info) = serde_json::from_str::<crate::types::EngineVersionInfo>(&content)
                 {
-                    return format!("{}.{}", info.major, info.minor);
+                    return info.major_minor();
                 }
             }
         }

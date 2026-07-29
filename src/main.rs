@@ -27,6 +27,7 @@ fn main() {
         cli::Command::Gencodebase(args) => commands::gencodebase::execute(args),
         cli::Command::Clean(args) => commands::clean::execute(args),
         cli::Command::Switch(args) => commands::switch::execute(args),
+        cli::Command::LiveCoding(args) => commands::livecoding::execute(args),
         cli::Command::Version(args) => commands::version::execute(args),
     };
 

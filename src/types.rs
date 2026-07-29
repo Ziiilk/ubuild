@@ -63,19 +63,23 @@ impl std::fmt::Display for EngineVersionInfo {
     }
 }
 
+impl EngineVersionInfo {
+    pub fn major_minor(&self) -> String {
+        format!("{}.{}", self.major, self.minor)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EngineSource {
     Registry,
     Launcher,
-    Environment,
 }
 
 impl EngineSource {
     pub fn priority(self) -> u8 {
         match self {
             Self::Launcher => 0,
-            Self::Environment => 1,
-            Self::Registry => 2,
+            Self::Registry => 1,
         }
     }
 }
@@ -85,7 +89,6 @@ impl std::fmt::Display for EngineSource {
         match self {
             Self::Registry => f.write_str("registry"),
             Self::Launcher => f.write_str("launcher"),
-            Self::Environment => f.write_str("environment"),
         }
     }
 }
@@ -112,6 +115,11 @@ pub struct EngineDetectionResult {
     pub engine: Option<EngineInstallation>,
     pub uproject_engine: Option<EngineAssociation>,
     pub warnings: Vec<String>,
+}
+
+pub struct LiveCodingSettingsResult {
+    pub engine_version: String,
+    pub settings_path: PathBuf,
 }
 
 // ──── Project ────

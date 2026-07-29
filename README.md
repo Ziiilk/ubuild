@@ -259,8 +259,7 @@ ubuild 会通过以下来源自动检测 Unreal Engine 安装：
 
 1. **Windows 注册表** — HKCU/HKLM 下已知的 Unreal Engine 注册表键
 2. **Launcher 清单** — LOCALAPPDATA、PROGRAMDATA 和 APPDATA 下的已知清单路径
-3. **环境变量** — `UE_ENGINE_PATH`、`UE_ROOT`、`UNREAL_ENGINE_PATH`
-4. **手动指定** — `--engine-path` 选项
+3. **手动指定** — `--engine-path` 选项
 
 注册表候选必须包含可解析的引擎版本文件。项目指定 `EngineAssociation` 时，ubuild 会依次尝试精确 ID、`UE_5_5` / `UE_5.5` 形式的关联 ID 和实际引擎主次版本匹配；无法唯一匹配时会报错，不会静默回退到其他版本。
 

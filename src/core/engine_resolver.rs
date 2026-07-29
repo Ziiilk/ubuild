@@ -24,10 +24,6 @@ const REGISTRY_LOCATIONS: &[&str] = &[
     r"SOFTWARE\Epic Games\UE_4",
 ];
 
-// ── Environment variables for engine detection ──
-
-const ENGINE_ENV_VARS: &[&str] = &["UE_ENGINE_PATH", "UE_ROOT", "UNREAL_ENGINE_PATH"];
-
 pub struct EngineResolver;
 
 impl EngineResolver {
@@ -119,7 +115,7 @@ impl EngineResolver {
         }
     }
 
-    /// Find all engine installations from registry, launcher, and environment.
+    /// Find all engine installations from registry and launcher.
     pub fn find_engine_installations() -> Vec<EngineInstallation> {
         let mut installations = Vec::new();
 
@@ -131,9 +127,6 @@ impl EngineResolver {
 
         // Epic Launcher manifest
         installations.extend(Self::find_from_launcher());
-
-        // Environment variables
-        installations.extend(Self::find_from_environment());
 
         // Deduplicate by path, preferring higher-priority sources
         Self::deduplicate(&mut installations);
@@ -235,7 +228,7 @@ impl EngineResolver {
 
         if installations.is_empty() {
             warnings.push(
-                "No Unreal Engine installations found. Checked Windows Registry, Epic Launcher, and environment variables. Specify --engine-path manually.".to_string()
+                "No Unreal Engine installations found. Checked Windows Registry and Epic Launcher. Specify --engine-path manually.".to_string()
             );
         }
 
@@ -421,28 +414,6 @@ impl EngineResolver {
         }
 
         Vec::new()
-    }
-
-    fn find_from_environment() -> Vec<EngineInstallation> {
-        let mut results = Vec::new();
-
-        for var_name in ENGINE_ENV_VARS {
-            if let Ok(value) = env::var(var_name) {
-                let engine_path = PathBuf::from(&value);
-                if engine_path.exists() {
-                    results.push(EngineInstallation {
-                        path: engine_path,
-                        association_id: format!("env:{var_name}"),
-                        display_name: format!("UE Engine (${var_name})"),
-                        version: None,
-                        installed_date: None,
-                        source: EngineSource::Environment,
-                    });
-                }
-            }
-        }
-
-        results
     }
 
     fn launcher_manifest_paths() -> Vec<PathBuf> {
