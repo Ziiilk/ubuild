@@ -50,7 +50,8 @@ fn run_update(
         .repo_name(REPO_NAME)
         .bin_name(REPO_NAME)
         .current_version(current)
-        .show_download_progress(true);
+        .show_download_progress(true)
+        .no_confirm(true);
     if let Some(token) = token {
         builder.auth_token(token);
     }

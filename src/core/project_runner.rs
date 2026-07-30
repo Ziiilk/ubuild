@@ -100,10 +100,18 @@ impl ProjectRunner {
                 .spawn()
                 .with_context(|| format!("Failed to run {basename}"))?;
 
-            // Kill the spawned executable when the user presses Ctrl+C so the
-            // editor/game does not keep running after ubuild is interrupted.
-            let pid = child.id();
-            let _ = ctrlc::set_handler(move || platform::kill_process(pid));
+            let _lifetime_guard = match platform::bind_child_lifetime(&child) {
+                Ok(guard) => guard,
+                Err(bind_error) => {
+                    let cleanup_result = child.kill().and_then(|()| child.wait().map(|_| ()));
+                    if let Err(cleanup_error) = cleanup_result {
+                        return Err(bind_error.context(format!(
+                            "Failed to clean up process after lifecycle binding error: {cleanup_error}"
+                        )));
+                    }
+                    return Err(bind_error);
+                }
+            };
 
             let status = child
                 .wait()
