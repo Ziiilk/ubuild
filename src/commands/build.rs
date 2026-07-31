@@ -5,7 +5,6 @@ use crate::core::project_builder::ProjectBuilder;
 
 pub fn execute(args: BuildArgs) -> Result<()> {
     ProjectBuilder::build(
-        &args.target,
         &args.config,
         &args.platform,
         args.project.as_deref(),
@@ -13,6 +12,6 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         args.clean,
         args.verbose,
         args.dry_run,
-        args.list_targets,
+        &args.ubt_args,
     )
 }

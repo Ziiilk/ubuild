@@ -23,24 +23,6 @@ pub fn format_engine_version(major: u32, minor: u32, patch: u32) -> String {
     format!("{major}.{minor}.{patch}")
 }
 
-/// Infer the generic target type from a target name.
-pub fn infer_target_type(name: &str) -> &'static str {
-    let lower = name.to_lowercase();
-    if lower.contains("editor") {
-        "Editor"
-    } else if lower.contains("client") {
-        "Client"
-    } else if lower.contains("server") {
-        "Server"
-    } else {
-        "Game"
-    }
-}
-
-pub fn is_generic_target(target: &str) -> bool {
-    matches!(target, "Editor" | "Game" | "Client" | "Server")
-}
-
 pub fn is_valid_project_name(name: &str) -> bool {
     !name.is_empty()
         && name

@@ -119,14 +119,12 @@ cargo run -- <subcommand> [args]
 所有操作逻辑均位于此处：
 
 - `BuildExecutor` — 通过子进程运行 UBT
-- `ProjectBuilder` — 编排构建、目标列表和 dry-run
+- `ProjectBuilder` — 编排项目构建和 dry-run
 - `EngineResolver` — 从注册表、Launcher 清单和环境变量查找引擎安装
-- `ProjectDetector` — 发现 `.uproject`、`.Target.cs` 和 `.Build.cs`
 - `ProjectPathResolver` — 根据用户输入解析项目路径
-- `TargetResolver` — 从 Source 目录解析构建目标
 - `ProjectGenerator` — 生成 IDE 项目文件
 - `ProjectInitializer` — 初始化新的 UE 项目
-- `ProjectRunner` — 运行已构建的可执行文件
+- `ProjectRunner` — 通过 UnrealEditor 启动 `.uproject`
 - `CleanExecutor` — 删除构建产物
 - `SwitchExecutor` — 切换引擎关联
 - `CompileCommandsGenerator` — 生成 `compile_commands.json`
@@ -139,9 +137,8 @@ cargo run -- <subcommand> [args]
 
 - `BuildResult`、`CleanResult`、`SwitchResult`、`InitResult`、`GenerateResult`
 - `EngineVersionInfo`、`EngineInstallation`、`EngineSource`、`EngineAssociation`
-- `UProject`、`ProjectInfo`、`ProjectDetectionResult`、`EngineDetectionResult`
-- `ResolvedTarget`、`ModuleInfo`
-- 常量：`BUILD_TARGETS`、`BUILD_CONFIGS`、`BUILD_PLATFORMS`、`PROJECT_TYPES`、`IDE_TYPES`
+- `UProject`、`UProjectModule`、`UProjectPlugin`、`EngineDetectionResult`
+- 常量：`BUILD_CONFIGS`、`BUILD_PLATFORMS`、`PROJECT_TYPES`、`IDE_TYPES`
 
 ### Error（`src/error.rs`）
 
@@ -151,7 +148,7 @@ cargo run -- <subcommand> [args]
 
 - `Logger` — 结构化 CLI 输出（info、success、warning、error、title、subtitle、json、debug）
 - `unreal_paths` — 解析 UBT、Build.bat 和引擎版本路径
-- `version` — 版本比较、格式化和目标类型推断
+- `version` — 版本比较和格式化
 
 ### Platform（`src/platform.rs`）
 
@@ -164,7 +161,7 @@ cargo run -- <subcommand> [args]
 - 文件：`snake_case.rs`
 - 常量：`UPPER_SNAKE_CASE`
 
-示例：`EngineResolver`、`resolve_engine`、`engine_resolver.rs`、`BUILD_TARGETS`
+示例：`EngineResolver`、`resolve_engine`、`engine_resolver.rs`、`BUILD_CONFIGS`
 
 ## 错误处理
 

@@ -21,8 +21,6 @@ pub enum Command {
     Installed(InstalledArgs),
     /// Package an Unreal Engine project for distribution
     Package(PackageArgs),
-    /// Detect and display project information
-    List(ListArgs),
     /// Show engine information
     Engine(EngineArgs),
     /// Generate IDE project files
@@ -48,10 +46,6 @@ pub enum Command {
 
 #[derive(Args)]
 pub struct BuildArgs {
-    /// Build target (Editor, Game, Client, Server)
-    #[arg(short, long, default_value = "Editor")]
-    pub target: String,
-
     /// Build configuration (Debug, DebugGame, Development, Shipping, Test)
     #[arg(short, long, default_value = "Development")]
     pub config: String,
@@ -80,9 +74,9 @@ pub struct BuildArgs {
     #[arg(long)]
     pub dry_run: bool,
 
-    /// List available build targets
-    #[arg(long)]
-    pub list_targets: bool,
+    /// Raw args passed through to UnrealBuildTool
+    #[arg(last = true)]
+    pub ubt_args: Vec<String>,
 }
 
 #[derive(Args)]
@@ -165,10 +159,6 @@ pub struct PackageArgs {
     #[arg(long)]
     pub engine_path: Option<String>,
 
-    /// Explicit Game target name
-    #[arg(long)]
-    pub target: Option<String>,
-
     /// Target platform
     #[arg(long, default_value = "Win64")]
     pub platform: String,
@@ -188,21 +178,6 @@ pub struct PackageArgs {
     /// Raw args passed through to RunUAT BuildCookRun
     #[arg(last = true)]
     pub uat_args: Vec<String>,
-}
-
-#[derive(Args)]
-pub struct ListArgs {
-    /// Path to project or .uproject file
-    #[arg(short, long)]
-    pub project: Option<String>,
-
-    /// Search recursively for .uproject files
-    #[arg(short, long)]
-    pub recursive: bool,
-
-    /// Output as JSON
-    #[arg(short, long)]
-    pub json: bool,
 }
 
 #[derive(Args)]
@@ -272,10 +247,6 @@ pub struct InitArgs {
 
 #[derive(Args)]
 pub struct RunArgs {
-    /// Build target (Editor, Game, Client, Server)
-    #[arg(short, long, default_value = "Editor")]
-    pub target: String,
-
     /// Build configuration
     #[arg(short, long, default_value = "Development")]
     pub config: String,
@@ -308,17 +279,13 @@ pub struct RunArgs {
     #[arg(long)]
     pub detached: bool,
 
-    /// Additional arguments to pass to executable
+    /// Additional arguments to pass to UnrealEditor
     #[arg(last = true)]
     pub args: Vec<String>,
 }
 
 #[derive(Args)]
 pub struct GencodebaseArgs {
-    /// Build target
-    #[arg(short, long, default_value = "Editor")]
-    pub target: String,
-
     /// Build configuration
     #[arg(short, long, default_value = "Development")]
     pub config: String,
@@ -346,6 +313,10 @@ pub struct GencodebaseArgs {
     /// Don't use engine includes
     #[arg(long)]
     pub no_engine_includes: bool,
+
+    /// Raw args passed through to UnrealBuildTool
+    #[arg(last = true)]
+    pub ubt_args: Vec<String>,
 }
 
 #[derive(Args)]

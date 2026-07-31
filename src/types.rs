@@ -9,14 +9,12 @@ pub const REPO_NAME: &str = "ubuild";
 
 // ──── Build ────
 
-pub const BUILD_TARGETS: &[&str] = &["Editor", "Game", "Client", "Server"];
 pub const BUILD_CONFIGS: &[&str] = &["Debug", "DebugGame", "Development", "Shipping", "Test"];
 pub const BUILD_PLATFORMS: &[&str] = &["Win64", "Win32", "Linux", "Mac", "Android", "IOS"];
 pub const PROJECT_TYPES: &[&str] = &["cpp", "blueprint", "blank"];
 pub const IDE_TYPES: &[&str] = &["sln", "vscode", "clion", "xcode", "vs2022"];
 
 pub mod defaults {
-    pub const BUILD_TARGET: &str = "Editor";
     pub const BUILD_CONFIG: &str = "Development";
     pub const BUILD_PLATFORM: &str = "Win64";
     pub const PROJECT_TYPE: &str = "cpp";
@@ -156,40 +154,6 @@ pub struct UProjectPlugin {
     pub name: String,
     #[serde(rename = "Enabled", default)]
     pub enabled: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct ResolvedTarget {
-    pub name: String,
-    pub target_type: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct ProjectInfo {
-    pub name: String,
-    pub path: PathBuf,
-    pub uproject: UProject,
-    pub source_dir: Option<PathBuf>,
-    pub targets: Vec<ResolvedTarget>,
-    pub modules: Vec<ModuleInfo>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ModuleInfo {
-    pub name: String,
-    pub path: PathBuf,
-}
-
-pub struct ProjectDetectionResult {
-    pub project: Option<ProjectInfo>,
-    pub warnings: Vec<String>,
-}
-
-pub struct ProjectPathResolution {
-    pub input_path: PathBuf,
-    pub resolved_path: PathBuf,
-    pub is_directory: bool,
-    pub was_resolved_from_directory: bool,
 }
 
 // ──── Operation Results ────

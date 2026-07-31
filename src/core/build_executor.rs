@@ -5,59 +5,32 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 
-use crate::error::UbuildError;
-use crate::types::{defaults, BuildResult, ResolvedTarget};
+use crate::types::BuildResult;
+use crate::utils::command::append_ubt_target_selection;
 use crate::utils::logger::Logger;
 use crate::utils::unreal_paths::{resolve_build_bat_path, resolve_ubt_path};
 
 use super::engine_resolver::EngineResolver;
 use super::project_path_resolver::ProjectPathResolver;
-use super::target_resolver::TargetResolver;
 
 pub struct BuildExecutor;
 
 impl BuildExecutor {
     pub fn execute(
-        target: &str,
         config: &str,
         platform: &str,
         project_path: Option<&str>,
         engine_path: Option<&str>,
         clean: bool,
         verbose: bool,
-        additional_args: &[String],
+        ubt_args: &[String],
     ) -> Result<BuildResult> {
         let start = Instant::now();
 
         let (project, engine) =
             EngineResolver::resolve_project_and_engine(project_path, engine_path)?;
 
-        // Resolve target name
-        let available_targets = TargetResolver::find_available_targets(&project);
-        let resolved_target = if available_targets.is_empty() {
-            Logger::debug("No target files found, using generic target name");
-            target.to_string()
-        } else {
-            let resolved = TargetResolver::resolve_from_list(target, &available_targets);
-            if TargetResolver::is_generic(target)
-                && !available_targets.iter().any(|t| t.target_type == target)
-                && resolved == target
-            {
-                return Err(UbuildError::TargetNotFound {
-                    target: target.to_string(),
-                    available: available_targets.iter().map(|t| t.name.clone()).collect(),
-                }
-                .into());
-            }
-            if resolved != target {
-                Logger::debug(&format!("Resolved target \"{target}\" to \"{resolved}\""));
-            }
-            resolved
-        };
-
-        Logger::info(&format!(
-            "Starting build: {resolved_target} | {platform} | {config}"
-        ));
+        Logger::info(&format!("Starting build: {platform} | {config}"));
         Logger::info(&format!("Project: {}", project.display()));
         Logger::info(&format!("Engine: {}", engine.display()));
 
@@ -67,15 +40,7 @@ impl BuildExecutor {
             None => resolve_ubt_path(&engine)?,
         };
 
-        let args = Self::build_args(
-            &resolved_target,
-            config,
-            platform,
-            &project,
-            clean,
-            verbose,
-            additional_args,
-        );
+        let args = Self::build_args(config, platform, &project, clean, verbose, ubt_args);
 
         let (stdout, stderr, exit_code) = Self::execute_streaming(&executable, &args)?;
 
@@ -122,16 +87,14 @@ impl BuildExecutor {
     }
 
     fn build_args(
-        target: &str,
         config: &str,
         platform: &str,
         project_path: &Path,
         clean: bool,
         verbose: bool,
-        additional_args: &[String],
+        ubt_args: &[String],
     ) -> Vec<String> {
         let mut args = vec![
-            target.to_string(),
             platform.to_string(),
             config.to_string(),
             format!("-project={}", project_path.display()),
@@ -144,7 +107,7 @@ impl BuildExecutor {
         if verbose {
             args.push("-verbose".to_string());
         }
-        args.extend(additional_args.iter().cloned());
+        append_ubt_target_selection(&mut args, ubt_args);
         args
     }
 
@@ -207,19 +170,5 @@ impl BuildExecutor {
             buffer.push('\n');
         }
         buffer
-    }
-
-    pub fn get_available_targets(project_path: &Path) -> Vec<ResolvedTarget> {
-        TargetResolver::find_available_targets(project_path)
-    }
-
-    pub fn get_default_options(project_path: &Path) -> (&'static str, &'static str, &'static str) {
-        let targets = Self::get_available_targets(project_path);
-        let target = if targets.iter().any(|t| t.target_type == "Editor") {
-            "Editor"
-        } else {
-            "Game"
-        };
-        (target, defaults::BUILD_CONFIG, defaults::BUILD_PLATFORM)
     }
 }

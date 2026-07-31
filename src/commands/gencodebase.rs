@@ -8,7 +8,6 @@ pub fn execute(args: GencodebaseArgs) -> Result<()> {
     Logger::title("Generate Compile Commands Database");
 
     let output_path = CompileCommandsGenerator::generate(
-        &args.target,
         &args.config,
         &args.platform,
         args.project.as_deref(),
@@ -16,6 +15,7 @@ pub fn execute(args: GencodebaseArgs) -> Result<()> {
         !args.no_plugin_sources,
         !args.no_engine_sources,
         !args.no_engine_includes,
+        &args.ubt_args,
     )?;
 
     Logger::success(&format!(

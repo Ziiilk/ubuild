@@ -51,15 +51,6 @@ pub enum UbuildError {
     #[error("Build failed with exit code {exit_code}")]
     BuildFailed { exit_code: i32, stderr: String },
 
-    #[error("No {target} target found. Available targets: {}", available.join(", "))]
-    TargetNotFound {
-        target: String,
-        available: Vec<String>,
-    },
-
-    #[error("Invalid build target: {0}")]
-    InvalidBuildTarget(String),
-
     #[error("Invalid build configuration: {0}")]
     InvalidBuildConfig(String),
 

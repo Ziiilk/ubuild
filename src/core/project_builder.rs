@@ -10,7 +10,6 @@ pub struct ProjectBuilder;
 
 impl ProjectBuilder {
     pub fn build(
-        target: &str,
         config: &str,
         platform: &str,
         project: Option<&str>,
@@ -18,40 +17,33 @@ impl ProjectBuilder {
         clean: bool,
         verbose: bool,
         dry_run: bool,
-        list_targets: bool,
+        ubt_args: &[String],
     ) -> Result<()> {
         Logger::title("Unreal Engine Build");
 
-        if list_targets {
-            return Self::list_available_targets(project);
-        }
-
         if dry_run {
             return Self::dry_run_build(
-                target,
                 config,
                 platform,
                 project,
                 engine_path,
                 clean,
                 verbose,
+                ubt_args,
             );
         }
 
-        Logger::info(&format!(
-            "Preparing to build: {target} | {platform} | {config}"
-        ));
+        Logger::info(&format!("Preparing to build: {platform} | {config}"));
         Logger::divider();
 
         let result = BuildExecutor::execute(
-            target,
             config,
             platform,
             project,
             engine_path,
             clean,
             verbose,
-            &[],
+            ubt_args,
         )?;
 
         Logger::divider();
@@ -71,48 +63,27 @@ impl ProjectBuilder {
         Ok(())
     }
 
-    fn list_available_targets(project: Option<&str>) -> Result<()> {
-        Logger::subtitle("Available Build Targets");
-
-        let project_path = ProjectPathResolver::resolve_or_throw(project)?;
-        let targets = BuildExecutor::get_available_targets(&project_path);
-
-        if targets.is_empty() {
-            Logger::writeln("  No build targets found");
-            Logger::writeln("  Make sure:");
-            Logger::writeln("    • You are in a Unreal Engine project directory");
-            Logger::writeln("    • The project has Source/*.Target.cs files");
-            Logger::writeln("    • The project is a C++ project");
-        } else {
-            for t in &targets {
-                Logger::writeln(&format!("  • {} ({})", t.name, t.target_type));
-            }
-        }
-
-        Logger::writeln("");
-        Logger::writeln("  Use: ubuild build --target <target>");
-        Ok(())
-    }
-
     fn dry_run_build(
-        target: &str,
         config: &str,
         platform: &str,
         project: Option<&str>,
         _engine_path: Option<&str>,
         clean: bool,
         verbose: bool,
+        ubt_args: &[String],
     ) -> Result<()> {
         Logger::subtitle("Dry Run - Build Configuration");
 
         let project_path = ProjectPathResolver::resolve_or_throw(project)?;
 
         Logger::info(&format!("Project: {}", project_path.display()));
-        Logger::info(&format!("Target: {target}"));
         Logger::info(&format!("Configuration: {config}"));
         Logger::info(&format!("Platform: {platform}"));
         Logger::info(&format!("Clean: {clean}"));
         Logger::info(&format!("Verbose: {verbose}"));
+        if !ubt_args.is_empty() {
+            Logger::info(&format!("UBT args: {}", ubt_args.join(" ")));
+        }
 
         EngineResolver::write_engine_status(Some(&project_path));
 

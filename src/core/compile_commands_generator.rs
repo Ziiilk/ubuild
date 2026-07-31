@@ -3,19 +3,18 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result};
 
+use crate::utils::command::append_ubt_target_selection;
 use crate::utils::file::{atomic_copy, atomic_write};
 use crate::utils::logger::Logger;
 use crate::utils::unreal_paths::resolve_ubt_path;
 
 use super::engine_resolver::EngineResolver;
 use super::project_path_resolver::ProjectPathResolver;
-use super::target_resolver::TargetResolver;
 
 pub struct CompileCommandsGenerator;
 
 impl CompileCommandsGenerator {
     pub fn generate(
-        target: &str,
         config: &str,
         platform: &str,
         project: Option<&str>,
@@ -23,22 +22,20 @@ impl CompileCommandsGenerator {
         include_plugin_sources: bool,
         include_engine_sources: bool,
         use_engine_includes: bool,
+        ubt_args: &[String],
     ) -> Result<PathBuf> {
         let (project_path, engine) =
             EngineResolver::resolve_project_and_engine(project, engine_path)?;
 
         let project_dir = ProjectPathResolver::project_dir(&project_path);
 
-        // Resolve target name
-        let available = TargetResolver::find_available_targets(&project_path);
-        let resolved_target = TargetResolver::resolve_from_list(target, &available);
-
         let ubt_path = resolve_ubt_path(&engine)?;
 
         let mut args = vec![
             "-mode=GenerateClangDatabase".to_string(),
             format!("-Project={}", project_path.display()),
-            format!("-Target={resolved_target} {platform} {config}"),
+            platform.to_string(),
+            config.to_string(),
         ];
 
         if include_plugin_sources {
@@ -50,9 +47,10 @@ impl CompileCommandsGenerator {
         if use_engine_includes {
             args.push("-UseEngineIncludes".to_string());
         }
+        append_ubt_target_selection(&mut args, ubt_args);
 
         Logger::info(&format!(
-            "Generating compile commands for {resolved_target} ({platform} {config})"
+            "Generating compile commands ({platform} {config})"
         ));
 
         let output = Command::new(&ubt_path)

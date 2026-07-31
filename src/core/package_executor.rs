@@ -11,7 +11,6 @@ use crate::utils::unreal_paths::resolve_runuat_path;
 use super::build_executor::BuildExecutor;
 use super::engine_resolver::EngineResolver;
 use super::project_path_resolver::ProjectPathResolver;
-use super::target_resolver::TargetResolver;
 
 pub struct PackageExecutor;
 
@@ -19,7 +18,6 @@ impl PackageExecutor {
     pub fn run(
         project_path: Option<&str>,
         engine_path: Option<&str>,
-        target: Option<&str>,
         platform: &str,
         config: &str,
         output_dir: Option<&str>,
@@ -37,28 +35,16 @@ impl PackageExecutor {
             engine_path,
         )?)?;
         let runuat = resolve_runuat_path(&engine)?;
-        let target = Self::resolve_game_target(&project, target)?;
         let output = Self::resolve_output(&project, platform, output_dir)?;
 
         if output.is_file() {
             anyhow::bail!("Package output path is a file: {}", output.display());
         }
 
-        let args = Self::build_args(
-            &project,
-            target.as_deref(),
-            platform,
-            config,
-            &output,
-            uat_args,
-        );
+        let args = Self::build_args(&project, platform, config, &output, uat_args);
 
         Logger::info(&format!("Project: {}", project.display()));
         Logger::info(&format!("Engine: {}", engine.display()));
-        Logger::info(&format!(
-            "Target: {}",
-            target.as_deref().unwrap_or("UAT auto-detect")
-        ));
         Logger::info(&format!("Platform: {platform}"));
         Logger::info(&format!("Configuration: {config}"));
         Logger::info(&format!("Output: {}", output.display()));
@@ -111,7 +97,6 @@ impl PackageExecutor {
             let conflicts = matches!(
                 key.as_str(),
                 "project"
-                    | "target"
                     | "platform"
                     | "targetplatform"
                     | "clientconfig"
@@ -134,83 +119,12 @@ impl PackageExecutor {
                     | "unattended"
                     | "utf8output"
                     | "nop4"
-                    | "server"
-                    | "noclient"
-                    | "serverconfig"
             );
             if conflicts {
                 anyhow::bail!("UAT argument conflicts with ubuild package: {arg}");
             }
         }
         Ok(())
-    }
-
-    fn resolve_game_target(project: &Path, requested: Option<&str>) -> Result<Option<String>> {
-        let targets = TargetResolver::find_available_targets(project);
-        if let Some(requested) = requested {
-            if targets.is_empty() {
-                return Ok(Some(requested.to_string()));
-            }
-            let matched = targets
-                .iter()
-                .find(|candidate| candidate.name.eq_ignore_ascii_case(requested));
-            return match matched {
-                Some(candidate) if candidate.target_type == "Game" => {
-                    Ok(Some(candidate.name.clone()))
-                }
-                Some(_) => anyhow::bail!("Target is not a Game target: {requested}"),
-                None => {
-                    let games = Self::game_target_names(&targets);
-                    if games.is_empty() {
-                        anyhow::bail!(
-                            "No Game target found. Available targets: {}",
-                            targets
-                                .iter()
-                                .map(|candidate| candidate.name.clone())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        );
-                    }
-                    anyhow::bail!(
-                        "Game target not found: {requested}. Available Game targets: {}",
-                        games.join(", ")
-                    )
-                }
-            };
-        }
-
-        let games: Vec<_> = targets
-            .iter()
-            .filter(|candidate| candidate.target_type == "Game")
-            .collect();
-        match games.as_slice() {
-            [] if targets.is_empty() => Ok(None),
-            [] => anyhow::bail!(
-                "No Game target found. Available targets: {}",
-                targets
-                    .iter()
-                    .map(|candidate| candidate.name.clone())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            [game] => Ok(Some(game.name.clone())),
-            _ => anyhow::bail!(
-                "Multiple Game targets found: {}. Specify --target",
-                games
-                    .iter()
-                    .map(|candidate| candidate.name.clone())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        }
-    }
-
-    fn game_target_names(targets: &[crate::types::ResolvedTarget]) -> Vec<String> {
-        targets
-            .iter()
-            .filter(|candidate| candidate.target_type == "Game")
-            .map(|candidate| candidate.name.clone())
-            .collect()
     }
 
     fn resolve_output(project: &Path, platform: &str, output_dir: Option<&str>) -> Result<PathBuf> {
@@ -235,7 +149,6 @@ impl PackageExecutor {
 
     fn build_args(
         project: &Path,
-        target: Option<&str>,
         platform: &str,
         config: &str,
         output: &Path,
@@ -258,9 +171,6 @@ impl PackageExecutor {
             "-utf8output".to_string(),
             "-nop4".to_string(),
         ];
-        if let Some(target) = target {
-            args.push(format!("-target={target}"));
-        }
         args.extend(uat_args.iter().cloned());
         args
     }
@@ -287,6 +197,18 @@ mod tests {
     }
 
     #[test]
+    fn accepts_native_uat_target_routing_arguments() {
+        for arg in [
+            "-target=MyProjectServer",
+            "-server",
+            "-noclient",
+            "-serverconfig=Shipping",
+        ] {
+            assert!(PackageExecutor::validate_uat_args(&[arg.to_string()]).is_ok());
+        }
+    }
+
+    #[test]
     fn rejects_managed_container_arguments() {
         for arg in ["-pak", "-iostore", "-skippak", "-skipiostore"] {
             let error = PackageExecutor::validate_uat_args(&[arg.to_string()])
@@ -299,7 +221,6 @@ mod tests {
     fn builds_complete_package_pipeline() {
         let args = PackageExecutor::build_args(
             Path::new("C:/Project/Game.uproject"),
-            Some("Game"),
             "Win64",
             "Shipping",
             Path::new("C:/Output"),
@@ -317,7 +238,6 @@ mod tests {
             "-unattended",
             "-utf8output",
             "-nop4",
-            "-target=Game",
         ] {
             assert!(args.iter().any(|arg| arg == required));
         }

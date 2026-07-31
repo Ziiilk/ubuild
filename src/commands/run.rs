@@ -5,7 +5,6 @@ use crate::core::project_runner::ProjectRunner;
 
 pub fn execute(args: RunArgs) -> Result<()> {
     ProjectRunner::run(
-        &args.target,
         &args.config,
         &args.platform,
         args.project.as_deref(),

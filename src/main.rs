@@ -18,7 +18,6 @@ fn main() {
         cli::Command::Plugin(args) => commands::plugin::execute(args),
         cli::Command::Installed(args) => commands::installed::execute(args),
         cli::Command::Package(args) => commands::package::execute(args),
-        cli::Command::List(args) => commands::list::execute(args),
         cli::Command::Engine(args) => commands::engine::execute(args),
         cli::Command::Generate(args) => commands::generate::execute(args),
         cli::Command::Init(args) => commands::init::execute(args),
