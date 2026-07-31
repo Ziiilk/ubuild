@@ -2,6 +2,8 @@ use anyhow::Result;
 
 use crate::cli::GenerateArgs;
 use crate::core::project_generator::ProjectGenerator;
+use crate::core::project_operation::ProjectOperation;
+use crate::types::OperationKind;
 use crate::types::IDE_TYPES;
 use crate::utils::logger::Logger;
 
@@ -21,6 +23,12 @@ pub fn execute(args: GenerateArgs) -> Result<()> {
         );
     }
 
+    ProjectOperation::execute(args.project.as_deref(), OperationKind::Generate, || {
+        generate(&args)
+    })
+}
+
+fn generate(args: &GenerateArgs) -> Result<()> {
     let result = ProjectGenerator::generate(
         &args.ide,
         args.project.as_deref(),

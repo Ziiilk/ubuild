@@ -28,6 +28,7 @@ fn main() {
         cli::Command::Switch(args) => commands::switch::execute(args),
         cli::Command::LiveCoding(args) => commands::livecoding::execute(args),
         cli::Command::Version(args) => commands::version::execute(args),
+        cli::Command::ManagedProcess(args) => commands::managed_process::execute(args),
     };
 
     if let Err(e) = result {

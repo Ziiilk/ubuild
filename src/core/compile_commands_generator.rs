@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::utils::command::append_ubt_target_selection;
 use crate::utils::file::{atomic_copy, atomic_write};
@@ -9,6 +9,7 @@ use crate::utils::logger::Logger;
 use crate::utils::unreal_paths::resolve_ubt_path;
 
 use super::engine_resolver::EngineResolver;
+use super::process_runner::ProcessRunner;
 use super::project_path_resolver::ProjectPathResolver;
 
 pub struct CompileCommandsGenerator;
@@ -53,24 +54,21 @@ impl CompileCommandsGenerator {
             "Generating compile commands ({platform} {config})"
         ));
 
-        let output = Command::new(&ubt_path)
-            .args(&args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .with_context(|| "Failed to run UnrealBuildTool")?;
+        let mut command = Command::new(&ubt_path);
+        command.args(&args);
+        let output = ProcessRunner::capture(&mut command)?;
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stdout = &output.stdout;
         for line in stdout.lines() {
             Logger::debug(line);
         }
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
+        if output.exit_code != 0 {
             anyhow::bail!(
                 "UBT exited with code {}:\n{}\n{stderr}",
-                output.status.code().unwrap_or(-1),
-                stdout.trim_end()
+                output.exit_code,
+                stdout.trim_end(),
+                stderr = output.stderr
             );
         }
 

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 pub const REPO_OWNER: &str = "Ziiilk";
 pub const REPO_NAME: &str = "ubuild";
+pub const PROJECT_OPERATION_STATE_DIR: &str = "ubuild";
 
 // ──── Build ────
 
@@ -29,6 +30,12 @@ pub struct BuildResult {
     pub stdout: String,
     pub stderr: String,
     pub duration: std::time::Duration,
+}
+
+pub struct ProcessOutput {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
 }
 
 // ──── Engine ────
@@ -121,6 +128,33 @@ pub struct LiveCodingSettingsResult {
 }
 
 // ──── Project ────
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OperationKind {
+    Build,
+    Package,
+    Generate,
+    GenerateCodebase,
+    Clean,
+    Switch,
+    Run,
+}
+
+impl std::fmt::Display for OperationKind {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            Self::Build => "build",
+            Self::Package => "package",
+            Self::Generate => "generate",
+            Self::GenerateCodebase => "gencodebase",
+            Self::Clean => "clean",
+            Self::Switch => "switch",
+            Self::Run => "run",
+        };
+        formatter.write_str(name)
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UProject {

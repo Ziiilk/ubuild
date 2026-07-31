@@ -1,8 +1,7 @@
-use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::types::GenerateResult;
 use crate::utils::file::atomic_write;
@@ -10,6 +9,7 @@ use crate::utils::logger::Logger;
 use crate::utils::unreal_paths::resolve_ubt_path;
 
 use super::engine_resolver::EngineResolver;
+use super::process_runner::ProcessRunner;
 use super::project_path_resolver::ProjectPathResolver;
 
 pub struct ProjectGenerator;
@@ -47,30 +47,13 @@ impl ProjectGenerator {
 
         Logger::info(&format!("Generating {ide} project files..."));
 
-        let mut child = Command::new(&ubt_path)
-            .args(&args)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .with_context(|| "Failed to run UnrealBuildTool")?;
-
-        if let Some(stdout) = child.stdout.take() {
-            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                println!("  {line}");
-            }
-        }
-
-        if let Some(stderr) = child.stderr.take() {
-            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-                eprintln!("  {line}");
-            }
-        }
-
-        let status = child.wait()?;
-        if !status.success() {
+        let mut command = Command::new(&ubt_path);
+        command.args(&args);
+        let output = ProcessRunner::stream(&mut command)?;
+        if output.exit_code != 0 {
             anyhow::bail!(
                 "Project file generation failed with exit code {}",
-                status.code().unwrap_or(-1)
+                output.exit_code
             );
         }
 

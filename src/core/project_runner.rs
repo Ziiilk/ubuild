@@ -1,13 +1,14 @@
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::error::UbuildError;
 use crate::platform;
 use crate::utils::logger::Logger;
 
 use super::engine_resolver::EngineResolver;
+use super::process_runner::ProcessRunner;
 use super::project_builder::ProjectBuilder;
 
 pub struct ProjectRunner;
@@ -21,7 +22,6 @@ impl ProjectRunner {
         dry_run: bool,
         build_first: bool,
         no_build: bool,
-        detached: bool,
         extra_args: &[String],
     ) -> Result<()> {
         Logger::title("Run Unreal Engine Project");
@@ -34,7 +34,6 @@ impl ProjectRunner {
                 project,
                 engine_path,
                 should_build,
-                detached,
                 extra_args,
             );
         }
@@ -73,55 +72,13 @@ impl ProjectRunner {
         Logger::divider();
 
         let args = Self::build_launch_args(&project_path, extra_args);
+        let mut command = Command::new(&exec_path);
+        command.args(&args);
+        let code = ProcessRunner::inherit(&mut command)?;
 
-        if detached {
-            let mut child = Command::new(&exec_path)
-                .args(&args)
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()
-                .with_context(|| format!("Failed to start {basename}"))?;
-
-            // Detach: don't wait
-            drop(child.stdout.take());
-            drop(child.stderr.take());
-            Logger::success(&format!("Started process in detached mode: {basename}"));
-        } else {
-            let mut child = Command::new(&exec_path)
-                .args(&args)
-                .stdin(Stdio::inherit())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .spawn()
-                .with_context(|| format!("Failed to run {basename}"))?;
-
-            let _lifetime_guard = match platform::bind_child_lifetime(&child) {
-                Ok(guard) => guard,
-                Err(bind_error) => {
-                    let cleanup_result = child.kill().and_then(|()| child.wait().map(|_| ()));
-                    if let Err(cleanup_error) = cleanup_result {
-                        return Err(bind_error.context(format!(
-                            "Failed to clean up process after lifecycle binding error: {cleanup_error}"
-                        )));
-                    }
-                    return Err(bind_error);
-                }
-            };
-
-            let status = child
-                .wait()
-                .with_context(|| format!("Failed to wait for {basename}"))?;
-
-            Logger::divider();
-            let code = status.code().unwrap_or(-1);
-            if status.success() {
-                Logger::success(&format!("Process exited with code {code}"));
-            } else {
-                Logger::error(&format!("Process exited with code {code}"));
-            }
-        }
-
+        Logger::divider();
+        Self::validate_exit_code(code)?;
+        Logger::success(&format!("Process exited with code {code}"));
         Ok(())
     }
 
@@ -160,13 +117,20 @@ impl ProjectRunner {
         args
     }
 
+    fn validate_exit_code(code: i32) -> Result<()> {
+        if code == 0 {
+            Ok(())
+        } else {
+            anyhow::bail!("Process exited with code {code}");
+        }
+    }
+
     fn dry_run(
         config: &str,
         platform: &str,
         project: Option<&str>,
         engine_path: Option<&str>,
         should_build: bool,
-        detached: bool,
         extra_args: &[String],
     ) -> Result<()> {
         Logger::subtitle("Dry Run - Run Configuration");
@@ -180,7 +144,6 @@ impl ProjectRunner {
             Logger::info(&format!("Build Configuration: {config}"));
             Logger::info(&format!("Build Platform: {platform}"));
         }
-        Logger::info(&format!("Detached: {detached}"));
         if !extra_args.is_empty() {
             Logger::info(&format!("Args: {}", extra_args.join(" ")));
         }
@@ -218,5 +181,11 @@ mod tests {
             args,
             ["C:/Project/Game.uproject", "-skipcompile", "-game", "-log"]
         );
+    }
+
+    #[test]
+    fn nonzero_process_exit_is_an_error() {
+        assert!(ProjectRunner::validate_exit_code(1).is_err());
+        assert!(ProjectRunner::validate_exit_code(0).is_ok());
     }
 }

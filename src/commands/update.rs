@@ -2,6 +2,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 
+use crate::core::process_runner::ProcessRunner;
 use crate::types::{REPO_NAME, REPO_OWNER};
 use crate::utils::logger::Logger;
 
@@ -67,11 +68,13 @@ fn is_rate_limited(err: &self_update::errors::Error) -> bool {
 
 /// Read the token from the user's logged-in gh CLI, if available.
 fn gh_auth_token() -> Option<String> {
-    let output = Command::new("gh").args(["auth", "token"]).output().ok()?;
-    if !output.status.success() {
+    let mut command = Command::new("gh");
+    command.args(["auth", "token"]);
+    let output = ProcessRunner::capture(&mut command).ok()?;
+    if output.exit_code != 0 {
         return None;
     }
-    let token = String::from_utf8(output.stdout).ok()?.trim().to_string();
+    let token = output.stdout.trim().to_string();
     if token.is_empty() {
         None
     } else {

@@ -1,3 +1,6 @@
+use std::ffi::OsString;
+use std::path::PathBuf;
+
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
@@ -42,6 +45,8 @@ pub enum Command {
     LiveCoding(LiveCodingArgs),
     /// Show version information
     Version(VersionArgs),
+    #[command(name = "__managed-process", hide = true)]
+    ManagedProcess(ManagedProcessArgs),
 }
 
 #[derive(Args)]
@@ -275,13 +280,24 @@ pub struct RunArgs {
     #[arg(long)]
     pub no_build: bool,
 
-    /// Run in detached mode (non-blocking)
-    #[arg(long)]
-    pub detached: bool,
-
     /// Additional arguments to pass to UnrealEditor
     #[arg(last = true)]
     pub args: Vec<String>,
+}
+
+#[derive(Args)]
+pub struct ManagedProcessArgs {
+    #[arg(long)]
+    pub gate: PathBuf,
+
+    #[arg(long)]
+    pub program: PathBuf,
+
+    #[arg(long)]
+    pub cwd: Option<PathBuf>,
+
+    #[arg(last = true)]
+    pub args: Vec<OsString>,
 }
 
 #[derive(Args)]

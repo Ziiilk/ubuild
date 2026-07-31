@@ -2,9 +2,19 @@ use anyhow::Result;
 
 use crate::cli::GencodebaseArgs;
 use crate::core::compile_commands_generator::CompileCommandsGenerator;
+use crate::core::project_operation::ProjectOperation;
+use crate::types::OperationKind;
 use crate::utils::logger::Logger;
 
 pub fn execute(args: GencodebaseArgs) -> Result<()> {
+    ProjectOperation::execute(
+        args.project.as_deref(),
+        OperationKind::GenerateCodebase,
+        || generate(&args),
+    )
+}
+
+fn generate(args: &GencodebaseArgs) -> Result<()> {
     Logger::title("Generate Compile Commands Database");
 
     let output_path = CompileCommandsGenerator::generate(

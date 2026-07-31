@@ -72,7 +72,7 @@ ubuild init --name MyBlueprintProject --type blueprint
 ubuild run
 ubuild run --build-first
 ubuild run -- -game
-ubuild run --detached -- -log
+ubuild run -- -log
 
 # 为 clangd 生成编译数据库
 ubuild gencodebase
@@ -188,8 +188,24 @@ ubuild version --json
 | `--dry-run` | 仅显示将要运行的内容 | |
 | `--build-first` | 运行前执行与 `ubuild build` 相同的构建流程 | |
 | `--no-build` | 不构建，直接运行已有可执行文件 | |
-| `--detached` | 以分离模式运行（非阻塞） | |
 | `-- <args>` | 传递给 UnrealEditor 的额外参数 | |
+
+### 项目操作竞争
+
+同一台机器上，同一个 `.uproject` 同时只允许一个会修改项目或启动受管工具的
+ubuild 命令运行。Windows 上，新的 `build`、`package`、`generate`、
+`gencodebase`、`clean`、`switch` 或 `run` 会写入该 Project Workspace 的接管请求，
+使旧 ubuild 主进程立即以退出码 `72` 结束，然后接管工作区。只有能写入
+`Saved/ubuild` 状态的进程才能请求接管；旧命令的受管子进程树由 Windows Job
+Object 自动清理。
+
+Linux 和 macOS 当前只提供项目占用检测，不支持强制终止仍在运行的旧 ubuild；
+发生竞争时，新命令会在等待超时后报错。
+
+同一目录中的多个 `.uproject` 共享 `Binaries`、`Intermediate` 和 `Saved`，因此属于
+同一个 Project Workspace 并参与同一组竞争；不同工作区互不影响。`engine`、
+`version`、所有 `--dry-run` 以及 `generate --list-ides` 是只读命令，不会终止
+正在运行的项目操作。
 
 ### `ubuild gencodebase`
 

@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::Instant;
 
 use anyhow::Result;
@@ -8,8 +9,8 @@ use crate::utils::command::{display_args, uat_arg_key};
 use crate::utils::logger::Logger;
 use crate::utils::unreal_paths::resolve_runuat_path;
 
-use super::build_executor::BuildExecutor;
 use super::engine_resolver::EngineResolver;
+use super::process_runner::ProcessRunner;
 use super::project_path_resolver::ProjectPathResolver;
 
 pub struct PackageExecutor;
@@ -58,7 +59,13 @@ impl PackageExecutor {
 
         Logger::divider();
         let start = Instant::now();
-        let (stdout, stderr, exit_code) = BuildExecutor::execute_streaming(&runuat, &args)?;
+        let mut command = Command::new(&runuat);
+        command.args(&args);
+        if let Some(cwd) = runuat.parent() {
+            command.current_dir(cwd);
+        }
+        let execution = ProcessRunner::stream(&mut command)?;
+        let (stdout, stderr, exit_code) = (execution.stdout, execution.stderr, execution.exit_code);
         let duration = start.elapsed().as_secs_f64();
         Logger::divider();
 

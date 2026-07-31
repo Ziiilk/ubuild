@@ -1,10 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Child;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
-#[cfg(windows)]
-use anyhow::Context;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 

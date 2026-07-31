@@ -41,6 +41,10 @@ impl Logger {
         println!("{msg}");
     }
 
+    pub fn writeln_stderr(msg: &str) {
+        eprintln!("{msg}");
+    }
+
     pub fn json<T: serde::Serialize>(value: &T) -> anyhow::Result<()> {
         let json = serde_json::to_string_pretty(value)?;
         println!("{json}");

@@ -1,9 +1,8 @@
-use std::io::{BufRead, BufReader};
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::time::Instant;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::types::BuildResult;
 use crate::utils::command::append_ubt_target_selection;
@@ -11,6 +10,9 @@ use crate::utils::logger::Logger;
 use crate::utils::unreal_paths::{resolve_build_bat_path, resolve_ubt_path};
 
 use super::engine_resolver::EngineResolver;
+use crate::types::ProcessOutput;
+
+use super::process_runner::ProcessRunner;
 use super::project_path_resolver::ProjectPathResolver;
 
 pub struct BuildExecutor;
@@ -42,7 +44,11 @@ impl BuildExecutor {
 
         let args = Self::build_args(config, platform, &project, clean, verbose, ubt_args);
 
-        let (stdout, stderr, exit_code) = Self::execute_streaming(&executable, &args)?;
+        let ProcessOutput {
+            stdout,
+            stderr,
+            exit_code,
+        } = Self::run_process(&executable, &args)?;
 
         // By default UBT logs to the global %LOCALAPPDATA%\UnrealBuildTool\Log.txt
         // to stay close to native behavior. When a concurrent build holds that
@@ -61,7 +67,8 @@ impl BuildExecutor {
 
                 let mut retry_args = args.clone();
                 retry_args.push(format!("-Log={}", log_path.display()));
-                Self::execute_streaming(&executable, &retry_args)?
+                let result = Self::run_process(&executable, &retry_args)?;
+                (result.stdout, result.stderr, result.exit_code)
             } else {
                 (stdout, stderr, exit_code)
             };
@@ -111,64 +118,10 @@ impl BuildExecutor {
         args
     }
 
-    pub(crate) fn execute_streaming(
-        executable: &Path,
-        args: &[String],
-    ) -> Result<(String, String, i32)> {
-        Logger::debug(&format!(
-            "Executing: {} {}",
-            executable.display(),
-            args.join(" ")
-        ));
-
+    fn run_process(executable: &Path, args: &[String]) -> Result<ProcessOutput> {
         let cwd = executable.parent().unwrap_or_else(|| Path::new("."));
-
-        let mut child = Command::new(executable)
-            .args(args)
-            .current_dir(cwd)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .with_context(|| format!("Failed to start {}", executable.display()))?;
-
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("Failed to capture process stdout"))?;
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("Failed to capture process stderr"))?;
-
-        let (stdout_buf, stderr_buf) = std::thread::scope(|scope| {
-            let stdout_handle = scope.spawn(|| Self::read_stream(stdout, false));
-            let stderr_handle = scope.spawn(|| Self::read_stream(stderr, true));
-            let stdout_buf = stdout_handle
-                .join()
-                .map_err(|_| anyhow::anyhow!("stdout reader thread panicked"))?;
-            let stderr_buf = stderr_handle
-                .join()
-                .map_err(|_| anyhow::anyhow!("stderr reader thread panicked"))?;
-            Ok::<_, anyhow::Error>((stdout_buf, stderr_buf))
-        })?;
-
-        let status = child.wait().context("Failed to wait for build process")?;
-        let exit_code = status.code().unwrap_or(-1);
-
-        Ok((stdout_buf, stderr_buf, exit_code))
-    }
-
-    fn read_stream(stream: impl std::io::Read, is_stderr: bool) -> String {
-        let mut buffer = String::new();
-        for line in BufReader::new(stream).lines().map_while(Result::ok) {
-            if is_stderr {
-                eprintln!("  {line}");
-            } else {
-                println!("  {line}");
-            }
-            buffer.push_str(&line);
-            buffer.push('\n');
-        }
-        buffer
+        let mut command = Command::new(executable);
+        command.args(args).current_dir(cwd);
+        ProcessRunner::stream(&mut command)
     }
 }
