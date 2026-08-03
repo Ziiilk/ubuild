@@ -113,6 +113,18 @@ impl ProjectRunner {
             project_path.to_string_lossy().to_string(),
             "-skipcompile".to_string(),
         ];
+        if !extra_args
+            .iter()
+            .any(|arg| arg.eq_ignore_ascii_case("-stdout"))
+        {
+            args.push("-stdout".to_string());
+        }
+        if !extra_args
+            .iter()
+            .any(|arg| arg.eq_ignore_ascii_case("-FullStdOutLogOutput"))
+        {
+            args.push("-FullStdOutLogOutput".to_string());
+        }
         args.extend(extra_args.iter().cloned());
         args
     }
@@ -179,7 +191,37 @@ mod tests {
 
         assert_eq!(
             args,
-            ["C:/Project/Game.uproject", "-skipcompile", "-game", "-log"]
+            [
+                "C:/Project/Game.uproject",
+                "-skipcompile",
+                "-stdout",
+                "-FullStdOutLogOutput",
+                "-game",
+                "-log"
+            ]
+        );
+    }
+
+    #[test]
+    fn does_not_duplicate_explicit_log_arguments() {
+        let extra_args = vec![
+            "-STDOUT".to_string(),
+            "-fullstdoutlogoutput".to_string(),
+            "-game".to_string(),
+        ];
+
+        let args =
+            ProjectRunner::build_launch_args(Path::new("C:/Project/Game.uproject"), &extra_args);
+
+        assert_eq!(
+            args,
+            [
+                "C:/Project/Game.uproject",
+                "-skipcompile",
+                "-STDOUT",
+                "-fullstdoutlogoutput",
+                "-game"
+            ]
         );
     }
 
