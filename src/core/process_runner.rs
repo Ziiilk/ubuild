@@ -15,6 +15,8 @@ use crate::utils::logger::Logger;
 
 const PROCESS_GATE_TIMEOUT: Duration = Duration::from_secs(5);
 const PROCESS_GATE_RETRY_INTERVAL: Duration = Duration::from_millis(5);
+const PROCESS_OUTPUT_DRAIN_TIMEOUT: Duration = Duration::from_secs(1);
+const PROCESS_OUTPUT_DRAIN_RETRY_INTERVAL: Duration = Duration::from_millis(5);
 
 pub struct ProcessRunner;
 
@@ -72,6 +74,33 @@ impl ProcessRunner {
         })
     }
 
+    pub fn forward(command: &mut Command) -> Result<i32> {
+        Logger::debug(&format!("Executing: {command:?}"));
+        let mut managed = ManagedChild::spawn(command, OutputMode::Piped)?;
+        let stdout = managed
+            .child
+            .stdout
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to capture process stdout"))?;
+        let stderr = managed
+            .child
+            .stderr
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to capture process stderr"))?;
+
+        let stdout_handle = std::thread::spawn(move || Self::forward_stream(stdout, false));
+        let stderr_handle = std::thread::spawn(move || Self::forward_stream(stderr, true));
+        let status = managed
+            .child
+            .wait()
+            .context("Failed to wait for managed process");
+        drop(managed.lifetime);
+        Self::finish_forwarders(stdout_handle, stderr_handle)?;
+
+        let status = status?;
+        Ok(status.code().unwrap_or(-1))
+    }
+
     pub fn inherit(command: &mut Command) -> Result<i32> {
         Logger::debug(&format!("Executing: {command:?}"));
         let mut managed = ManagedChild::spawn(command, OutputMode::Inherited)?;
@@ -106,8 +135,53 @@ impl ProcessRunner {
         Ok(status.code().unwrap_or(1))
     }
 
+    fn forward_stream(stream: impl std::io::Read, is_stderr: bool) -> Result<()> {
+        Self::process_stream(stream, is_stderr, |_| {})
+    }
+
+    fn finish_forwarders(
+        stdout_handle: std::thread::JoinHandle<Result<()>>,
+        stderr_handle: std::thread::JoinHandle<Result<()>>,
+    ) -> Result<()> {
+        let deadline = Instant::now() + PROCESS_OUTPUT_DRAIN_TIMEOUT;
+        while Instant::now() < deadline
+            && (!stdout_handle.is_finished() || !stderr_handle.is_finished())
+        {
+            std::thread::sleep(PROCESS_OUTPUT_DRAIN_RETRY_INTERVAL);
+        }
+
+        Self::finish_forwarder(stdout_handle, "stdout")?;
+        Self::finish_forwarder(stderr_handle, "stderr")
+    }
+
+    fn finish_forwarder(
+        handle: std::thread::JoinHandle<Result<()>>,
+        stream_name: &str,
+    ) -> Result<()> {
+        if handle.is_finished() {
+            handle
+                .join()
+                .map_err(|_| anyhow::anyhow!("{stream_name} reader thread panicked"))?
+        } else {
+            Logger::warning(&format!(
+                "{stream_name} reader did not finish within {:.1}s; output may be incomplete",
+                PROCESS_OUTPUT_DRAIN_TIMEOUT.as_secs_f64()
+            ));
+            Ok(())
+        }
+    }
+
     fn read_stream(stream: impl std::io::Read, is_stderr: bool) -> Result<String> {
         let mut buffer = String::new();
+        Self::process_stream(stream, is_stderr, |text| buffer.push_str(text))?;
+        Ok(buffer)
+    }
+
+    fn process_stream(
+        stream: impl std::io::Read,
+        is_stderr: bool,
+        mut consume: impl FnMut(&str),
+    ) -> Result<()> {
         let mut reader = BufReader::new(stream);
         let mut bytes = Vec::new();
         loop {
@@ -127,9 +201,9 @@ impl ProcessRunner {
             } else {
                 Logger::writeln(&format!("  {line}"));
             }
-            buffer.push_str(&text);
+            consume(&text);
         }
-        Ok(buffer)
+        Ok(())
     }
 
     fn wait_for_gate(gate_path: &Path, timeout: Duration) -> Result<()> {
@@ -165,7 +239,7 @@ enum OutputMode {
 
 struct ManagedChild {
     child: Child,
-    _lifetime: ChildLifetimeGuard,
+    lifetime: ChildLifetimeGuard,
     #[cfg(windows)]
     _gate: NamedTempFile,
 }
@@ -219,7 +293,7 @@ impl ManagedChild {
 
         Ok(Self {
             child,
-            _lifetime: lifetime,
+            lifetime,
             _gate: gate,
         })
     }
@@ -229,10 +303,7 @@ impl ManagedChild {
         Self::configure_stdio(command, output_mode);
         let child = command.spawn().context("Failed to start managed process")?;
         let lifetime = platform::bind_child_lifetime(&child)?;
-        Ok(Self {
-            child,
-            _lifetime: lifetime,
-        })
+        Ok(Self { child, lifetime })
     }
 
     fn configure_stdio(command: &mut Command, output_mode: OutputMode) {

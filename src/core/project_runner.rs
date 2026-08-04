@@ -74,7 +74,7 @@ impl ProjectRunner {
         let args = Self::build_launch_args(&project_path, extra_args);
         let mut command = Command::new(&exec_path);
         command.args(&args);
-        let code = ProcessRunner::inherit(&mut command)?;
+        let code = ProcessRunner::forward(&mut command)?;
 
         Logger::divider();
         Self::validate_exit_code(code)?;
