@@ -266,6 +266,16 @@ ubuild 会通过以下来源自动检测 Unreal Engine 安装：
 
 ## 开发
 
+每次克隆仓库后，先启用仓库内的 Git 钩子：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File setup.ps1
+```
+
+`commit-msg` 钩子会在创建提交前自动删除提交消息中的
+`Co-authored-by:` 行。该设置仅作用于当前克隆；Git 允许通过
+`git commit --no-verify` 跳过本地钩子。
+
 ```bash
 # 构建
 cargo build
