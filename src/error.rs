@@ -61,6 +61,9 @@ pub enum UbuildError {
     #[error("Invalid IDE type: {0}")]
     InvalidIdeType(String),
 
+    #[error("Process {0}")]
+    Terminated(crate::types::TerminationSignal),
+
     // ── Generic ──
     #[error("Executable not found: {0}")]
     ExecutableNotFound(PathBuf),

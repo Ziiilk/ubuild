@@ -3,20 +3,30 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 #[cfg(windows)]
+use send_ctrlc::Interruptible;
+use send_ctrlc::{InterruptibleChild, InterruptibleCommand};
+#[cfg(windows)]
 use tempfile::NamedTempFile;
 
+use crate::error::UbuildError;
 use crate::platform::{self, ChildLifetimeGuard};
-use crate::types::ProcessOutput;
+use crate::types::{ProcessOutput, TerminationSignal};
 use crate::utils::logger::Logger;
+
+use super::log_monitor::{MonitorAction, TerminalLogMonitor};
 
 const PROCESS_GATE_TIMEOUT: Duration = Duration::from_secs(5);
 const PROCESS_GATE_RETRY_INTERVAL: Duration = Duration::from_millis(5);
 const PROCESS_OUTPUT_DRAIN_TIMEOUT: Duration = Duration::from_secs(1);
 const PROCESS_OUTPUT_DRAIN_RETRY_INTERVAL: Duration = Duration::from_millis(5);
+const INTERRUPT_GRACE_PERIOD: Duration = Duration::from_secs(2);
+const MAX_MONITOR_LINES_PER_TICK: usize = 1_024;
+const MONITOR_CHANNEL_CAPACITY: usize = 2_048;
 
 pub struct ProcessRunner;
 
@@ -101,6 +111,90 @@ impl ProcessRunner {
         Ok(status.code().unwrap_or(-1))
     }
 
+    pub fn forward_collapsible(command: &mut Command, title: &str) -> Result<i32> {
+        if !TerminalLogMonitor::is_supported() {
+            return Self::forward(command);
+        }
+
+        Logger::debug(&format!("Executing: {command:?}"));
+        let mut monitor = match TerminalLogMonitor::start(title) {
+            Ok(monitor) => monitor,
+            Err(error) => {
+                Logger::warning(&format!(
+                    "Could not start collapsible log monitor: {error:#}"
+                ));
+                return Self::forward(command);
+            }
+        };
+
+        let mut managed = ManagedInterruptibleChild::spawn(command, OutputMode::Piped)?;
+        let stdout = managed
+            .child
+            .stdout
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to capture process stdout"))?;
+        let stderr = managed
+            .child
+            .stderr
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to capture process stderr"))?;
+        let (sender, receiver) = mpsc::sync_channel(MONITOR_CHANNEL_CAPACITY);
+        let stdout_sender = sender.clone();
+        let stdout_handle =
+            std::thread::spawn(move || Self::collect_stream(stdout, &stdout_sender));
+        let stderr_handle = std::thread::spawn(move || Self::collect_stream(stderr, &sender));
+
+        let mut termination = None;
+        let mut interrupt_deadline = None;
+        let status = loop {
+            Self::drain_monitor_lines(&receiver, &mut monitor);
+            if let MonitorAction::Terminate(signal) = monitor.update()? {
+                if termination.is_none() {
+                    termination = Some(signal);
+                    if managed.child.try_wait()?.is_none() {
+                        if let Err(error) = managed.signal(signal) {
+                            if managed.child.try_wait()?.is_none() {
+                                return Err(error)
+                                    .context("Failed to signal managed process gracefully");
+                            }
+                        }
+                        interrupt_deadline = Some(Instant::now() + INTERRUPT_GRACE_PERIOD);
+                    }
+                }
+            }
+            if let Some(status) = managed
+                .child
+                .try_wait()
+                .context("Failed to poll managed process")?
+            {
+                break status;
+            }
+            if interrupt_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                managed
+                    .force_kill()
+                    .context("Failed to stop unresponsive signaled process")?;
+                interrupt_deadline = None;
+            }
+            std::thread::sleep(TerminalLogMonitor::poll_interval());
+        };
+
+        drop(managed.lifetime.take());
+        Self::drain_monitor_until_finished(
+            &receiver,
+            &mut monitor,
+            &stdout_handle,
+            &stderr_handle,
+        )?;
+        let exit_code = status.code().unwrap_or(-1);
+        monitor.finish(exit_code, termination)?;
+        Self::finish_forwarders(stdout_handle, stderr_handle)?;
+
+        if let Some(signal) = termination {
+            return Err(UbuildError::Terminated(signal).into());
+        }
+        Ok(exit_code)
+    }
+
     pub fn inherit(command: &mut Command) -> Result<i32> {
         Logger::debug(&format!("Executing: {command:?}"));
         let mut managed = ManagedChild::spawn(command, OutputMode::Inherited)?;
@@ -117,6 +211,9 @@ impl ProcessRunner {
         cwd: Option<&Path>,
         args: &[OsString],
     ) -> Result<i32> {
+        #[cfg(windows)]
+        ctrlc::set_handler(|| {}).context("Failed to install managed process control handler")?;
+
         Self::wait_for_gate(gate_path, PROCESS_GATE_TIMEOUT)?;
 
         let mut command = Command::new(program);
@@ -137,6 +234,67 @@ impl ProcessRunner {
 
     fn forward_stream(stream: impl std::io::Read, is_stderr: bool) -> Result<()> {
         Self::process_stream(stream, is_stderr, |_| {})
+    }
+
+    fn collect_stream(stream: impl std::io::Read, sender: &SyncSender<String>) -> Result<()> {
+        let mut reader = BufReader::new(stream);
+        let mut bytes = Vec::new();
+        loop {
+            bytes.clear();
+            if reader
+                .read_until(b'\n', &mut bytes)
+                .context("Failed to read managed process output")?
+                == 0
+            {
+                break;
+            }
+
+            let text = String::from_utf8_lossy(&bytes);
+            let line = text.trim_end_matches(['\r', '\n']);
+            if sender.send(format!("  {line}")).is_err() {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    fn drain_monitor_lines(receiver: &Receiver<String>, monitor: &mut TerminalLogMonitor) -> bool {
+        Self::drain_lines(receiver, MAX_MONITOR_LINES_PER_TICK, |line| {
+            monitor.push_line(line);
+        })
+    }
+
+    fn drain_lines(
+        receiver: &Receiver<String>,
+        limit: usize,
+        mut consume: impl FnMut(String),
+    ) -> bool {
+        for _ in 0..limit {
+            match receiver.try_recv() {
+                Ok(line) => consume(line),
+                Err(TryRecvError::Empty | TryRecvError::Disconnected) => return true,
+            }
+        }
+        false
+    }
+
+    fn drain_monitor_until_finished(
+        receiver: &Receiver<String>,
+        monitor: &mut TerminalLogMonitor,
+        stdout_handle: &std::thread::JoinHandle<Result<()>>,
+        stderr_handle: &std::thread::JoinHandle<Result<()>>,
+    ) -> Result<()> {
+        let deadline = Instant::now() + PROCESS_OUTPUT_DRAIN_TIMEOUT;
+        while Instant::now() < deadline {
+            let queue_empty = Self::drain_monitor_lines(receiver, monitor);
+            if queue_empty && stdout_handle.is_finished() && stderr_handle.is_finished() {
+                break;
+            }
+            monitor.update()?;
+            std::thread::sleep(PROCESS_OUTPUT_DRAIN_RETRY_INTERVAL);
+        }
+        Self::drain_monitor_lines(receiver, monitor);
+        Ok(())
     }
 
     fn finish_forwarders(
@@ -244,35 +402,21 @@ struct ManagedChild {
     _gate: NamedTempFile,
 }
 
+struct ManagedInterruptibleChild {
+    child: InterruptibleChild,
+    lifetime: Option<ChildLifetimeGuard>,
+    #[cfg(windows)]
+    _gate: NamedTempFile,
+}
+
 impl ManagedChild {
     #[cfg(windows)]
     fn spawn(command: &mut Command, output_mode: OutputMode) -> Result<Self> {
-        let spec = ManagedProcessSpec::from_command(command);
-        let mut gate = NamedTempFile::new().context("Failed to create managed process gate")?;
-
-        let mut helper = Command::new(std::env::current_exe()?);
-        helper
-            .arg("__managed-process")
-            .arg("--gate")
-            .arg(gate.path())
-            .arg("--program")
-            .arg(&spec.program);
-        if let Some(cwd) = &spec.cwd {
-            helper.arg("--cwd").arg(cwd);
-        }
-        helper.arg("--").args(&spec.args);
-        for (key, value) in &spec.environment {
-            if let Some(value) = value {
-                helper.env(key, value);
-            } else {
-                helper.env_remove(key);
-            }
-        }
-        Self::configure_stdio(&mut helper, output_mode);
+        let (mut helper, mut gate, program) = Self::prepare_windows_helper(command, output_mode)?;
 
         let mut child = helper
             .spawn()
-            .with_context(|| format!("Failed to start {}", spec.program.display()))?;
+            .with_context(|| format!("Failed to start {}", program.display()))?;
         let lifetime = match platform::bind_child_lifetime(&child) {
             Ok(lifetime) => lifetime,
             Err(bind_error) => {
@@ -286,10 +430,7 @@ impl ManagedChild {
             }
         };
 
-        gate.write_all(b"ready")
-            .context("Failed to release managed process gate")?;
-        gate.flush()
-            .context("Failed to flush managed process gate")?;
+        Self::release_windows_gate(&mut gate)?;
 
         Ok(Self {
             child,
@@ -317,6 +458,161 @@ impl ManagedChild {
             }
         }
     }
+
+    #[cfg(windows)]
+    fn prepare_windows_helper(
+        command: &Command,
+        output_mode: OutputMode,
+    ) -> Result<(Command, NamedTempFile, PathBuf)> {
+        let spec = ManagedProcessSpec::from_command(command);
+        let gate = NamedTempFile::new().context("Failed to create managed process gate")?;
+        let mut helper = Command::new(std::env::current_exe()?);
+        helper
+            .arg("__managed-process")
+            .arg("--gate")
+            .arg(gate.path())
+            .arg("--program")
+            .arg(&spec.program);
+        if let Some(cwd) = &spec.cwd {
+            helper.arg("--cwd").arg(cwd);
+        }
+        helper.arg("--").args(&spec.args);
+        for (key, value) in &spec.environment {
+            if let Some(value) = value {
+                helper.env(key, value);
+            } else {
+                helper.env_remove(key);
+            }
+        }
+        Self::configure_stdio(&mut helper, output_mode);
+        Ok((helper, gate, spec.program))
+    }
+
+    #[cfg(windows)]
+    fn release_windows_gate(gate: &mut NamedTempFile) -> Result<()> {
+        gate.write_all(b"ready")
+            .context("Failed to release managed process gate")?;
+        gate.flush().context("Failed to flush managed process gate")
+    }
+}
+
+impl Drop for ManagedInterruptibleChild {
+    fn drop(&mut self) {
+        if self.lifetime.is_none() {
+            return;
+        }
+        match self.child.try_wait() {
+            Ok(Some(_)) => {}
+            Ok(None) | Err(_) => {
+                if let Err(error) = self.force_kill() {
+                    Logger::error(&format!(
+                        "Failed to clean up managed process group after error: {error}"
+                    ));
+                }
+            }
+        }
+    }
+}
+
+impl ManagedInterruptibleChild {
+    #[cfg(windows)]
+    fn spawn(command: &mut Command, output_mode: OutputMode) -> Result<Self> {
+        let (mut helper, mut gate, program) =
+            ManagedChild::prepare_windows_helper(command, output_mode)?;
+
+        let mut child = helper
+            .spawn_interruptible()
+            .with_context(|| format!("Failed to start {}", program.display()))?;
+        let lifetime = match platform::bind_child_lifetime(&child) {
+            Ok(lifetime) => lifetime,
+            Err(bind_error) => {
+                let cleanup_result = child.kill().and_then(|()| child.wait().map(|_| ()));
+                if let Err(cleanup_error) = cleanup_result {
+                    return Err(bind_error.context(format!(
+                        "Failed to clean up process after lifecycle binding error: {cleanup_error}"
+                    )));
+                }
+                return Err(bind_error);
+            }
+        };
+
+        ManagedChild::release_windows_gate(&mut gate)?;
+
+        Ok(Self {
+            child,
+            lifetime: Some(lifetime),
+            _gate: gate,
+        })
+    }
+
+    #[cfg(not(windows))]
+    fn spawn(command: &mut Command, output_mode: OutputMode) -> Result<Self> {
+        use std::os::unix::process::CommandExt;
+
+        ManagedChild::configure_stdio(command, output_mode);
+        command.process_group(0);
+        let child = command
+            .spawn_interruptible()
+            .context("Failed to start managed process")?;
+        let lifetime = platform::bind_child_lifetime(&child)?;
+        Ok(Self {
+            child,
+            lifetime: Some(lifetime),
+        })
+    }
+
+    fn signal(&mut self, signal: TerminationSignal) -> std::io::Result<()> {
+        #[cfg(windows)]
+        {
+            let _ = signal;
+            self.child.terminate()
+        }
+
+        #[cfg(unix)]
+        {
+            let signal = match signal {
+                TerminationSignal::Interrupt => nix::sys::signal::Signal::SIGINT,
+                TerminationSignal::Terminate => nix::sys::signal::Signal::SIGTERM,
+                TerminationSignal::Hangup => nix::sys::signal::Signal::SIGHUP,
+            };
+            signal_process_group(self.child.id(), signal)
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            let _ = signal;
+            self.child.kill()
+        }
+    }
+
+    fn force_kill(&mut self) -> std::io::Result<()> {
+        #[cfg(windows)]
+        {
+            self.child.kill()
+        }
+
+        #[cfg(unix)]
+        {
+            signal_process_group(self.child.id(), nix::sys::signal::Signal::SIGKILL)
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            self.child.kill()
+        }
+    }
+}
+
+#[cfg(unix)]
+fn signal_process_group(child_id: u32, signal: nix::sys::signal::Signal) -> std::io::Result<()> {
+    let process_group = i32::try_from(child_id).map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Process ID does not fit i32: {child_id}"),
+        )
+    })?;
+    nix::sys::signal::killpg(nix::unistd::Pid::from_raw(process_group), signal)
+        .map_err(std::io::Error::from)
 }
 
 #[cfg(windows)]
@@ -360,6 +656,24 @@ mod tests {
 
         assert_eq!(output, "A\u{fffd}\n");
         Ok(())
+    }
+
+    #[test]
+    fn monitor_drain_has_a_per_tick_budget() {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        for line in ["one", "two", "three"] {
+            assert!(sender.send(line.to_string()).is_ok());
+        }
+
+        let mut drained = Vec::new();
+        let queue_empty = ProcessRunner::drain_lines(&receiver, 2, |line| drained.push(line));
+
+        assert!(!queue_empty);
+        assert_eq!(drained, ["one", "two"]);
+
+        let queue_empty = ProcessRunner::drain_lines(&receiver, 2, |line| drained.push(line));
+        assert!(queue_empty);
+        assert_eq!(drained, ["one", "two", "three"]);
     }
 
     #[test]

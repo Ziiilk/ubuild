@@ -32,6 +32,10 @@ fn main() {
     };
 
     if let Err(e) = result {
+        if let Some(error::UbuildError::Terminated(signal)) = e.downcast_ref::<error::UbuildError>()
+        {
+            std::process::exit(signal.exit_code());
+        }
         utils::logger::Logger::error(&format!("{e:#}"));
         std::process::exit(1);
     }

@@ -38,6 +38,33 @@ pub struct ProcessOutput {
     pub exit_code: i32,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TerminationSignal {
+    Interrupt,
+    Terminate,
+    Hangup,
+}
+
+impl TerminationSignal {
+    pub fn exit_code(self) -> i32 {
+        match self {
+            Self::Interrupt => 130,
+            Self::Terminate => 143,
+            Self::Hangup => 129,
+        }
+    }
+}
+
+impl std::fmt::Display for TerminationSignal {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Interrupt => formatter.write_str("interrupted"),
+            Self::Terminate => formatter.write_str("terminated"),
+            Self::Hangup => formatter.write_str("disconnected"),
+        }
+    }
+}
+
 // ──── Engine ────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

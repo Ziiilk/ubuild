@@ -254,6 +254,7 @@ impl ReplacementSignal {
         let thread = std::thread::spawn(move || {
             while !thread_stop.load(Ordering::Acquire) {
                 if fs::read(&request_path).is_ok_and(|contents| contents != token) {
+                    super::log_monitor::restore_terminal_before_exit();
                     std::process::exit(REPLACED_EXIT_CODE);
                 }
                 std::thread::sleep(REPLACEMENT_WAIT_INTERVAL);
