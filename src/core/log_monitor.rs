@@ -310,10 +310,10 @@ impl TerminalLogMonitor {
                 }
             }
             MouseEventKind::ScrollUp if self.state.is_expanded() => {
-                self.state.scroll_up(scroll_step)
+                self.state.scroll_up(scroll_step);
             }
             MouseEventKind::ScrollDown if self.state.is_expanded() => {
-                self.state.scroll_down(scroll_step)
+                self.state.scroll_down(scroll_step);
             }
             _ => {}
         }
@@ -385,7 +385,7 @@ impl TerminalLogMonitor {
             .render_lines(area.width.into(), area.height.into(), elapsed);
         let widget_lines: Vec<Line<'static>> = lines.into_iter().map(Line::raw).collect();
         self.terminal
-            .draw(|frame| frame.render_widget(Paragraph::new(widget_lines), area))
+            .draw(|frame| frame.render_widget(Paragraph::new(widget_lines), area.into()))
             .context("Failed to render expanded Unreal log monitor")?;
         Ok(())
     }
