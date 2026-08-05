@@ -12,7 +12,13 @@ use crossterm::event::{
 };
 use crossterm::terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{execute, queue};
-use ratatui::{backend::CrosstermBackend, text::Line, widgets::Paragraph, Terminal};
+use ratatui::{
+    backend::CrosstermBackend,
+    style::{Color, Style},
+    text::{Line, Span},
+    widgets::Paragraph,
+    Terminal,
+};
 
 use crate::types::TerminationSignal;
 
@@ -48,6 +54,9 @@ pub struct LogMonitorState {
     lines: VecDeque<String>,
     total_lines: usize,
     expanded: bool,
+    follow: bool,
+    viewport_body_height: usize,
+    header_height: usize,
     completion: Option<Completion>,
     top_index: usize,
     search: SearchState,
@@ -79,6 +88,14 @@ enum Completion {
     Interrupted,
 }
 
+struct Layout {
+    header: Vec<String>,
+    footer: String,
+    body_start: usize,
+    body_end: usize,
+    body_height: usize,
+}
+
 impl LogMonitorState {
     pub fn new(title: &str) -> Self {
         Self {
@@ -86,6 +103,9 @@ impl LogMonitorState {
             lines: VecDeque::new(),
             total_lines: 0,
             expanded: false,
+            follow: true,
+            viewport_body_height: 1,
+            header_height: 1,
             completion: None,
             top_index: 0,
             search: SearchState::new(),
@@ -99,9 +119,7 @@ impl LogMonitorState {
         }
         self.lines.push_back(line.into());
         self.total_lines += 1;
-        if self.at_bottom() {
-            self.top_index = self.last_top_index();
-        } else if self.top_index > 0 && was_full {
+        if !self.follow && was_full && self.top_index > 0 {
             self.top_index = self.top_index.saturating_sub(1);
         }
         if self.search.active {
@@ -112,7 +130,7 @@ impl LogMonitorState {
     pub fn toggle(&mut self) {
         self.expanded = !self.expanded;
         if self.expanded {
-            self.top_index = self.last_top_index();
+            self.follow = true;
         }
     }
 
@@ -122,6 +140,7 @@ impl LogMonitorState {
 
     pub fn complete(&mut self, exit_code: i32, termination: Option<TerminationSignal>) {
         self.expanded = false;
+        self.follow = true;
         self.completion = Some(if termination.is_some() {
             Completion::Interrupted
         } else if exit_code == 0 {
@@ -132,21 +151,32 @@ impl LogMonitorState {
     }
 
     pub fn scroll_up(&mut self, lines: usize) {
-        self.top_index = self.top_index.saturating_sub(lines);
+        let base = if self.follow {
+            self.last_top_index()
+        } else {
+            self.top_index
+        };
+        self.follow = false;
+        self.top_index = base.saturating_sub(lines);
     }
 
     pub fn scroll_down(&mut self, lines: usize) {
-        self.top_index = self
-            .top_index
-            .saturating_add(lines)
-            .min(self.last_top_index());
+        let base = if self.follow {
+            self.last_top_index()
+        } else {
+            self.top_index
+        };
+        let last = self.last_top_index();
+        self.top_index = base.saturating_add(lines).min(last);
+        self.follow = self.top_index >= last;
     }
 
     pub fn scroll_to_bottom(&mut self) {
-        self.top_index = self.last_top_index();
+        self.follow = true;
     }
 
     pub fn scroll_to_top(&mut self) {
+        self.follow = false;
         self.top_index = 0;
     }
 
@@ -201,6 +231,10 @@ impl LogMonitorState {
         self.expanded
     }
 
+    pub fn header_height(&self) -> usize {
+        self.header_height
+    }
+
     pub fn search_active(&self) -> bool {
         self.search.active
     }
@@ -235,70 +269,121 @@ impl LogMonitorState {
     }
 
     fn center_on(&mut self, target: usize) {
-        self.top_index = target.min(self.last_top_index());
+        self.follow = false;
+        let half = self.viewport_body_height / 2;
+        self.top_index = target.saturating_sub(half).min(self.last_top_index());
     }
 
     fn last_top_index(&self) -> usize {
-        self.lines.len().saturating_sub(1)
+        self.lines
+            .len()
+            .saturating_sub(self.viewport_body_height.max(1))
     }
 
-    fn at_bottom(&self) -> bool {
-        self.top_index >= self.last_top_index()
-    }
-
-    pub fn render(&self, width: u16, height: u16, elapsed: Duration) -> String {
-        self.render_lines(usize::from(width), usize::from(height), elapsed)
+    pub fn render(&mut self, width: u16, height: u16, elapsed: Duration) -> String {
+        let width = usize::from(width);
+        let height = usize::from(height);
+        if !self.expanded {
+            return truncate(&self.render_header(elapsed), width);
+        }
+        self.render_styled(width, height, elapsed)
+            .into_iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
             .join("\r\n")
     }
 
-    fn render_lines(&self, width: usize, height: usize, elapsed: Duration) -> Vec<String> {
-        let header = self.render_header(elapsed);
-        if !self.expanded {
-            return vec![truncate(&header, width)];
+    fn render_styled(
+        &mut self,
+        width: usize,
+        height: usize,
+        elapsed: Duration,
+    ) -> Vec<Line<'static>> {
+        let needle = self.search_needle();
+        let current_line = self.search.matches.get(self.search.current).copied();
+        let layout = self.frame(width, height, elapsed);
+        self.sync_layout(layout.body_height, layout.header.len());
+        let gap = layout
+            .body_height
+            .saturating_sub(layout.body_end - layout.body_start);
+        let mut out: Vec<Line<'static>> = Vec::with_capacity(height);
+        for head in &layout.header {
+            out.push(Line::raw(head.clone()));
         }
-
-        let body_height = height.saturating_sub(3);
-        let start = self.top_index.min(self.last_top_index());
-        let end = self.lines.len().min(start.saturating_add(body_height));
-        let mut rendered = Vec::with_capacity(body_height.saturating_add(3));
-        rendered.push(truncate(&header, width));
-        rendered.push("─".repeat(width));
-        rendered.extend(
-            self.lines
-                .range(start..end)
-                .map(|line| truncate(line, width)),
-        );
-        let gap = body_height.saturating_sub(end - start);
+        out.push(Line::raw(divider(width)));
+        for (offset, line) in self
+            .lines
+            .range(layout.body_start..layout.body_end)
+            .enumerate()
+        {
+            let idx = layout.body_start + offset;
+            let is_current = current_line == Some(idx);
+            out.push(Line::from(highlight_spans(
+                &clip(line, width),
+                needle.as_deref(),
+                is_current,
+            )));
+        }
         for _ in 0..gap {
-            rendered.push(String::new());
+            out.push(Line::raw(String::new()));
         }
-        rendered.push("─".repeat(width));
-        rendered.push(truncate(&self.render_status(), width));
-        rendered
+        out.push(Line::raw(divider(width)));
+        out.push(Line::raw(layout.footer));
+        out
     }
 
-    fn render_status(&self) -> String {
-        let mut parts: Vec<String> = Vec::with_capacity(3);
-        parts.push(if self.at_bottom() {
-            "FOLLOW".to_string()
+    fn frame(&self, width: usize, height: usize, elapsed: Duration) -> Layout {
+        let header = wrap_text(&self.render_header(elapsed), width);
+        let body_height = height.saturating_sub(header.len() + 3).max(1);
+        let last = self.lines.len().saturating_sub(body_height);
+        let start = if self.follow {
+            last
         } else {
-            "PAUSED".to_string()
-        });
+            self.top_index.min(last)
+        };
+        let end = (start + body_height).min(self.lines.len());
+        let footer = truncate(&self.render_status_at(start), width);
+        Layout {
+            header,
+            footer,
+            body_start: start,
+            body_end: end,
+            body_height,
+        }
+    }
+
+    fn search_needle(&self) -> Option<String> {
+        let needle = self.search.input.trim();
+        if needle.is_empty() {
+            None
+        } else {
+            Some(needle.to_ascii_lowercase())
+        }
+    }
+
+    fn sync_layout(&mut self, body_height: usize, header_height: usize) {
+        self.viewport_body_height = body_height;
+        self.header_height = header_height.max(1);
+    }
+
+    fn render_status_at(&self, top: usize) -> String {
+        let mut parts: Vec<String> = Vec::with_capacity(3);
+        parts.push((if self.follow { "FOLLOW" } else { "PAUSED" }).to_string());
         let total = self.lines.len();
         if total == 0 {
             parts.push("0 lines".to_string());
         } else {
-            parts.push(format!("{} / {total}", self.top_index + 1));
+            parts.push(format!("{} / {total}", top + 1));
         }
+        let needle = self.search.input.trim();
         if !self.search.matches.is_empty() {
             parts.push(format!(
-                "/{} [{}/{Total}]",
-                self.search.input,
+                "/{needle} [{}/{}]",
                 self.search.current + 1,
-                Total = self.search.matches.len()
+                self.search.matches.len()
             ));
-        } else if !self.search.input.is_empty() {
-            parts.push(format!("/{} [no matches]", self.search.input));
+        } else if !needle.is_empty() {
+            parts.push(format!("/{needle} [no matches]"));
         }
         format!("  {}", parts.join("  │  "))
     }
@@ -323,9 +408,9 @@ impl LogMonitorState {
 
         let chevron = if self.expanded { "⌄" } else { "›" };
         let action = if self.expanded {
-            "Enter/click to collapse · ↑↓/PgUp/Dn/Home/End · Ctrl+F search · N/P next/prev"
+            "Space/click to collapse · ↑↓/PgUp/Dn/Home/End · Ctrl+F search · N/P next/prev"
         } else {
-            "Enter/click to expand"
+            "Space/click to expand"
         };
         format!(
             "  {chevron} {}  Worked for {}  {} lines  {action}",
@@ -445,7 +530,7 @@ impl TerminalLogMonitor {
         }
 
         match key.code {
-            KeyCode::Enter | KeyCode::Char(' ') => self.toggle()?,
+            KeyCode::Char(' ') => self.toggle()?,
             KeyCode::Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.state.begin_search();
             }
@@ -468,7 +553,7 @@ impl TerminalLogMonitor {
         match mouse.kind {
             MouseEventKind::Up(MouseButton::Left) => {
                 let on_header = if self.state.is_expanded() {
-                    mouse.row == 0
+                    usize::from(mouse.row) < self.state.header_height()
                 } else {
                     mouse.row == self.header_row
                 };
@@ -542,17 +627,17 @@ impl TerminalLogMonitor {
     }
 
     fn draw_expanded(&mut self) -> Result<()> {
-        let elapsed = self.started_at.elapsed();
         let area = self
             .terminal
             .size()
             .context("Failed to read terminal size for Unreal log monitor")?;
-        let lines = self
-            .state
-            .render_lines(area.width.into(), area.height.into(), elapsed);
-        let widget_lines: Vec<Line<'static>> = lines.into_iter().map(Line::raw).collect();
+        let lines = self.state.render_styled(
+            area.width.into(),
+            area.height.into(),
+            self.started_at.elapsed(),
+        );
         self.terminal
-            .draw(|frame| frame.render_widget(Paragraph::new(widget_lines), area.into()))
+            .draw(|frame| frame.render_widget(Paragraph::new(lines), area.into()))
             .context("Failed to render expanded Unreal log monitor")?;
         Ok(())
     }
@@ -708,6 +793,88 @@ fn format_duration(duration: Duration) -> String {
     }
 }
 
+fn clip(text: &str, width: usize) -> String {
+    if width == 0 {
+        return String::new();
+    }
+    if text.chars().count() <= width {
+        return text.to_string();
+    }
+    text.chars().take(width).collect()
+}
+
+fn divider(width: usize) -> String {
+    "─".repeat(width)
+}
+
+fn wrap_text(text: &str, width: usize) -> Vec<String> {
+    if width == 0 {
+        return vec![text.to_string()];
+    }
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    for word in text.split(' ') {
+        if word.is_empty() {
+            continue;
+        }
+        let needs_separator = !current.is_empty();
+        let current_len = current.chars().count();
+        let word_len = word.chars().count();
+        if current_len + usize::from(needs_separator) + word_len <= width {
+            if needs_separator {
+                current.push(' ');
+            }
+            current.push_str(word);
+        } else {
+            if !current.is_empty() {
+                lines.push(std::mem::take(&mut current));
+            }
+            let mut rest: String = word.to_string();
+            while rest.chars().count() > width {
+                let head: String = rest.chars().take(width).collect();
+                lines.push(head);
+                rest = rest.chars().skip(width).collect();
+            }
+            current.push_str(&rest);
+        }
+    }
+    lines.push(current);
+    lines
+}
+
+fn highlight_spans(text: &str, needle: Option<&str>, is_current: bool) -> Vec<Span<'static>> {
+    let Some(needle) = needle else {
+        return vec![Span::raw(text.to_string())];
+    };
+    if needle.is_empty() {
+        return vec![Span::raw(text.to_string())];
+    }
+    let style = if is_current {
+        Style::default().fg(Color::Black).bg(Color::Yellow)
+    } else {
+        Style::default().fg(Color::Yellow)
+    };
+    let lower = text.to_ascii_lowercase();
+    let needle_len = needle.len();
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    let mut cursor = 0usize;
+    for (start, _) in lower.match_indices(needle) {
+        let end = start + needle_len;
+        if start > cursor {
+            spans.push(Span::raw(text[cursor..start].to_string()));
+        }
+        spans.push(Span::styled(text[start..end].to_string(), style));
+        cursor = end;
+    }
+    if cursor < text.len() {
+        spans.push(Span::raw(text[cursor..].to_string()));
+    }
+    if spans.is_empty() {
+        spans.push(Span::raw(text.to_string()));
+    }
+    spans
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -784,5 +951,115 @@ mod tests {
         assert!(!TerminalLogMonitor::streams_support_monitor(
             true, true, false
         ));
+    }
+
+    #[test]
+    fn expanded_view_always_reserves_a_footer_row() {
+        let mut state = LogMonitorState::new("Unreal log");
+        state.toggle();
+        state.push_line("LogInit: Display: Running engine");
+
+        let rendered = state.render(80, 24, Duration::from_secs(1));
+        let rows: Vec<&str> = rendered.split("\r\n").collect();
+
+        assert_eq!(rows.len(), 24);
+        assert!(rows[rows.len() - 1].contains("FOLLOW"));
+    }
+
+    #[test]
+    fn following_pins_newest_line_at_the_bottom() {
+        let mut state = LogMonitorState::new("Unreal log");
+        state.toggle();
+        for index in 0..30 {
+            state.push_line(format!("line {index}"));
+        }
+
+        let rendered = state.render(80, 24, Duration::from_secs(1));
+        let rows: Vec<&str> = rendered.split("\r\n").collect();
+        assert_eq!(rows.len(), 24);
+        assert!(rows[rows.len() - 1].contains("FOLLOW"));
+        assert_eq!(rows[rows.len() - 3], "line 29");
+
+        // A new line while following fills the bottom and shifts the previous newest up.
+        state.push_line("line 30");
+        let rendered_after = state.render(80, 24, Duration::from_secs(1));
+        let rows_after: Vec<&str> = rendered_after.split("\r\n").collect();
+        assert_eq!(rows_after[rows_after.len() - 3], "line 30");
+        assert_eq!(rows_after[rows_after.len() - 4], "line 29");
+    }
+
+    #[test]
+    fn paused_view_does_not_follow_new_lines() {
+        let mut state = LogMonitorState::new("Unreal log");
+        state.toggle();
+        for index in 0..30 {
+            state.push_line(format!("line {index}"));
+        }
+        // The expanded view draws once before the user scrolls, fixing the viewport height.
+        let _ = state.render(80, 24, Duration::from_secs(1));
+        state.scroll_up(5);
+
+        let before = state.render(80, 24, Duration::from_secs(1));
+        state.push_line("line 30");
+        let after = state.render(80, 24, Duration::from_secs(1));
+
+        assert!(before.contains("PAUSED"));
+        assert!(after.contains("PAUSED"));
+        assert!(!after.contains("line 30"));
+    }
+
+    #[test]
+    fn narrow_header_wraps_instead_of_truncating() {
+        let mut state = LogMonitorState::new("Unreal log");
+        state.toggle();
+        state.push_line("LogInit: Display: Running engine");
+
+        let rendered = state.render(20, 24, Duration::from_secs(1));
+
+        assert!(rendered.contains("LogInit: Display:"));
+        assert!(rendered.contains("next/prev"));
+    }
+
+    #[test]
+    fn search_reports_match_counts_in_status() {
+        let mut state = LogMonitorState::new("Unreal log");
+        state.push_line("LogInit: Display: Running engine");
+        state.push_line("LogCore: Warning: something");
+        state.push_line("LogInit: Error: boom");
+        state.toggle();
+        for ch in "loginit".chars() {
+            state.search_input_push(ch);
+        }
+        state.finalize_search();
+
+        let rendered = state.render(80, 24, Duration::from_secs(1));
+        assert!(rendered.contains("[1/2]"));
+
+        state.search_next();
+        let rendered_after = state.render(80, 24, Duration::from_secs(1));
+        assert!(rendered_after.contains("[2/2]"));
+    }
+
+    #[test]
+    fn search_isolates_the_matched_substring() {
+        let spans = super::highlight_spans("LogInit: Error: boom", Some("error"), false);
+
+        assert!(spans.len() >= 2);
+        assert!(spans.iter().any(|span| span.content.as_ref() == "Error"));
+    }
+
+    #[test]
+    fn wrapped_header_reports_its_full_row_count() {
+        // At a default-ish width the expanded header wraps to several rows; every
+        // header row must remain clickable, not just row 0.
+        let mut state = LogMonitorState::new("Unreal log");
+        state.toggle();
+        state.push_line("LogInit: Display: Running engine");
+        let _ = state.render(80, 24, Duration::from_secs(1));
+
+        assert!(
+            state.header_height() >= 2,
+            "header should wrap across multiple rows at width 80"
+        );
     }
 }
