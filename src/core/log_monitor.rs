@@ -12,6 +12,7 @@ use crossterm::event::{
 };
 use crossterm::terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{execute, queue};
+use ratatui::{backend::CrosstermBackend, text::Line, widgets::Paragraph, Terminal};
 
 use crate::types::TerminationSignal;
 
@@ -127,18 +128,22 @@ impl LogMonitorState {
     }
 
     pub fn render(&self, width: u16, height: u16, elapsed: Duration) -> String {
+        self.render_lines(usize::from(width), usize::from(height), elapsed)
+            .join("\r\n")
+    }
+
+    fn render_lines(&self, width: usize, height: usize, elapsed: Duration) -> Vec<String> {
         let header = self.render_header(elapsed);
         if !self.expanded {
-            return truncate(&header, usize::from(width));
+            return vec![truncate(&header, width)];
         }
 
-        let body_height = usize::from(height.saturating_sub(2));
+        let body_height = height.saturating_sub(2);
         let end = self
             .lines
             .len()
             .saturating_sub(self.scroll_from_bottom.min(self.lines.len()));
         let start = end.saturating_sub(body_height);
-        let width = usize::from(width);
         let mut rendered = Vec::with_capacity(body_height.saturating_add(2));
         rendered.push(truncate(&header, width));
         rendered.push("─".repeat(width));
@@ -147,7 +152,7 @@ impl LogMonitorState {
                 .range(start..end)
                 .map(|line| truncate(line, width)),
         );
-        rendered.join("\r\n")
+        rendered
     }
 
     fn render_header(&self, elapsed: Duration) -> String {
@@ -184,7 +189,8 @@ pub struct TerminalLogMonitor {
     state: LogMonitorState,
     started_at: Instant,
     header_row: u16,
-    alternate_screen: bool,
+    terminal: Terminal<CrosstermBackend<io::Stdout>>,
+    in_alternate: bool,
     raw_mode: bool,
     mouse_capture: bool,
     cursor_hidden: bool,
@@ -204,22 +210,26 @@ impl TerminalLogMonitor {
         TERMINATION_SIGNAL.store(0, Ordering::Release);
         let (_, header_row) = crossterm::cursor::position()
             .context("Failed to locate terminal cursor for Unreal log monitor")?;
+        let backend = CrosstermBackend::new(io::stdout());
+        let terminal =
+            Terminal::new(backend).context("Failed to create ratatui terminal backend")?;
+        terminal::enable_raw_mode().context("Failed to enable terminal log monitor input")?;
         let mut monitor = Self {
             state: LogMonitorState::new(title),
             started_at: Instant::now(),
             header_row,
-            alternate_screen: false,
-            raw_mode: false,
+            terminal,
+            in_alternate: false,
+            raw_mode: true,
             mouse_capture: false,
-            cursor_hidden: false,
+            cursor_hidden: true,
             finished: false,
         };
 
         TERMINAL_MONITOR_ACTIVE.store(true, Ordering::Release);
-        terminal::enable_raw_mode().context("Failed to enable terminal log monitor input")?;
-        monitor.raw_mode = true;
-        monitor.cursor_hidden = true;
-        execute!(io::stdout(), Hide).context("Failed to initialize terminal log monitor")?;
+        execute!(io::stdout(), Hide, EnableMouseCapture)
+            .context("Failed to initialize terminal log monitor")?;
+        monitor.mouse_capture = true;
         monitor.draw()?;
         Self::install_signal_handler()?;
         Ok(monitor)
@@ -286,14 +296,25 @@ impl TerminalLogMonitor {
     }
 
     fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<MonitorAction> {
+        let (_, height) = terminal::size().unwrap_or((80, 24));
+        let scroll_step = (usize::from(height) / 3).max(1);
         match mouse.kind {
-            MouseEventKind::Down(MouseButton::Left)
-                if self.state.is_expanded() && mouse.row == 0 =>
-            {
-                self.collapse()?;
+            MouseEventKind::Up(MouseButton::Left) => {
+                let on_header = if self.state.is_expanded() {
+                    mouse.row == 0
+                } else {
+                    mouse.row == self.header_row
+                };
+                if on_header {
+                    self.toggle()?;
+                }
             }
-            MouseEventKind::ScrollUp if self.state.is_expanded() => self.state.scroll_up(3),
-            MouseEventKind::ScrollDown if self.state.is_expanded() => self.state.scroll_down(3),
+            MouseEventKind::ScrollUp if self.state.is_expanded() => {
+                self.state.scroll_up(scroll_step)
+            }
+            MouseEventKind::ScrollDown if self.state.is_expanded() => {
+                self.state.scroll_down(scroll_step)
+            }
             _ => {}
         }
         Ok(MonitorAction::Continue)
@@ -309,65 +330,75 @@ impl TerminalLogMonitor {
 
     fn expand(&mut self) -> Result<()> {
         self.state.toggle();
-        self.alternate_screen = true;
-        self.mouse_capture = true;
-        execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)
+        self.in_alternate = true;
+        execute!(io::stdout(), EnterAlternateScreen)
             .context("Failed to expand Unreal log monitor")?;
+        self.terminal
+            .clear()
+            .context("Failed to clear ratatui buffer for Unreal log monitor")?;
         self.draw()
     }
 
     fn collapse(&mut self) -> Result<()> {
         self.state.collapse();
-        if self.mouse_capture {
-            execute!(io::stdout(), DisableMouseCapture)
-                .context("Failed to release expanded Unreal log mouse capture")?;
-            self.mouse_capture = false;
-        }
-        if self.alternate_screen {
+        if self.in_alternate {
             execute!(io::stdout(), LeaveAlternateScreen)
                 .context("Failed to collapse Unreal log monitor")?;
-            self.alternate_screen = false;
+            self.in_alternate = false;
         }
         self.draw()
     }
 
     fn draw(&mut self) -> Result<()> {
-        let (width, height) =
-            terminal::size().context("Failed to read terminal size for Unreal log monitor")?;
-        if !self.state.is_expanded() {
-            let (_, row) = crossterm::cursor::position()
-                .context("Failed to locate collapsed Unreal log monitor")?;
-            self.header_row = row;
-        }
-        let rendered = self.state.render(width, height, self.started_at.elapsed());
-        let mut stdout = io::stdout();
         if self.state.is_expanded() {
-            queue!(
-                stdout,
-                MoveTo(0, 0),
-                Clear(ClearType::All),
-                crossterm::style::Print(rendered)
-            )?;
+            self.draw_expanded()
         } else {
-            queue!(
-                stdout,
-                MoveToColumn(0),
-                Clear(ClearType::CurrentLine),
-                crossterm::style::Print(rendered)
-            )?;
+            self.draw_collapsed()
         }
+    }
+
+    fn draw_collapsed(&mut self) -> Result<()> {
+        let (_, row) = crossterm::cursor::position()
+            .context("Failed to locate collapsed Unreal log monitor")?;
+        self.header_row = row;
+        let (width, _) =
+            terminal::size().context("Failed to read terminal size for Unreal log monitor")?;
+        let header = self.state.render_header(self.started_at.elapsed());
+        let mut stdout = io::stdout();
+        queue!(
+            stdout,
+            MoveTo(0, self.header_row),
+            Clear(ClearType::CurrentLine),
+            crossterm::style::Print(truncate(&header, usize::from(width)))
+        )?;
         stdout.flush().context("Failed to draw Unreal log monitor")
+    }
+
+    fn draw_expanded(&mut self) -> Result<()> {
+        let elapsed = self.started_at.elapsed();
+        let area = self
+            .terminal
+            .size()
+            .context("Failed to read terminal size for Unreal log monitor")?;
+        let lines = self
+            .state
+            .render_lines(area.width.into(), area.height.into(), elapsed);
+        let widget_lines: Vec<Line<'static>> = lines.into_iter().map(Line::raw).collect();
+        self.terminal
+            .draw(|frame| frame.render_widget(Paragraph::new(widget_lines), area))
+            .context("Failed to render expanded Unreal log monitor")?;
+        Ok(())
     }
 
     fn restore_terminal(&mut self, print_summary: bool) -> Result<()> {
         let mut first_error = None;
         let mut stdout = io::stdout();
 
-        if self.alternate_screen {
+        if self.in_alternate {
             if let Err(error) = execute!(stdout, LeaveAlternateScreen) {
                 first_error = Some(error);
             }
-            self.alternate_screen = false;
+            self.in_alternate = false;
             self.state.collapse();
         }
         if self.mouse_capture {
