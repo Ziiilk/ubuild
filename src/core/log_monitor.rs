@@ -123,6 +123,10 @@ impl LogMonitorState {
         self.scroll_from_bottom = 0;
     }
 
+    pub fn scroll_to_top(&mut self) {
+        self.scroll_from_bottom = self.lines.len().saturating_sub(1);
+    }
+
     pub fn is_expanded(&self) -> bool {
         self.expanded
     }
@@ -172,9 +176,9 @@ impl LogMonitorState {
 
         let chevron = if self.expanded { "⌄" } else { "›" };
         let action = if self.expanded {
-            "Enter/click to collapse · ↑↓ to scroll"
+            "Enter/click to collapse · ↑↓/wheel/PgUp/Dn/Home/End to scroll"
         } else {
-            "Enter/Space to expand"
+            "Enter/click to expand"
         };
         format!(
             "  {chevron} {}  Worked for {}  {} lines  {action}",
@@ -284,12 +288,12 @@ impl TerminalLogMonitor {
 
         match key.code {
             KeyCode::Enter | KeyCode::Char(' ') => self.toggle()?,
-            KeyCode::Esc if self.state.is_expanded() => self.collapse()?,
             KeyCode::Up if self.state.is_expanded() => self.state.scroll_up(1),
             KeyCode::Down if self.state.is_expanded() => self.state.scroll_down(1),
             KeyCode::PageUp if self.state.is_expanded() => self.state.scroll_up(10),
             KeyCode::PageDown if self.state.is_expanded() => self.state.scroll_down(10),
             KeyCode::End if self.state.is_expanded() => self.state.scroll_to_bottom(),
+            KeyCode::Home if self.state.is_expanded() => self.state.scroll_to_top(),
             _ => {}
         }
         Ok(MonitorAction::Continue)
