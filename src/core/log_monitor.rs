@@ -49,7 +49,27 @@ pub struct LogMonitorState {
     total_lines: usize,
     expanded: bool,
     completion: Option<Completion>,
-    scroll_from_bottom: usize,
+    top_index: usize,
+    search: SearchState,
+}
+
+#[derive(Clone)]
+struct SearchState {
+    active: bool,
+    input: String,
+    matches: Vec<usize>,
+    current: usize,
+}
+
+impl SearchState {
+    fn new() -> Self {
+        Self {
+            active: false,
+            input: String::new(),
+            matches: Vec::new(),
+            current: 0,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -67,7 +87,8 @@ impl LogMonitorState {
             total_lines: 0,
             expanded: false,
             completion: None,
-            scroll_from_bottom: 0,
+            top_index: 0,
+            search: SearchState::new(),
         }
     }
 
@@ -78,18 +99,20 @@ impl LogMonitorState {
         }
         self.lines.push_back(line.into());
         self.total_lines += 1;
-        if self.scroll_from_bottom > 0 {
-            self.scroll_from_bottom = self
-                .scroll_from_bottom
-                .saturating_add(1)
-                .min(self.lines.len().saturating_sub(1));
+        if self.at_bottom() {
+            self.top_index = self.last_top_index();
+        } else if self.top_index > 0 && was_full {
+            self.top_index = self.top_index.saturating_sub(1);
+        }
+        if self.search.active {
+            self.refresh_search();
         }
     }
 
     pub fn toggle(&mut self) {
         self.expanded = !self.expanded;
         if self.expanded {
-            self.scroll_from_bottom = 0;
+            self.top_index = self.last_top_index();
         }
     }
 
@@ -109,26 +132,118 @@ impl LogMonitorState {
     }
 
     pub fn scroll_up(&mut self, lines: usize) {
-        self.scroll_from_bottom = self
-            .scroll_from_bottom
-            .saturating_add(lines)
-            .min(self.lines.len().saturating_sub(1));
+        self.top_index = self.top_index.saturating_sub(lines);
     }
 
     pub fn scroll_down(&mut self, lines: usize) {
-        self.scroll_from_bottom = self.scroll_from_bottom.saturating_sub(lines);
+        self.top_index = self
+            .top_index
+            .saturating_add(lines)
+            .min(self.last_top_index());
     }
 
     pub fn scroll_to_bottom(&mut self) {
-        self.scroll_from_bottom = 0;
+        self.top_index = self.last_top_index();
     }
 
     pub fn scroll_to_top(&mut self) {
-        self.scroll_from_bottom = self.lines.len().saturating_sub(1);
+        self.top_index = 0;
+    }
+
+    pub fn begin_search(&mut self) {
+        let mut state = SearchState::new();
+        state.active = true;
+        self.search = state;
+    }
+
+    pub fn cancel_search(&mut self) {
+        self.search = SearchState::new();
+    }
+
+    pub fn finalize_search(&mut self) {
+        if self.search.input.is_empty() {
+            self.search.matches.clear();
+            self.search.current = 0;
+        } else {
+            self.refresh_search();
+        }
+        self.search.active = false;
+        if let Some(&first) = self.search.matches.first() {
+            self.center_on(first);
+        }
+    }
+
+    pub fn search_next(&mut self) {
+        if self.search.matches.is_empty() {
+            return;
+        }
+        self.search.current = (self.search.current + 1) % self.search.matches.len();
+        if let Some(&t) = self.search.matches.get(self.search.current) {
+            self.center_on(t);
+        }
+    }
+
+    pub fn search_prev(&mut self) {
+        if self.search.matches.is_empty() {
+            return;
+        }
+        if self.search.current == 0 {
+            self.search.current = self.search.matches.len() - 1;
+        } else {
+            self.search.current -= 1;
+        }
+        if let Some(&t) = self.search.matches.get(self.search.current) {
+            self.center_on(t);
+        }
     }
 
     pub fn is_expanded(&self) -> bool {
         self.expanded
+    }
+
+    pub fn search_active(&self) -> bool {
+        self.search.active
+    }
+
+    pub fn search_input_push(&mut self, ch: char) {
+        self.search.input.push(ch);
+        self.refresh_search();
+    }
+
+    pub fn search_input_pop(&mut self) {
+        self.search.input.pop();
+        self.refresh_search();
+    }
+
+    fn refresh_search(&mut self) {
+        if self.search.input.trim().is_empty() {
+            self.search.matches.clear();
+            self.search.current = 0;
+            return;
+        }
+        let needle = self.search.input.trim().to_ascii_lowercase();
+        let matches: Vec<usize> = self
+            .lines
+            .iter()
+            .enumerate()
+            .filter(|(_, line)| line.to_ascii_lowercase().contains(&needle))
+            .map(|(i, _)| i)
+            .collect();
+        let preserved = self.search.current.min(matches.len().saturating_sub(1));
+        self.search.matches = matches;
+        self.search.current = preserved;
+    }
+
+    fn center_on(&mut self, target: usize) {
+        self.top_index = target.min(self.last_top_index());
+    }
+
+    fn last_top_index(&self) -> usize {
+        self.lines.len().saturating_sub(1)
+    }
+
+    fn at_bottom(&self) -> bool {
+        self.top_index >= self.last_top_index()
     }
 
     pub fn render(&self, width: u16, height: u16, elapsed: Duration) -> String {
@@ -142,13 +257,10 @@ impl LogMonitorState {
             return vec![truncate(&header, width)];
         }
 
-        let body_height = height.saturating_sub(2);
-        let end = self
-            .lines
-            .len()
-            .saturating_sub(self.scroll_from_bottom.min(self.lines.len()));
-        let start = end.saturating_sub(body_height);
-        let mut rendered = Vec::with_capacity(body_height.saturating_add(2));
+        let body_height = height.saturating_sub(3);
+        let start = self.top_index.min(self.last_top_index());
+        let end = self.lines.len().min(start.saturating_add(body_height));
+        let mut rendered = Vec::with_capacity(body_height.saturating_add(3));
         rendered.push(truncate(&header, width));
         rendered.push("─".repeat(width));
         rendered.extend(
@@ -156,10 +268,45 @@ impl LogMonitorState {
                 .range(start..end)
                 .map(|line| truncate(line, width)),
         );
+        let gap = body_height.saturating_sub(end - start);
+        for _ in 0..gap {
+            rendered.push(String::new());
+        }
+        rendered.push("─".repeat(width));
+        rendered.push(truncate(&self.render_status(), width));
         rendered
     }
 
+    fn render_status(&self) -> String {
+        let mut parts: Vec<String> = Vec::with_capacity(3);
+        parts.push(if self.at_bottom() {
+            "FOLLOW".to_string()
+        } else {
+            "PAUSED".to_string()
+        });
+        let total = self.lines.len();
+        if total == 0 {
+            parts.push("0 lines".to_string());
+        } else {
+            parts.push(format!("{} / {total}", self.top_index + 1));
+        }
+        if !self.search.matches.is_empty() {
+            parts.push(format!(
+                "/{} [{}/{Total}]",
+                self.search.input,
+                self.search.current + 1,
+                Total = self.search.matches.len()
+            ));
+        } else if !self.search.input.is_empty() {
+            parts.push(format!("/{} [no matches]", self.search.input));
+        }
+        format!("  {}", parts.join("  │  "))
+    }
+
     fn render_header(&self, elapsed: Duration) -> String {
+        if self.search.active {
+            return format!("  /{}  (Enter to find · Esc to cancel)", self.search.input);
+        }
         if let Some(completion) = self.completion {
             let (icon, status) = match completion {
                 Completion::Completed => ("✔", "Completed".to_string()),
@@ -176,7 +323,7 @@ impl LogMonitorState {
 
         let chevron = if self.expanded { "⌄" } else { "›" };
         let action = if self.expanded {
-            "Enter/click to collapse · ↑↓/wheel/PgUp/Dn/Home/End to scroll"
+            "Enter/click to collapse · ↑↓/PgUp/Dn/Home/End · Ctrl+F search · N/P next/prev"
         } else {
             "Enter/click to expand"
         };
@@ -286,8 +433,24 @@ impl TerminalLogMonitor {
             return Ok(MonitorAction::Terminate(TerminationSignal::Interrupt));
         }
 
+        if self.state.search_active() {
+            match key.code {
+                KeyCode::Esc => self.state.cancel_search(),
+                KeyCode::Enter => self.state.finalize_search(),
+                KeyCode::Backspace => self.state.search_input_pop(),
+                KeyCode::Char(ch) => self.state.search_input_push(ch),
+                _ => {}
+            }
+            return Ok(MonitorAction::Continue);
+        }
+
         match key.code {
             KeyCode::Enter | KeyCode::Char(' ') => self.toggle()?,
+            KeyCode::Char('f' | 'F') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.state.begin_search();
+            }
+            KeyCode::Char('n' | 'N') if self.state.is_expanded() => self.state.search_next(),
+            KeyCode::Char('p' | 'P') if self.state.is_expanded() => self.state.search_prev(),
             KeyCode::Up if self.state.is_expanded() => self.state.scroll_up(1),
             KeyCode::Down if self.state.is_expanded() => self.state.scroll_down(1),
             KeyCode::PageUp if self.state.is_expanded() => self.state.scroll_up(10),
