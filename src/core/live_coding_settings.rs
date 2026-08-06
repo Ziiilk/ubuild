@@ -1,5 +1,4 @@
-use std::collections::BTreeSet;
-use std::env;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -7,6 +6,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::types::LiveCodingSettingsResult;
 use crate::utils::file::atomic_write;
+use crate::utils::logger::Logger;
 
 use super::engine_resolver::EngineResolver;
 
@@ -19,36 +19,96 @@ impl LiveCodingSettings {
     pub fn set_enabled_for_installed_engines(
         enabled: bool,
     ) -> Result<Vec<LiveCodingSettingsResult>> {
-        let engine_versions = EngineResolver::find_engine_installations()
-            .into_iter()
-            .filter_map(|engine| engine.version.map(|version| version.major_minor()))
-            .collect::<BTreeSet<_>>();
-        if engine_versions.is_empty() {
+        let installations = EngineResolver::find_engine_installations();
+        if installations.is_empty() {
             bail!(
-                "No Unreal Engine installations with detectable versions were found in the registry or Epic Launcher manifest"
+                "No Unreal Engine installations were found in the registry or Epic Launcher manifest"
             );
         }
 
-        let local_app_data = env::var_os("LOCALAPPDATA").map(PathBuf::from).context(
-            "LOCALAPPDATA is not set; user-level Unreal Engine settings are unavailable",
-        )?;
-        engine_versions
-            .into_iter()
-            .map(|engine_version| {
-                let settings_path = local_app_data
-                    .join("UnrealEngine")
-                    .join(&engine_version)
-                    .join("Saved")
-                    .join("Config")
-                    .join("WindowsEditor")
-                    .join("EditorPerProjectUserSettings.ini");
-                Self::write_enabled(&settings_path, enabled)?;
-                Ok(LiveCodingSettingsResult {
+        // `WindowsEditorPerProjectUserSettings.ini` is the global editor-preference
+        // defaults file that every project consults at startup. A project only
+        // overrides a preference once it has saved one itself, so flipping the
+        // value here is the single global switch that applies to all projects.
+        // This is intentionally NOT the engine-standalone config under
+        // %LOCALAPPDATA%, which only applies when the editor runs without a project.
+        //
+        // This file lives inside the engine installation, which for a default
+        // Epic Launcher install sits under Program Files and may be read-only for
+        // a non-elevated user. A single unwritable engine must not abort the
+        // whole batch, so per-engine write failures are reported and skipped
+        // rather than propagated; the command only fails when nothing was written.
+        let mut visited: HashSet<PathBuf> = HashSet::new();
+        let mut results = Vec::new();
+        // Per-engine failures carry only the label and path: the underlying
+        // error is already logged inline and is not reused in the summary.
+        let mut failures: Vec<(String, PathBuf)> = Vec::new();
+        let action = if enabled { "enable" } else { "disable" };
+        for engine in installations {
+            let engine_dir = engine.path.join("Engine");
+            if !engine_dir.exists() {
+                continue;
+            }
+
+            // The resolver already dedupes installations with identical path
+            // strings. Canonicalize here additionally collapses the same
+            // physical install reached through case or symlink/junction aliases,
+            // so each engine file is written at most once.
+            let canonical = fs::canonicalize(&engine.path).unwrap_or_else(|_| engine.path.clone());
+            if !visited.insert(canonical) {
+                continue;
+            }
+
+            let settings_path = engine_dir
+                .join("Config")
+                .join("Windows")
+                .join("WindowsEditorPerProjectUserSettings.ini");
+
+            let engine_version = engine.version.map_or_else(
+                || engine.path.display().to_string(),
+                |version| version.major_minor(),
+            );
+
+            match Self::write_enabled(&settings_path, enabled) {
+                Ok(()) => results.push(LiveCodingSettingsResult {
                     engine_version,
                     settings_path,
+                }),
+                Err(error) => {
+                    // Common trigger: the engine install is read-only (e.g. a
+                    // Launcher install under Program Files) and this process is
+                    // not elevated. Surface it inline and keep going so any
+                    // writable engine is still configured.
+                    Logger::warning(&format!(
+                        "Failed to {action} Live Coding for Unreal Engine {engine_version}: {error}"
+                    ));
+                    failures.push((engine_version, settings_path));
+                }
+            }
+        }
+
+        if results.is_empty() {
+            if failures.is_empty() {
+                bail!("No Unreal Engine installations with a valid Engine directory were found");
+            }
+
+            // Every candidate failed to write. The most common reason is a
+            // read-only engine install, so name it explicitly.
+            let detail = failures
+                .into_iter()
+                .map(|(engine_version, settings_path)| {
+                    format!("  {engine_version}: {}", settings_path.display())
                 })
-            })
-            .collect()
+                .collect::<Vec<_>>()
+                .join("\n");
+            bail!(
+                "Could not {action} Live Coding for any engine. The engine \
+                 install is likely read-only (e.g. a Launcher install under \
+                 Program Files); rerun as administrator.\n{detail}"
+            );
+        }
+
+        Ok(results)
     }
 
     fn write_enabled(settings_path: &Path, enabled: bool) -> Result<()> {
