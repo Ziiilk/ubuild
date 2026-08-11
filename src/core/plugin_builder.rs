@@ -745,7 +745,7 @@ impl PluginBuilder {
     fn read_descriptor(path: &Path) -> Result<PluginDescriptor> {
         let content = fs::read_to_string(path)
             .with_context(|| format!("Failed to read {}", path.display()))?;
-        serde_json::from_str(&content)
+        crate::utils::json::from_str_lenient(&content)
             .with_context(|| format!("Failed to parse {}", path.display()))
     }
 

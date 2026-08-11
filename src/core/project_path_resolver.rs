@@ -107,9 +107,10 @@ impl ProjectPathResolver {
         let content = fs::read_to_string(uproject_path)
             .map_err(|_| UbuildError::ProjectFileNotFound(uproject_path.to_path_buf()))?;
         let content = content.strip_prefix('\u{feff}').unwrap_or(&content);
-        let uproject: crate::types::UProject = serde_json::from_str(content).map_err(|e| {
-            UbuildError::InvalidUproject(format!("{}: {e}", uproject_path.display()))
-        })?;
+        let uproject: crate::types::UProject = crate::utils::json::from_str_lenient(content)
+            .map_err(|e| {
+                UbuildError::InvalidUproject(format!("{}: {e}", uproject_path.display()))
+            })?;
         Ok(uproject)
     }
 }
