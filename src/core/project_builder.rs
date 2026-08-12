@@ -3,9 +3,10 @@ use std::path::Path;
 use anyhow::Result;
 
 use crate::error::UbuildError;
+use crate::utils::command::current_invocation;
 use crate::utils::logger::Logger;
 
-use super::build_executor::BuildExecutor;
+use super::build_executor::{BuildExecutor, BuildPlan};
 use super::engine_resolver::EngineResolver;
 use super::project_path_resolver::ProjectPathResolver;
 
@@ -44,15 +45,23 @@ impl ProjectBuilder {
             ubt_args,
         )?;
 
-        Logger::operation_header(
-            &plan.command(),
+        Self::print_header(
             &plan.project,
             &plan.engine.display().to_string(),
             platform,
             config,
         );
+        Self::build_phase(&plan)?;
+        Ok(())
+    }
 
-        let (result, rendered_collapsible) = BuildExecutor::run(&plan)?;
+    /// The build command line + collapsible Build log, with no header. Used by
+    /// `run --build-first`, which prints the shared header once before both
+    /// the build and run phases.
+    pub(crate) fn build_phase(plan: &BuildPlan) -> Result<()> {
+        Logger::executed_command(&plan.command());
+
+        let (result, rendered_collapsible) = BuildExecutor::run(plan)?;
         let duration_secs = result.duration.as_secs_f64();
 
         if result.success {
@@ -66,6 +75,18 @@ impl ProjectBuilder {
         } else {
             anyhow::bail!("Build failed with exit code {}", result.exit_code);
         }
+    }
+
+    /// Print the shared normalized header once: the exact `ubuild` invocation
+    /// the user ran, then Project / Engine / Platform.
+    pub(crate) fn print_header(project: &Path, engine_display: &str, platform: &str, config: &str) {
+        Logger::operation_header(
+            &current_invocation(),
+            project,
+            engine_display,
+            platform,
+            config,
+        );
     }
 
     fn dry_run_build(
@@ -89,7 +110,8 @@ impl ProjectBuilder {
             ubt_args,
         );
 
-        Logger::operation_header(&command, &project_path, &engine_display, platform, config);
+        Self::print_header(&project_path, &engine_display, platform, config);
+        Logger::executed_command(&command);
         Logger::plain_line("Dry run - no build will be performed");
         Ok(())
     }

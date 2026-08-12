@@ -49,17 +49,24 @@ impl Logger {
         println!("  {msg}");
     }
 
+    /// Print the normalized header: the exact `ubuild` invocation the user ran
+    /// (echoed from `std::env::args`), then Project / Engine / Platform.
     pub fn operation_header(
-        command: &str,
+        invocation: &str,
         project: &std::path::Path,
         engine_display: &str,
         platform: &str,
         config: &str,
     ) {
-        Self::plain_line(command);
+        Self::plain_line(invocation);
         Self::plain_line(&format!("Project: {}", project.display()));
         Self::plain_line(&format!("Engine: {engine_display}"));
         Self::plain_line(&format!("Platform: {platform} | {config}"));
+    }
+
+    /// Print the full command that will be executed (plain text, not folded).
+    pub fn executed_command(command: &str) {
+        Self::plain_line(command);
     }
 
     pub fn json<T: serde::Serialize>(value: &T) -> anyhow::Result<()> {

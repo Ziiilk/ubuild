@@ -21,6 +21,26 @@ pub fn join_command_line(executable: &Path, args: &[String]) -> String {
     parts.join(" ")
 }
 
+/// The exact `ubuild` invocation the user ran, echoed from `std::env::args`.
+/// The program name is normalized to `ubuild` regardless of how the OS
+/// resolved argv[0] (full path, relative, etc.), so the echoed line is clean.
+pub fn current_invocation() -> String {
+    let mut args = std::env::args();
+    let program = args.next().map_or_else(
+        || "ubuild".to_string(),
+        |path| {
+            std::path::Path::new(&path).file_stem().map_or_else(
+                || "ubuild".to_string(),
+                |name| name.to_string_lossy().into_owned(),
+            )
+        },
+    );
+    let tail: Vec<String> = args.collect();
+    let mut parts = vec![program];
+    parts.extend(tail);
+    parts.join(" ")
+}
+
 pub fn uat_arg_key(arg: &str) -> String {
     arg.trim_start_matches('-')
         .split_once('=')
