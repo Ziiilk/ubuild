@@ -45,6 +45,23 @@ impl Logger {
         eprintln!("{msg}");
     }
 
+    pub fn plain_line(msg: &str) {
+        println!("  {msg}");
+    }
+
+    pub fn operation_header(
+        command: &str,
+        project: &std::path::Path,
+        engine_display: &str,
+        platform: &str,
+        config: &str,
+    ) {
+        Self::plain_line(command);
+        Self::plain_line(&format!("Project: {}", project.display()));
+        Self::plain_line(&format!("Engine: {engine_display}"));
+        Self::plain_line(&format!("Platform: {platform} | {config}"));
+    }
+
     pub fn json<T: serde::Serialize>(value: &T) -> anyhow::Result<()> {
         let json = serde_json::to_string_pretty(value)?;
         println!("{json}");

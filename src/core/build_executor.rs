@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
@@ -10,15 +10,30 @@ use crate::utils::logger::Logger;
 use crate::utils::unreal_paths::{resolve_build_bat_path, resolve_ubt_path};
 
 use super::engine_resolver::EngineResolver;
-use crate::types::ProcessOutput;
-
 use super::process_runner::ProcessRunner;
 use super::project_path_resolver::ProjectPathResolver;
+
+/// Resolved inputs for a single build invocation, ready to print or execute.
+pub(crate) struct BuildPlan {
+    executable: PathBuf,
+    args: Vec<String>,
+    pub(crate) project: PathBuf,
+    pub(crate) engine: PathBuf,
+}
+
+impl BuildPlan {
+    /// The full command line (executable + args, single-space joined) exactly
+    /// as it will be executed, for use as the first header line.
+    pub(crate) fn command(&self) -> String {
+        crate::utils::command::join_command_line(&self.executable, &self.args)
+    }
+}
 
 pub struct BuildExecutor;
 
 impl BuildExecutor {
-    pub fn execute(
+    /// Resolve the project, engine and UBT command without printing or running.
+    pub(crate) fn resolve(
         config: &str,
         platform: &str,
         project_path: Option<&str>,
@@ -26,74 +41,76 @@ impl BuildExecutor {
         clean: bool,
         verbose: bool,
         ubt_args: &[String],
-    ) -> Result<BuildResult> {
-        let start = Instant::now();
-
+    ) -> Result<BuildPlan> {
         let (project, engine) =
             EngineResolver::resolve_project_and_engine(project_path, engine_path)?;
 
-        Logger::info(&format!("Starting build: {platform} | {config}"));
-        Logger::info(&format!("Project: {}", project.display()));
-        Logger::info(&format!("Engine: {}", engine.display()));
-
-        // Prefer Build.bat, fallback to UBT directly
+        // Prefer Build.bat, fallback to UBT directly.
         let executable = match resolve_build_bat_path(&engine) {
             Some(bat) => bat,
             None => resolve_ubt_path(&engine)?,
         };
-
         let args = Self::build_args(config, platform, &project, clean, verbose, ubt_args);
 
-        let ProcessOutput {
-            stdout,
-            stderr,
-            exit_code,
-        } = Self::run_process(&executable, &args)?;
+        Ok(BuildPlan {
+            executable,
+            args,
+            project,
+            engine,
+        })
+    }
+
+    /// Run the plan and return the result plus whether a collapsible region
+    /// was actually rendered (false when TTY was unsupported or the monitor
+    /// failed to start and output streamed line-by-line instead).
+    pub(crate) fn run(plan: &BuildPlan) -> Result<(BuildResult, bool)> {
+        let start = Instant::now();
+
+        let attempt = Self::run_process(&plan.executable, &plan.args)?;
+        let mut rendered_collapsible = attempt.rendered_collapsible;
+        let mut exit_code = attempt.exit_code;
 
         // By default UBT logs to the global %LOCALAPPDATA%\UnrealBuildTool\Log.txt
         // to stay close to native behavior. When a concurrent build holds that
         // file, UBT aborts before doing any work. Only in that case, retry once
-        // with a per-project log file so parallel builds no longer block.
-        let (stdout, stderr, exit_code) =
-            if exit_code != 0 && Self::is_log_locked_failure(&stdout, &stderr) {
-                let log_path = ProjectPathResolver::project_dir(&project)
-                    .join("Saved")
-                    .join("UnrealBuildTool")
-                    .join("Log.txt");
-                Logger::warning(
-                    "Global UnrealBuildTool log is locked by another build; \
-                     retrying with a per-project log file",
-                );
+        // with a per-project log file so parallel builds no longer block. The
+        // log-lock markers are detected incrementally while streaming (bounded
+        // memory), so the captured flag drives the retry decision.
+        if exit_code != 0 && attempt.log_locked {
+            let log_path = ProjectPathResolver::project_dir(&plan.project)
+                .join("Saved")
+                .join("UnrealBuildTool")
+                .join("Log.txt");
+            Logger::warning(
+                "Global UnrealBuildTool log is locked by another build; \
+                 retrying with a per-project log file",
+            );
 
-                let mut retry_args = args.clone();
-                retry_args.push(format!("-Log={}", log_path.display()));
-                let result = Self::run_process(&executable, &retry_args)?;
-                (result.stdout, result.stderr, result.exit_code)
-            } else {
-                (stdout, stderr, exit_code)
-            };
+            let mut retry_args = plan.args.clone();
+            retry_args.push(format!("-Log={}", log_path.display()));
+            let retry = Self::run_process(&plan.executable, &retry_args)?;
+            rendered_collapsible = retry.rendered_collapsible;
+            exit_code = retry.exit_code;
+        }
 
         let duration = start.elapsed();
 
-        Ok(BuildResult {
+        let result = BuildResult {
             success: exit_code == 0,
             exit_code,
-            stdout,
-            stderr,
             duration,
-        })
+        };
+        Ok((result, rendered_collapsible))
     }
 
-    /// Detect the UBT failure where the global log file could not be rotated
-    /// because another process holds it open.
-    fn is_log_locked_failure(stdout: &str, stderr: &str) -> bool {
-        let mentions_backup = stdout.contains("BackupLogFile") || stderr.contains("BackupLogFile");
-        let mentions_lock = stdout.contains("being used by another process")
-            || stderr.contains("being used by another process");
-        mentions_backup && mentions_lock
+    /// Resolve the build executable without requiring it to exist (Build.bat
+    /// preferred, UBT fallback). Returns `None` when neither is present, so
+    /// dry-run output can degrade gracefully instead of erroring.
+    pub(crate) fn executable_for_display(engine: &Path) -> Option<PathBuf> {
+        resolve_build_bat_path(engine).or_else(|| resolve_ubt_path(engine).ok())
     }
 
-    fn build_args(
+    pub(crate) fn build_args(
         config: &str,
         platform: &str,
         project_path: &Path,
@@ -118,10 +135,114 @@ impl BuildExecutor {
         args
     }
 
-    fn run_process(executable: &Path, args: &[String]) -> Result<ProcessOutput> {
+    fn run_process(
+        executable: &Path,
+        args: &[String],
+    ) -> Result<crate::core::process_runner::CollapsibleOutput> {
         let cwd = executable.parent().unwrap_or_else(|| Path::new("."));
         let mut command = Command::new(executable);
         command.args(args).current_dir(cwd);
-        ProcessRunner::stream(&mut command)
+        ProcessRunner::forward_collapsible_capture(&mut command, "Build log")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::Path;
+
+    use anyhow::Result;
+    use tempfile::tempdir;
+
+    use super::BuildExecutor;
+    use crate::core::process_runner::log_locked_markers;
+    use crate::platform;
+
+    fn write_engine_layout(dir: &Path, with_build_bat: bool) -> Result<()> {
+        if with_build_bat {
+            let bat_dir = dir.join("Engine").join("Build").join("BatchFiles");
+            fs::create_dir_all(&bat_dir)?;
+            fs::write(
+                bat_dir.join(format!("Build{}", platform::bat_extension())),
+                "",
+            )?;
+        } else {
+            let ubt_dir = dir.join("Engine").join("Binaries").join("DotNET");
+            fs::create_dir_all(&ubt_dir)?;
+            fs::write(
+                ubt_dir.join(format!("UnrealBuildTool{}", platform::exe_extension())),
+                "",
+            )?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_prefers_build_bat_for_command_line() -> Result<()> {
+        let dir = tempdir()?;
+        write_engine_layout(dir.path(), true)?;
+        let engine = dir.path().to_string_lossy().to_string();
+        let project = dir.path().join("Game.uproject");
+        fs::write(&project, "{}")?;
+
+        let plan = BuildExecutor::resolve(
+            "Development",
+            "Win64",
+            Some(&project.to_string_lossy()),
+            Some(&engine),
+            false,
+            false,
+            &[],
+        )?;
+        let command = plan.command();
+
+        assert!(command.contains(&format!("Build{}", platform::bat_extension())));
+        assert!(command.contains("Win64"));
+        assert!(command.contains("Development"));
+        assert!(command.contains("-TargetType=Editor"));
+        assert!(!command.contains("UnrealBuildTool"));
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_falls_back_to_ubt_when_build_bat_absent() -> Result<()> {
+        let dir = tempdir()?;
+        write_engine_layout(dir.path(), false)?;
+        let engine = dir.path().to_string_lossy().to_string();
+        let project = dir.path().join("Game.uproject");
+        fs::write(&project, "{}")?;
+
+        let plan = BuildExecutor::resolve(
+            "Development",
+            "Win64",
+            Some(&project.to_string_lossy()),
+            Some(&engine),
+            true,
+            false,
+            &[],
+        )?;
+        let command = plan.command();
+
+        assert!(command.contains("UnrealBuildTool"));
+        assert!(command.contains("-clean"));
+        assert!(!command.contains(&format!("Build{}", platform::bat_extension())));
+        Ok(())
+    }
+
+    #[test]
+    fn detects_global_log_lock_failure() {
+        assert!(log_locked_markers(
+            "Performing BackupLogFile: the process cannot access the file as it is \
+             being used by another process",
+            "",
+        ));
+    }
+
+    #[test]
+    fn ignores_unrelated_build_failure() {
+        assert!(!log_locked_markers(
+            "error: module compile failed",
+            "fatal error: something went wrong",
+        ));
     }
 }

@@ -36,6 +36,11 @@ fn main() {
         {
             std::process::exit(signal.exit_code());
         }
+        if let Some(error::UbuildError::ReportedProcessFailure { exit_code }) =
+            e.downcast_ref::<error::UbuildError>()
+        {
+            std::process::exit(*exit_code);
+        }
         utils::logger::Logger::error(&format!("{e:#}"));
         std::process::exit(1);
     }

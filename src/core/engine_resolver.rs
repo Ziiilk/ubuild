@@ -9,7 +9,6 @@ use crate::types::{
     EngineAssociation, EngineDetectionResult, EngineInstallation, EngineSource, EngineVersionInfo,
     LauncherManifest,
 };
-use crate::utils::logger::Logger;
 use crate::utils::unreal_paths::resolve_engine_version_path;
 use crate::utils::version::compare_versions;
 
@@ -102,16 +101,6 @@ impl EngineResolver {
             engine: matched,
             uproject_engine,
             warnings,
-        }
-    }
-
-    /// Write engine status to stdout for dry-run output.
-    pub fn write_engine_status(project_path: Option<&Path>) {
-        let result = Self::resolve_engine(project_path);
-        if let Some(engine) = &result.engine {
-            Logger::info(&format!("Engine: {}", engine.display_name));
-        } else {
-            Logger::info("Engine: Not detected - specify with --engine-path");
         }
     }
 

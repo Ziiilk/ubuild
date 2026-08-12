@@ -117,7 +117,7 @@ impl ProcessRunner {
         }
 
         Logger::debug(&format!("Executing: {command:?}"));
-        let mut monitor = match TerminalLogMonitor::start(title) {
+        let monitor = match TerminalLogMonitor::start(title) {
             Ok(monitor) => monitor,
             Err(error) => {
                 Logger::warning(&format!(
@@ -126,7 +126,61 @@ impl ProcessRunner {
                 return Self::forward(command);
             }
         };
+        let outcome = Self::run_monitored(command, monitor)?;
+        if let Some(signal) = outcome.termination {
+            return Err(UbuildError::Terminated(signal).into());
+        }
+        Ok(outcome.exit_code)
+    }
 
+    /// Run a process inside a collapsible log region while capturing its
+    /// stdout/stderr. Non-interactive terminals fall back to streaming output
+    /// line-by-line (with capture), so callers can still inspect failures.
+    pub fn forward_collapsible_capture(
+        command: &mut Command,
+        title: &str,
+    ) -> Result<CollapsibleOutput> {
+        if !TerminalLogMonitor::is_supported() {
+            return Self::stream_uncaptured(command);
+        }
+
+        Logger::debug(&format!("Executing: {command:?}"));
+        let monitor = match TerminalLogMonitor::start(title) {
+            Ok(monitor) => monitor,
+            Err(error) => {
+                Logger::warning(&format!(
+                    "Could not start collapsible log monitor: {error:#}"
+                ));
+                return Self::stream_uncaptured(command);
+            }
+        };
+        let outcome = Self::run_monitored(command, monitor)?;
+        if let Some(signal) = outcome.termination {
+            return Err(UbuildError::Terminated(signal).into());
+        }
+        Ok(CollapsibleOutput {
+            exit_code: outcome.exit_code,
+            rendered_collapsible: true,
+            log_locked: outcome.log_locked,
+        })
+    }
+
+    /// Stream a process line-by-line to the terminal (non-collapsible fallback)
+    /// and return its exit code plus whether the output showed the global-log
+    /// lock markers. Full output is not retained: only the markers are tracked.
+    fn stream_uncaptured(command: &mut Command) -> Result<CollapsibleOutput> {
+        let output = Self::stream(command)?;
+        Ok(CollapsibleOutput {
+            exit_code: output.exit_code,
+            rendered_collapsible: false,
+            log_locked: log_locked_markers(&output.stdout, &output.stderr),
+        })
+    }
+
+    fn run_monitored(
+        command: &mut Command,
+        mut monitor: TerminalLogMonitor,
+    ) -> Result<MonitorOutcome> {
         let mut managed = ManagedInterruptibleChild::spawn(command, OutputMode::Piped)?;
         let stdout = managed
             .child
@@ -187,12 +241,15 @@ impl ProcessRunner {
         )?;
         let exit_code = status.code().unwrap_or(-1);
         monitor.finish(exit_code, termination)?;
-        Self::finish_forwarders(stdout_handle, stderr_handle)?;
+        let (stdout_markers, stderr_markers) =
+            Self::finish_forwarders(stdout_handle, stderr_handle)?;
+        let log_locked = stdout_markers.log_locked(&stderr_markers);
 
-        if let Some(signal) = termination {
-            return Err(UbuildError::Terminated(signal).into());
-        }
-        Ok(exit_code)
+        Ok(MonitorOutcome {
+            exit_code,
+            log_locked,
+            termination,
+        })
     }
 
     pub fn inherit(command: &mut Command) -> Result<i32> {
@@ -236,9 +293,17 @@ impl ProcessRunner {
         Self::process_stream(stream, is_stderr, |_| {})
     }
 
-    fn collect_stream(stream: impl std::io::Read, sender: &SyncSender<String>) -> Result<()> {
+    /// Read a stream, forwarding each line to the monitor, and track whether
+    /// the captured output mentions the global-log-lock failure markers. The
+    /// full text is intentionally NOT accumulated (bounded memory): only the
+    /// two marker substrings needed for the build retry decision are tracked.
+    fn collect_stream(
+        stream: impl std::io::Read,
+        sender: &SyncSender<String>,
+    ) -> Result<LineMarkers> {
         let mut reader = BufReader::new(stream);
         let mut bytes = Vec::new();
+        let mut markers = LineMarkers::default();
         loop {
             bytes.clear();
             if reader
@@ -254,8 +319,9 @@ impl ProcessRunner {
             if sender.send(format!("  {line}")).is_err() {
                 break;
             }
+            markers.observe(line);
         }
-        Ok(())
+        Ok(markers)
     }
 
     fn drain_monitor_lines(receiver: &Receiver<String>, monitor: &mut TerminalLogMonitor) -> bool {
@@ -278,11 +344,11 @@ impl ProcessRunner {
         false
     }
 
-    fn drain_monitor_until_finished(
+    fn drain_monitor_until_finished<T>(
         receiver: &Receiver<String>,
         monitor: &mut TerminalLogMonitor,
-        stdout_handle: &std::thread::JoinHandle<Result<()>>,
-        stderr_handle: &std::thread::JoinHandle<Result<()>>,
+        stdout_handle: &std::thread::JoinHandle<Result<T>>,
+        stderr_handle: &std::thread::JoinHandle<Result<T>>,
     ) -> Result<()> {
         let deadline = Instant::now() + PROCESS_OUTPUT_DRAIN_TIMEOUT;
         while Instant::now() < deadline {
@@ -297,10 +363,10 @@ impl ProcessRunner {
         Ok(())
     }
 
-    fn finish_forwarders(
-        stdout_handle: std::thread::JoinHandle<Result<()>>,
-        stderr_handle: std::thread::JoinHandle<Result<()>>,
-    ) -> Result<()> {
+    fn finish_forwarders<T: Default>(
+        stdout_handle: std::thread::JoinHandle<Result<T>>,
+        stderr_handle: std::thread::JoinHandle<Result<T>>,
+    ) -> Result<(T, T)> {
         let deadline = Instant::now() + PROCESS_OUTPUT_DRAIN_TIMEOUT;
         while Instant::now() < deadline
             && (!stdout_handle.is_finished() || !stderr_handle.is_finished())
@@ -308,14 +374,15 @@ impl ProcessRunner {
             std::thread::sleep(PROCESS_OUTPUT_DRAIN_RETRY_INTERVAL);
         }
 
-        Self::finish_forwarder(stdout_handle, "stdout")?;
-        Self::finish_forwarder(stderr_handle, "stderr")
+        let stdout = Self::finish_forwarder(stdout_handle, "stdout")?;
+        let stderr = Self::finish_forwarder(stderr_handle, "stderr")?;
+        Ok((stdout, stderr))
     }
 
-    fn finish_forwarder(
-        handle: std::thread::JoinHandle<Result<()>>,
+    fn finish_forwarder<T: Default>(
+        handle: std::thread::JoinHandle<Result<T>>,
         stream_name: &str,
-    ) -> Result<()> {
+    ) -> Result<T> {
         if handle.is_finished() {
             handle
                 .join()
@@ -325,7 +392,7 @@ impl ProcessRunner {
                 "{stream_name} reader did not finish within {:.1}s; output may be incomplete",
                 PROCESS_OUTPUT_DRAIN_TIMEOUT.as_secs_f64()
             ));
-            Ok(())
+            Ok(T::default())
         }
     }
 
@@ -393,6 +460,52 @@ impl ProcessRunner {
 enum OutputMode {
     Piped,
     Inherited,
+}
+
+struct MonitorOutcome {
+    exit_code: i32,
+    /// Whether the captured output showed the global UnrealBuildTool log-lock
+    /// failure markers, merged across stdout and stderr.
+    log_locked: bool,
+    termination: Option<TerminationSignal>,
+}
+
+/// Output of a process run inside a (possibly fallback) collapsible log
+/// region. `rendered_collapsible` records whether a collapsible title was
+/// actually drawn (false when TTY was unsupported or the monitor failed to
+/// start and output streamed line-by-line instead).
+pub struct CollapsibleOutput {
+    pub exit_code: i32,
+    pub rendered_collapsible: bool,
+    /// Whether the captured output contained the global UnrealBuildTool
+    /// log-lock failure markers (used to decide the per-project-log retry).
+    pub log_locked: bool,
+}
+
+/// Line-level detection of the global UnrealBuildTool log-lock failure,
+/// tracked incrementally while streaming instead of accumulating full output.
+#[derive(Default)]
+struct LineMarkers {
+    backup: bool,
+    locked: bool,
+}
+
+impl LineMarkers {
+    fn observe(&mut self, text: &str) {
+        self.backup |= text.contains("BackupLogFile");
+        self.locked |= text.contains("being used by another process");
+    }
+
+    fn log_locked(&self, other: &Self) -> bool {
+        (self.backup || other.backup) && (self.locked || other.locked)
+    }
+}
+
+pub(crate) fn log_locked_markers(stdout: &str, stderr: &str) -> bool {
+    let mut markers = LineMarkers::default();
+    markers.observe(stdout);
+    markers.observe(stderr);
+    markers.log_locked(&LineMarkers::default())
 }
 
 struct ManagedChild {

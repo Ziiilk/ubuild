@@ -64,6 +64,9 @@ pub enum UbuildError {
     #[error("Process {0}")]
     Terminated(crate::types::TerminationSignal),
 
+    #[error("Process exited with code {exit_code}")]
+    ReportedProcessFailure { exit_code: i32 },
+
     // ── Generic ──
     #[error("Executable not found: {0}")]
     ExecutableNotFound(PathBuf),

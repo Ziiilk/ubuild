@@ -27,8 +27,6 @@ pub mod defaults {
 pub struct BuildResult {
     pub success: bool,
     pub exit_code: i32,
-    pub stdout: String,
-    pub stderr: String,
     pub duration: std::time::Duration,
 }
 

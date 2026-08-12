@@ -10,6 +10,7 @@ use crate::utils::logger::Logger;
 use super::engine_resolver::EngineResolver;
 use super::process_runner::ProcessRunner;
 use super::project_builder::ProjectBuilder;
+use super::project_path_resolver::ProjectPathResolver;
 
 pub struct ProjectRunner;
 
@@ -24,25 +25,16 @@ impl ProjectRunner {
         no_build: bool,
         extra_args: &[String],
     ) -> Result<()> {
-        Logger::title("Run Unreal Engine Project");
         let should_build = build_first && !no_build;
 
         if dry_run {
-            return Self::dry_run(
-                config,
-                platform,
-                project,
-                engine_path,
-                should_build,
-                extra_args,
-            );
+            return Self::dry_run(config, platform, project, engine_path, extra_args);
         }
 
         let (project_path, engine) =
             EngineResolver::resolve_project_and_engine(project, engine_path)?;
 
         if should_build {
-            Logger::info("Building project before running...");
             let project_arg = project_path.to_string_lossy();
             let engine_arg = engine.to_string_lossy();
             ProjectBuilder::build(
@@ -55,7 +47,6 @@ impl ProjectRunner {
                 false,
                 &[],
             )?;
-            Logger::divider();
         }
 
         let exec_path = Self::find_editor_executable(platform, &engine);
@@ -63,20 +54,20 @@ impl ProjectRunner {
             return Err(UbuildError::ExecutableNotFound(exec_path).into());
         }
 
-        let basename = exec_path
-            .file_name()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
-
-        Logger::info(&format!("Running: {basename}"));
-        Logger::divider();
-
         let args = Self::build_launch_args(&project_path, extra_args);
+        let command_line = Self::launch_command(&exec_path, &args);
+        Logger::operation_header(
+            &command_line,
+            &project_path,
+            &engine.display().to_string(),
+            platform,
+            config,
+        );
+
         let mut command = Command::new(&exec_path);
         command.args(&args);
         let code = ProcessRunner::forward_collapsible(&mut command, "Unreal log")?;
 
-        Logger::divider();
         Self::validate_exit_code(code)?;
         Logger::success(&format!("Process exited with code {code}"));
         Ok(())
@@ -129,6 +120,12 @@ impl ProjectRunner {
         args
     }
 
+    /// The full editor launch command line (executable + args, single-space
+    /// joined), for use as the first header line.
+    pub(crate) fn launch_command(exec_path: &Path, args: &[String]) -> String {
+        crate::utils::command::join_command_line(exec_path, args)
+    }
+
     fn validate_exit_code(code: i32) -> Result<()> {
         if code == 0 {
             Ok(())
@@ -142,36 +139,28 @@ impl ProjectRunner {
         platform: &str,
         project: Option<&str>,
         engine_path: Option<&str>,
-        should_build: bool,
         extra_args: &[String],
     ) -> Result<()> {
-        Logger::subtitle("Dry Run - Run Configuration");
+        let project_path = ProjectPathResolver::resolve_or_throw(project)?;
 
-        let (project_path, engine) =
-            EngineResolver::resolve_project_and_engine(project, engine_path)?;
+        let (engine_display, command) =
+            match EngineResolver::resolve_engine_path(Some(&project_path), engine_path) {
+                Ok(engine) => {
+                    let exec_path = Self::find_editor_executable(platform, &engine);
+                    let args = Self::build_launch_args(&project_path, extra_args);
+                    (
+                        engine.display().to_string(),
+                        Self::launch_command(&exec_path, &args),
+                    )
+                }
+                Err(_) => (
+                    "Not detected".to_string(),
+                    "(run command unavailable - engine not detected)".to_string(),
+                ),
+            };
 
-        Logger::info(&format!("Project: {}", project_path.display()));
-        Logger::info(&format!("Build First: {should_build}"));
-        if should_build {
-            Logger::info(&format!("Build Configuration: {config}"));
-            Logger::info(&format!("Build Platform: {platform}"));
-        }
-        if !extra_args.is_empty() {
-            Logger::info(&format!("Args: {}", extra_args.join(" ")));
-        }
-
-        let exec_path = Self::find_editor_executable(platform, &engine);
-        let exists = exec_path.exists();
-        Logger::info(&format!(
-            "Executable: {}, exists: {}",
-            exec_path.display(),
-            if exists { "Yes" } else { "No (may need build)" }
-        ));
-
-        let launch_args = Self::build_launch_args(&project_path, extra_args);
-        Logger::info(&format!("Launch args: {}", launch_args.join(" ")));
-
-        Logger::info("This is a dry run - no actual run will be performed");
+        Logger::operation_header(&command, &project_path, &engine_display, platform, config);
+        Logger::plain_line("Dry run - no run will be performed");
         Ok(())
     }
 }
@@ -229,5 +218,23 @@ mod tests {
     fn nonzero_process_exit_is_an_error() {
         assert!(ProjectRunner::validate_exit_code(1).is_err());
         assert!(ProjectRunner::validate_exit_code(0).is_ok());
+    }
+
+    #[test]
+    fn launch_command_joins_executable_and_args() {
+        let command = ProjectRunner::launch_command(
+            Path::new("D:/Engine/Binaries/Win64/UnrealEditor.exe"),
+            &[
+                "C:/Project/Game.uproject".to_string(),
+                "-skipcompile".to_string(),
+                "-stdout".to_string(),
+            ],
+        );
+
+        assert_eq!(
+            command,
+            "D:/Engine/Binaries/Win64/UnrealEditor.exe \
+             C:/Project/Game.uproject -skipcompile -stdout"
+        );
     }
 }

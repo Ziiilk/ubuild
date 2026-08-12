@@ -1,3 +1,5 @@
+use std::path::Path;
+
 pub fn display_args(args: &[String]) -> String {
     args.iter()
         .map(|arg| {
@@ -9,6 +11,14 @@ pub fn display_args(args: &[String]) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Join an executable path and its args with single spaces, exactly as the
+/// process will be executed (no quoting) — used for the normalized header line.
+pub fn join_command_line(executable: &Path, args: &[String]) -> String {
+    let mut parts = vec![executable.display().to_string()];
+    parts.extend(args.iter().cloned());
+    parts.join(" ")
 }
 
 pub fn uat_arg_key(arg: &str) -> String {
