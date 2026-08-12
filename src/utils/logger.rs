@@ -49,7 +49,7 @@ impl Logger {
         println!("  {msg}");
     }
 
-    /// Print the normalized header: the exact `ubuild` invocation the user ran
+    /// Print the normalized header: the `ubuild` invocation the user ran
     /// (echoed from `std::env::args`), then Project / Engine / Platform.
     pub fn operation_header(
         invocation: &str,
@@ -64,7 +64,7 @@ impl Logger {
         Self::plain_line(&format!("Platform: {platform} | {config}"));
     }
 
-    /// Print the full command that will be executed (plain text, not folded).
+    /// Print a command line as plain text (not folded).
     pub fn executed_command(command: &str) {
         Self::plain_line(command);
     }

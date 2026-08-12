@@ -56,8 +56,8 @@ impl ProjectBuilder {
     }
 
     /// The build command line + collapsible Build log, with no header. Used by
-    /// `run --build-first`, which prints the shared header once before both
-    /// the build and run phases.
+    /// `build` and `run --build-first` (the latter prints the shared header
+    /// once before both phases).
     pub(crate) fn build_phase(plan: &BuildPlan) -> Result<()> {
         Logger::executed_command(&plan.command());
 
@@ -77,8 +77,8 @@ impl ProjectBuilder {
         }
     }
 
-    /// Print the shared normalized header once: the exact `ubuild` invocation
-    /// the user ran, then Project / Engine / Platform.
+    /// Print the shared normalized header once: the `ubuild` invocation the
+    /// user ran, then Project / Engine / Platform.
     pub(crate) fn print_header(project: &Path, engine_display: &str, platform: &str, config: &str) {
         Logger::operation_header(
             &current_invocation(),

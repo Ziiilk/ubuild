@@ -21,20 +21,19 @@ pub fn join_command_line(executable: &Path, args: &[String]) -> String {
     parts.join(" ")
 }
 
-/// The exact `ubuild` invocation the user ran, echoed from `std::env::args`.
-/// The program name is normalized to `ubuild` regardless of how the OS
-/// resolved argv[0] (full path, relative, etc.), so the echoed line is clean.
+/// The `ubuild` invocation the user ran, echoed from `std::env::args`.
+/// argv[0] is reduced to its file stem (directory + extension stripped) so the
+/// line is clean regardless of how the OS resolved it; remaining args are
+/// passed through unchanged.
 pub fn current_invocation() -> String {
     let mut args = std::env::args();
-    let program = args.next().map_or_else(
-        || "ubuild".to_string(),
-        |path| {
-            std::path::Path::new(&path).file_stem().map_or_else(
-                || "ubuild".to_string(),
-                |name| name.to_string_lossy().into_owned(),
-            )
-        },
-    );
+    let program = match args.next().as_deref().map(Path::new) {
+        Some(path) => path.file_stem().map_or_else(
+            || "ubuild".to_string(),
+            |name| name.to_string_lossy().into_owned(),
+        ),
+        None => "ubuild".to_string(),
+    };
     let tail: Vec<String> = args.collect();
     let mut parts = vec![program];
     parts.extend(tail);
