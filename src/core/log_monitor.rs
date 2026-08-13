@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use crossterm::cursor::{Hide, MoveTo, MoveToColumn, Show};
+use crossterm::cursor::{Hide, MoveToColumn, Show};
 use crossterm::event::{
     self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
     KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -610,20 +610,18 @@ impl TerminalLogMonitor {
     }
 
     fn draw_collapsed(&mut self) -> Result<()> {
+        let (width, _) =
+            terminal::size().context("Failed to read terminal size for Unreal log monitor")?;
+        let header = self.state.render(width, 1, self.started_at.elapsed());
+        let mut stdout = io::stdout();
+        queue_collapsed_line(&mut stdout, &header)?;
+        stdout
+            .flush()
+            .context("Failed to draw Unreal log monitor")?;
         let (_, row) = crossterm::cursor::position()
             .context("Failed to locate collapsed Unreal log monitor")?;
         self.header_row = row;
-        let (width, _) =
-            terminal::size().context("Failed to read terminal size for Unreal log monitor")?;
-        let header = self.state.render_header(self.started_at.elapsed());
-        let mut stdout = io::stdout();
-        queue!(
-            stdout,
-            MoveTo(0, self.header_row),
-            Clear(ClearType::CurrentLine),
-            crossterm::style::Print(truncate(&header, usize::from(width)))
-        )?;
-        stdout.flush().context("Failed to draw Unreal log monitor")
+        Ok(())
     }
 
     fn draw_expanded(&mut self) -> Result<()> {
@@ -778,6 +776,17 @@ fn truncate(text: &str, width: usize) -> String {
     console::truncate_str(text, width, "…").into_owned()
 }
 
+fn queue_collapsed_line(output: &mut impl Write, header: &str) -> Result<()> {
+    queue!(
+        output,
+        MoveToColumn(0),
+        Clear(ClearType::CurrentLine),
+        crossterm::style::Print(header),
+        MoveToColumn(0)
+    )?;
+    Ok(())
+}
+
 fn format_duration(duration: Duration) -> String {
     let total_seconds = duration.as_secs();
     let hours = total_seconds / 3_600;
@@ -879,7 +888,18 @@ fn highlight_spans(text: &str, needle: Option<&str>, is_current: bool) -> Vec<Sp
 mod tests {
     use std::time::Duration;
 
-    use super::{LogMonitorState, TerminalLogMonitor, MAX_RETAINED_LINES};
+    use super::{queue_collapsed_line, LogMonitorState, TerminalLogMonitor, MAX_RETAINED_LINES};
+
+    #[test]
+    fn collapsed_redraw_uses_only_current_line_positioning() -> anyhow::Result<()> {
+        let mut output = Vec::new();
+
+        queue_collapsed_line(&mut output, "Unreal log")?;
+
+        let rendered = String::from_utf8(output)?;
+        assert_eq!(rendered, "\u{1b}[1G\u{1b}[2KUnreal log\u{1b}[1G");
+        Ok(())
+    }
 
     #[test]
     fn collapsed_view_does_not_include_unreal_log_lines() {
