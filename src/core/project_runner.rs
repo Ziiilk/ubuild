@@ -68,6 +68,10 @@ impl ProjectRunner {
         // collapsible Unreal log.
         let args = Self::build_launch_args(&project_path, extra_args);
         Logger::executed_command(&join_command_line(&exec_path, &args));
+        Logger::info(&format!(
+            "Run log: {}",
+            Self::log_path(&project_path, &args).display()
+        ));
 
         let mut command = Command::new(&exec_path);
         command.args(&args);
@@ -76,6 +80,24 @@ impl ProjectRunner {
         Self::validate_exit_code(code)?;
         Logger::success(&format!("Process exited with code {code}"));
         Ok(())
+    }
+
+    fn log_path(project_path: &Path, args: &[String]) -> PathBuf {
+        if let Some(path) = args.iter().find_map(|arg| {
+            let (name, value) = arg.split_once('=')?;
+            (name.eq_ignore_ascii_case("-abslog") || name.eq_ignore_ascii_case("-log"))
+                .then(|| PathBuf::from(value))
+        }) {
+            return path;
+        }
+
+        ProjectPathResolver::project_dir(project_path)
+            .join("Saved")
+            .join("Logs")
+            .join(format!(
+                "{}.log",
+                ProjectPathResolver::project_name(project_path)
+            ))
     }
 
     fn find_editor_executable(platform: &str, engine_path: &Path) -> PathBuf {
@@ -212,6 +234,22 @@ mod tests {
                 "-game"
             ]
         );
+    }
+
+    #[test]
+    fn resolves_default_run_log_path() {
+        let path = ProjectRunner::log_path(Path::new("C:/Project/Game.uproject"), &[]);
+
+        assert_eq!(path, Path::new("C:/Project/Saved/Logs/Game.log"));
+    }
+
+    #[test]
+    fn respects_explicit_run_log_path() {
+        let args = vec!["-abslog=C:/Logs/Game.log".to_string()];
+
+        let path = ProjectRunner::log_path(Path::new("C:/Project/Game.uproject"), &args);
+
+        assert_eq!(path, Path::new("C:/Logs/Game.log"));
     }
 
     #[test]

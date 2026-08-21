@@ -157,7 +157,6 @@ impl ProjectGenerator {
                     "--compile-commands-dir=${workspaceFolder}",
                     "--background-index",
                     "--j=8",
-                    "--index-store-path=.clangd/index",
                     "--pch-storage=disk",
                     "--limit-results=200",
                     "--header-insertion=iwyu"

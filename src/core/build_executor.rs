@@ -66,6 +66,10 @@ impl BuildExecutor {
     pub(crate) fn run(plan: &BuildPlan) -> Result<(BuildResult, bool)> {
         let start = Instant::now();
 
+        Logger::info(&format!(
+            "Build log: {}",
+            Self::log_path(&plan.args, &plan.project).display()
+        ));
         let attempt = Self::run_process(&plan.executable, &plan.args)?;
         let mut rendered_collapsible = attempt.rendered_collapsible;
         let mut exit_code = attempt.exit_code;
@@ -77,14 +81,12 @@ impl BuildExecutor {
         // log-lock markers are detected incrementally while streaming (bounded
         // memory), so the captured flag drives the retry decision.
         if exit_code != 0 && attempt.log_locked {
-            let log_path = ProjectPathResolver::project_dir(&plan.project)
-                .join("Saved")
-                .join("UnrealBuildTool")
-                .join("Log.txt");
+            let log_path = Self::project_log_path(&plan.project);
             Logger::warning(
                 "Global UnrealBuildTool log is locked by another build; \
                  retrying with a per-project log file",
             );
+            Logger::info(&format!("Build retry log: {}", log_path.display()));
 
             let mut retry_args = plan.args.clone();
             retry_args.push(format!("-Log={}", log_path.display()));
@@ -101,6 +103,37 @@ impl BuildExecutor {
             duration,
         };
         Ok((result, rendered_collapsible))
+    }
+
+    fn default_log_path(project: &Path) -> PathBuf {
+        #[cfg(windows)]
+        if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
+            return PathBuf::from(local_app_data)
+                .join("UnrealBuildTool")
+                .join("Log.txt");
+        }
+
+        Self::project_log_path(project)
+    }
+
+    fn log_path(args: &[String], project: &Path) -> PathBuf {
+        args.iter()
+            .find_map(|arg| {
+                let (key, value) = arg.split_once('=')?;
+                if key.trim_start_matches('-').eq_ignore_ascii_case("log") {
+                    Some(PathBuf::from(value))
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| Self::default_log_path(project))
+    }
+
+    fn project_log_path(project: &Path) -> PathBuf {
+        ProjectPathResolver::project_dir(project)
+            .join("Saved")
+            .join("UnrealBuildTool")
+            .join("Log.txt")
     }
 
     /// Resolve the build executable without requiring it to exist (Build.bat
@@ -244,5 +277,16 @@ mod tests {
             "error: module compile failed",
             "fatal error: something went wrong",
         ));
+    }
+
+    #[test]
+    fn respects_explicit_build_log_path() {
+        let project = Path::new(r"D:\Projects\Game\Game.uproject");
+        let args = vec![r"-Log=D:\Logs\build.log".to_string()];
+
+        assert_eq!(
+            BuildExecutor::log_path(&args, project),
+            Path::new(r"D:\Logs\build.log")
+        );
     }
 }

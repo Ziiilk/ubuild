@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::io::{self, IsTerminal, Write};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -25,15 +25,21 @@ use crate::types::TerminationSignal;
 const MAX_RETAINED_LINES: usize = 10_000;
 const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 static TERMINAL_MONITOR_ACTIVE: AtomicBool = AtomicBool::new(false);
+static TERMINAL_OUTPUT_LOCK: Mutex<()> = Mutex::new(());
 static TERMINATION_SIGNAL: AtomicI32 = AtomicI32::new(0);
 static SIGNAL_HANDLER: OnceLock<std::result::Result<(), String>> = OnceLock::new();
 
 pub fn restore_terminal_before_exit() {
+    let Ok(_output_guard) = terminal_output_lock() else {
+        return;
+    };
     if !TERMINAL_MONITOR_ACTIVE.swap(false, Ordering::AcqRel) {
         return;
     }
+    let mut stdout = io::stdout();
+    let _ = stdout.flush();
     let _ = execute!(
-        io::stdout(),
+        stdout,
         LeaveAlternateScreen,
         DisableMouseCapture,
         Show,
@@ -41,7 +47,15 @@ pub fn restore_terminal_before_exit() {
         Clear(ClearType::CurrentLine),
         crossterm::style::Print("\r\n")
     );
+    let _ = stdout.flush();
+    let _ = io::stderr().flush();
     let _ = terminal::disable_raw_mode();
+}
+
+fn terminal_output_lock() -> Result<MutexGuard<'static, ()>> {
+    TERMINAL_OUTPUT_LOCK
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Terminal output lock poisoned"))
 }
 
 pub enum MonitorAction {
@@ -369,11 +383,17 @@ impl LogMonitorState {
     fn render_status_at(&self, top: usize) -> String {
         let mut parts: Vec<String> = Vec::with_capacity(3);
         parts.push((if self.follow { "FOLLOW" } else { "PAUSED" }).to_string());
-        let total = self.lines.len();
+        let total = self.total_lines;
         if total == 0 {
             parts.push("0 lines".to_string());
         } else {
-            parts.push(format!("{} / {total}", top + 1));
+            let retained_start = self.total_lines.saturating_sub(self.lines.len());
+            let current = if self.follow {
+                self.total_lines
+            } else {
+                retained_start + top + 1
+            };
+            parts.push(format!("{current} / {total}"));
         }
         let needle = self.search.input.trim();
         if !self.search.matches.is_empty() {
@@ -462,10 +482,15 @@ impl TerminalLogMonitor {
             finished: false,
         };
 
-        TERMINAL_MONITOR_ACTIVE.store(true, Ordering::Release);
-        execute!(io::stdout(), Hide, EnableMouseCapture)
-            .context("Failed to initialize terminal log monitor")?;
-        monitor.mouse_capture = true;
+        {
+            let _output_guard = terminal_output_lock()?;
+            TERMINAL_MONITOR_ACTIVE.store(true, Ordering::Release);
+            if let Err(error) = execute!(io::stdout(), Hide, EnableMouseCapture) {
+                TERMINAL_MONITOR_ACTIVE.store(false, Ordering::Release);
+                return Err(error).context("Failed to initialize terminal log monitor");
+            }
+            monitor.mouse_capture = true;
+        }
         monitor.draw()?;
         Self::install_signal_handler()?;
         Ok(monitor)
@@ -583,17 +608,27 @@ impl TerminalLogMonitor {
     fn expand(&mut self) -> Result<()> {
         self.state.toggle();
         self.in_alternate = true;
-        execute!(io::stdout(), EnterAlternateScreen)
-            .context("Failed to expand Unreal log monitor")?;
-        self.terminal
-            .clear()
-            .context("Failed to clear ratatui buffer for Unreal log monitor")?;
+        {
+            let _output_guard = terminal_output_lock()?;
+            if !TERMINAL_MONITOR_ACTIVE.load(Ordering::Acquire) {
+                return Ok(());
+            }
+            execute!(io::stdout(), EnterAlternateScreen)
+                .context("Failed to expand Unreal log monitor")?;
+            self.terminal
+                .clear()
+                .context("Failed to clear ratatui buffer for Unreal log monitor")?;
+        }
         self.draw()
     }
 
     fn collapse(&mut self) -> Result<()> {
         self.state.collapse();
         if self.in_alternate {
+            let _output_guard = terminal_output_lock()?;
+            if !TERMINAL_MONITOR_ACTIVE.load(Ordering::Acquire) {
+                return Ok(());
+            }
             execute!(io::stdout(), LeaveAlternateScreen)
                 .context("Failed to collapse Unreal log monitor")?;
             self.in_alternate = false;
@@ -602,6 +637,10 @@ impl TerminalLogMonitor {
     }
 
     fn draw(&mut self) -> Result<()> {
+        let _output_guard = terminal_output_lock()?;
+        if !TERMINAL_MONITOR_ACTIVE.load(Ordering::Acquire) {
+            return Ok(());
+        }
         if self.state.is_expanded() {
             self.draw_expanded()
         } else {
@@ -641,8 +680,14 @@ impl TerminalLogMonitor {
     }
 
     fn restore_terminal(&mut self, print_summary: bool) -> Result<()> {
+        let _output_guard = terminal_output_lock()?;
+        TERMINAL_MONITOR_ACTIVE.store(false, Ordering::Release);
         let mut first_error = None;
         let mut stdout = io::stdout();
+
+        if let Err(error) = stdout.flush() {
+            first_error = Some(error);
+        }
 
         if self.in_alternate {
             if let Err(error) = execute!(stdout, LeaveAlternateScreen) {
@@ -690,7 +735,12 @@ impl TerminalLogMonitor {
             first_error.get_or_insert(error);
         }
 
-        TERMINAL_MONITOR_ACTIVE.store(false, Ordering::Release);
+        if let Err(error) = stdout.flush() {
+            first_error.get_or_insert(error);
+        }
+        if let Err(error) = io::stderr().flush() {
+            first_error.get_or_insert(error);
+        }
         if let Some(error) = first_error {
             return Err(error).context("Failed to restore terminal after Unreal log monitor");
         }
@@ -1006,6 +1056,32 @@ mod tests {
         let rows_after: Vec<&str> = rendered_after.split("\r\n").collect();
         assert_eq!(rows_after[rows_after.len() - 3], "line 30");
         assert_eq!(rows_after[rows_after.len() - 4], "line 29");
+    }
+
+    #[test]
+    fn follow_status_reports_latest_line() {
+        let mut state = LogMonitorState::new("Unreal log");
+        state.toggle();
+        for index in 1..=30 {
+            state.push_line(format!("line {index}"));
+        }
+
+        let rendered = state.render(80, 24, Duration::from_secs(1));
+
+        assert!(rendered.contains("FOLLOW  │  30 / 30"));
+    }
+
+    #[test]
+    fn follow_status_keeps_absolute_line_count_after_eviction() {
+        let mut state = LogMonitorState::new("Unreal log");
+        state.toggle();
+        for index in 1..=MAX_RETAINED_LINES + 1 {
+            state.push_line(format!("line {index}"));
+        }
+
+        let rendered = state.render(80, 24, Duration::from_secs(1));
+
+        assert!(rendered.contains("FOLLOW  │  10001 / 10001"));
     }
 
     #[test]
