@@ -1,7 +1,6 @@
 pub mod build;
 pub mod clean;
 pub mod engine;
-pub mod gencodebase;
 pub mod generate;
 pub mod init;
 pub mod installed;

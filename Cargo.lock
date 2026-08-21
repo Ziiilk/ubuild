@@ -2302,6 +2302,7 @@ dependencies = [
  "glob",
  "nix",
  "ratatui",
+ "reqwest",
  "self_update",
  "send_ctrlc",
  "serde",
@@ -2312,6 +2313,7 @@ dependencies = [
  "thiserror 2.0.18",
  "win32job",
  "winreg",
+ "zip",
 ]
 
 [[package]]

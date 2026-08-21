@@ -34,8 +34,6 @@ pub enum Command {
     Run(RunArgs),
     /// Update ubuild to latest version
     Update,
-    /// Generate compile_commands.json for clangd
-    Gencodebase(GencodebaseArgs),
     /// Clean build artifacts
     Clean(CleanArgs),
     /// Switch engine association
@@ -298,41 +296,6 @@ pub struct ManagedProcessArgs {
 
     #[arg(last = true)]
     pub args: Vec<OsString>,
-}
-
-#[derive(Args)]
-pub struct GencodebaseArgs {
-    /// Build configuration
-    #[arg(short, long, default_value = "Development")]
-    pub config: String,
-
-    /// Build platform
-    #[arg(short, long, default_value = "Win64")]
-    pub platform: String,
-
-    /// Path to project directory or .uproject file
-    #[arg(long)]
-    pub project: Option<String>,
-
-    /// Path to Unreal Engine installation
-    #[arg(long)]
-    pub engine_path: Option<String>,
-
-    /// Exclude plugin sources
-    #[arg(long)]
-    pub no_plugin_sources: bool,
-
-    /// Exclude engine sources
-    #[arg(long)]
-    pub no_engine_sources: bool,
-
-    /// Don't use engine includes
-    #[arg(long)]
-    pub no_engine_includes: bool,
-
-    /// Raw args passed through to UnrealBuildTool
-    #[arg(last = true)]
-    pub ubt_args: Vec<String>,
 }
 
 #[derive(Args)]

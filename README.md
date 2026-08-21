@@ -11,7 +11,7 @@ Unreal Engine 项目管理命令行工具——单一可执行文件，无外部
 - **生成项目文件**（`ubuild generate`）— 生成 Visual Studio、VS Code 等 IDE 项目文件
 - **初始化项目**（`ubuild init`）— 创建 C++ 或 Blueprint Unreal Engine 项目
 - **运行项目**（`ubuild run`）— 使用 Unreal Editor 启动项目
-- **生成编译数据库**（`ubuild gencodebase`）— 为 clangd 生成 `compile_commands.json`
+- **生成 VS Code 配置**（`ubuild generate --ide vscode`）— 生成项目文件、`compile_commands.json` 以及工作区配置
 - **清理构建产物**（`ubuild clean`）— 删除 Binaries、Intermediate 和 Saved 目录
 - **切换引擎**（`ubuild switch`）— 将项目关联切换到其他引擎安装
 - **查看版本**（`ubuild version`）— 显示版本信息
@@ -74,10 +74,8 @@ ubuild run --build-first
 ubuild run -- -game
 ubuild run -- -log
 
-# 为 clangd 生成编译数据库
-ubuild gencodebase
-ubuild gencodebase --no-engine-sources
-ubuild gencodebase -- -TargetType=Server
+# 生成 VS Code 项目文件、编译数据库和工作区配置
+ubuild generate --ide vscode
 
 # 清理构建产物
 ubuild clean
@@ -162,6 +160,12 @@ ubuild version --json
 | `--force` | 强制重新生成 | |
 | `--list-ides` | 列出可用 IDE 类型 | |
 
+使用 `--ide vscode` 时还会自动生成项目根目录的 `compile_commands.json`，并将
+VS Code 的 `settings` 和 `tasks` 写入项目根目录的 `.code-workspace` 文件。
+同时会根据 Unreal Engine 版本检查 clangd；缺少适配版本时自动下载 LLVM
+官方安装包到系统标准 LLVM 目录（Windows 默认 `%ProgramFiles%\\LLVM`）。
+UE 5.5 默认使用 LLVM 18.1.3。
+
 ### `ubuild init`
 
 初始化新的 Unreal Engine 项目。
@@ -199,7 +203,7 @@ ubuild version --json
 
 同一台机器上，同一个 `.uproject` 同时只允许一个会修改项目或启动受管工具的
 ubuild 命令运行。Windows 上，新的 `build`、`package`、`generate`、
-`gencodebase`、`clean`、`switch` 或 `run` 会写入该 Project Workspace 的接管请求，
+`clean`、`switch` 或 `run` 会写入该 Project Workspace 的接管请求，
 使旧 ubuild 主进程立即以退出码 `72` 结束，然后接管工作区。只有能写入
 `Saved/ubuild` 状态的进程才能请求接管；旧命令的受管子进程树由 Windows Job
 Object 自动清理。
@@ -211,21 +215,6 @@ Linux 和 macOS 当前只提供项目占用检测，不支持强制终止仍在�
 同一个 Project Workspace 并参与同一组竞争；不同工作区互不影响。`engine`、
 `version`、所有 `--dry-run` 以及 `generate --list-ides` 是只读命令，不会终止
 正在运行的项目操作。
-
-### `ubuild gencodebase`
-
-为 clangd 生成 `compile_commands.json`。
-
-| 选项 | 说明 | 默认值 |
-|---|---|---|
-| `-c, --config` | 构建配置 | Development |
-| `-p, --platform` | 平台 | Win64 |
-| `--project` | 项目目录或 `.uproject` 文件路径 | 当前目录 |
-| `--engine-path` | Unreal Engine 安装路径 | 自动检测 |
-| `--no-plugin-sources` | 排除插件源码 | |
-| `--no-engine-sources` | 排除引擎源码 | |
-| `--no-engine-includes` | 不使用引擎包含目录 | |
-| `-- <UBT_ARGS>...` | 原样传递给 UnrealBuildTool；传入原生 target 选择时不注入默认 Editor 类型 | |
 
 ### `ubuild clean`
 

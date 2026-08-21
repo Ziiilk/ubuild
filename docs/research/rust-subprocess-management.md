@@ -52,7 +52,6 @@ Project Operation：
 - `build`
 - `package`
 - `generate`
-- `gencodebase`
 - `clean`
 - `switch`
 - `run`

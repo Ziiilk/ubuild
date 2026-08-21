@@ -23,7 +23,6 @@ fn main() {
         cli::Command::Init(args) => commands::init::execute(args),
         cli::Command::Run(args) => commands::run::execute(args),
         cli::Command::Update => commands::update::execute(),
-        cli::Command::Gencodebase(args) => commands::gencodebase::execute(args),
         cli::Command::Clean(args) => commands::clean::execute(args),
         cli::Command::Switch(args) => commands::switch::execute(args),
         cli::Command::LiveCoding(args) => commands::livecoding::execute(args),
